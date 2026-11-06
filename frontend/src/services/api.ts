@@ -34,6 +34,7 @@ import type {
   SchedulerDiagnoseRequest,
   SchedulerDiagnoseResponse,
   StartCapabilityTestOptions,
+  UsageReportChannel,
   CompatDiagnoseResult
 } from './api-types'
 
@@ -41,6 +42,32 @@ export * from './api-helpers'
 export * from './api-types'
 
 export class ApiService {
+  async getUsageReportChannels(): Promise<UsageReportChannel[]> {
+    return this.request('/reports/usage/channels')
+  }
+
+  async downloadUsageReport(month: string, channel: string, granularity: 'hour' | 'day'): Promise<Blob> {
+    const params = new URLSearchParams({
+      month, channel, granularity,
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+    })
+    const headers: Record<string, string> = {}
+    const apiKey = this.getApiKey()
+    if (apiKey) headers['x-api-key'] = apiKey
+    const response = await fetch(`${API_BASE}/reports/usage.csv?${params}`, { headers })
+    if (!response.ok) {
+      const body = await this.parseResponseBody(response)
+      if (response.status === 401) {
+        useAuthStore().clearAuth()
+        throw new ApiError(this.t('service.authFailed'), 401, body)
+      }
+      const message = typeof body === 'object' && body && 'error' in body && typeof body.error === 'string'
+        ? body.error : `Request failed (${response.status})`
+      throw new ApiError(message, response.status, body)
+    }
+    return response.blob()
+  }
+
   private historyQuery(duration: string, interval?: string): string {
     const params = new URLSearchParams({ duration })
     if (interval) {

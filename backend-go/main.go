@@ -660,6 +660,8 @@ func main() {
 	apiGroup := r.Group("/api")
 	{
 		siteaccess.RegisterRoutes(apiGroup, siteAccessDeps)
+		apiGroup.GET("/reports/usage/channels", handlers.GetUsageReportChannels(cfgManager))
+		apiGroup.GET("/reports/usage.csv", handlers.GetUsageReportCSV(metricsStore, cfgManager))
 
 		apiGroup.POST("/copilot/oauth/device/code", copilot.RequestDeviceCode())
 		apiGroup.POST("/copilot/oauth/token", copilot.PollAccessToken())

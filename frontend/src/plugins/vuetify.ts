@@ -80,6 +80,7 @@ import {
   mdiOpenInNew,
   mdiKey,
   mdiRefresh,
+  mdiDownload,
   mdiDotsVertical,
   mdiPencil,
   mdiSpeedometer,
@@ -289,6 +290,7 @@ const iconMap: Record<string, string> = {
   // 操作按钮
   'pencil': mdiPencil,
   'refresh': mdiRefresh,
+  'download': mdiDownload,
   'check': mdiCheck,
   'check-bold': mdiCheckBold,
   'content-copy': mdiContentCopy,

@@ -240,6 +240,13 @@ export interface SchedulerStatsResponse {
 
 export type ChannelKind = 'messages' | 'chat' | 'responses' | 'gemini' | 'images' | 'vectors'
 
+export interface UsageReportChannel {
+  id: string
+  name: string
+  apiType: ChannelKind
+  serviceType: string
+}
+
 export interface SchedulerDiagnoseContextRequirement {
   inputTokens?: number
   outputTokens?: number

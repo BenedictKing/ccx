@@ -31,21 +31,57 @@
       </div>
 
       <!-- View switcher -->
-      <v-btn-toggle v-model="selectedView" mandatory density="compact" variant="outlined" divided :disabled="isLoading" class="chart-control-toggle">
-        <v-btn value="traffic" size="x-small" class="chart-control-btn">
-          <v-icon size="small" class="mr-1">mdi-chart-line</v-icon>
-          {{ t('chart.traffic') }}
-        </v-btn>
-        <v-btn value="tokens" size="x-small" class="chart-control-btn">
-          <v-icon size="small" class="mr-1">mdi-chart-areaspline</v-icon>
-          {{ t('chart.tokens') }}
-        </v-btn>
-        <v-btn value="cost" size="x-small" class="chart-control-btn">
-          <v-icon size="small" class="mr-1">mdi-cash</v-icon>
-          {{ t('chart.cost') }}
-        </v-btn>
-      </v-btn-toggle>
+      <div class="d-flex align-center ga-2">
+        <v-btn-toggle v-model="selectedView" mandatory density="compact" variant="outlined" divided :disabled="isLoading" class="chart-control-toggle">
+          <v-btn value="traffic" size="x-small" class="chart-control-btn">
+            <v-icon size="small" class="mr-1">mdi-chart-line</v-icon>
+            {{ t('chart.traffic') }}
+          </v-btn>
+          <v-btn value="tokens" size="x-small" class="chart-control-btn">
+            <v-icon size="small" class="mr-1">mdi-chart-areaspline</v-icon>
+            {{ t('chart.tokens') }}
+          </v-btn>
+          <v-btn value="cost" size="x-small" class="chart-control-btn">
+            <v-icon size="small" class="mr-1">mdi-cash</v-icon>
+            {{ t('chart.cost') }}
+          </v-btn>
+        </v-btn-toggle>
+        <v-tooltip :text="t('chart.exportReport')" location="top">
+          <template #activator="{ props: tooltipProps }">
+            <v-btn v-bind="tooltipProps" icon size="x-small" variant="text" :aria-label="t('chart.exportReport')" @click="openExportDialog">
+              <v-icon size="small">mdi-download</v-icon>
+            </v-btn>
+          </template>
+        </v-tooltip>
+      </div>
     </div>
+
+    <v-dialog v-model="showExportDialog" max-width="440">
+      <v-card>
+        <v-card-title>{{ t('chart.exportReport') }}</v-card-title>
+        <v-card-text class="d-flex flex-column ga-3">
+          <v-text-field v-model="exportMonth" type="month" :label="t('chart.reportMonth')" :max="currentMonth" density="compact" hide-details />
+          <v-select
+            v-model="exportChannel" :items="exportChannelItems" item-title="title" item-value="value"
+            :label="t('chart.reportChannel')" :loading="isLoadingExportChannels" :disabled="isLoadingExportChannels"
+            density="compact" hide-details />
+          <v-btn-toggle v-model="exportGranularity" mandatory density="compact" variant="outlined" divided>
+            <v-btn value="hour" class="flex-grow-1">{{ t('chart.reportHourly') }}</v-btn>
+            <v-btn value="day" class="flex-grow-1">{{ t('chart.reportDaily') }}</v-btn>
+          </v-btn-toggle>
+          <div class="text-caption text-medium-emphasis">{{ t('chart.reportPriceNote') }}</div>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="showExportDialog = false">{{ t('chart.close') }}</v-btn>
+          <v-btn
+            color="primary" variant="flat" prepend-icon="mdi-download" :loading="isExporting"
+            :disabled="!exportMonth || exportMonth > currentMonth || isLoadingExportChannels" @click="downloadReport">
+            {{ t('chart.exportReport') }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
 
     <!-- Summary cards -->
     <div v-if="summary && !compact" class="summary-cards d-flex flex-wrap ga-2 mb-3">
@@ -122,10 +158,12 @@
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useTheme } from 'vuetify'
 import VueApexCharts from 'vue3-apexcharts'
+import type { ApexOptions } from 'apexcharts'
 import { api, type GlobalStatsHistoryResponse, type GlobalHistoryDataPoint as _GlobalHistoryDataPoint, type GlobalStatsSummary, type ModelHistoryDataPoint } from '../services/api'
 import { useI18n } from '../i18n'
 import { useGlobalTick } from '../composables/useGlobalTick'
 import { effectiveChartIntervalMs, selectDenseSamplingInterval } from '../utils/chartSampling'
+import type { UsageReportChannel } from '../services/api'
 
 // Register apexchart component
 const apexchart = VueApexCharts
@@ -180,6 +218,56 @@ const currentAdaptiveInterval = computed(() => (
 ))
 const showError = ref(false)
 const errorMessage = ref('')
+const today = new Date()
+const currentMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`
+const showExportDialog = ref(false)
+const exportMonth = ref(currentMonth)
+const exportChannel = ref('all')
+const exportGranularity = ref<'hour' | 'day'>('hour')
+const exportChannels = ref<UsageReportChannel[]>([])
+const isLoadingExportChannels = ref(false)
+const isExporting = ref(false)
+const exportChannelItems = computed(() => [
+  { title: t('chart.reportAllChannels'), value: 'all' },
+  ...exportChannels.value.map(channel => ({
+    title: `${channel.apiType} · ${channel.name || channel.id}`,
+    value: channel.id
+  }))
+])
+
+const openExportDialog = async () => {
+  showExportDialog.value = true
+  isLoadingExportChannels.value = true
+  try {
+    exportChannels.value = await api.getUsageReportChannels()
+  } catch (error) {
+    errorMessage.value = `${t('chart.reportFailed')}: ${error instanceof Error ? error.message : String(error)}`
+    showError.value = true
+  } finally {
+    isLoadingExportChannels.value = false
+  }
+}
+
+const downloadReport = async () => {
+  isExporting.value = true
+  try {
+    const blob = await api.downloadUsageReport(exportMonth.value, exportChannel.value, exportGranularity.value)
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = `ccx-usage-${exportMonth.value}.csv`
+    document.body.appendChild(anchor)
+    anchor.click()
+    anchor.remove()
+    URL.revokeObjectURL(url)
+    showExportDialog.value = false
+  } catch (error) {
+    errorMessage.value = `${t('chart.reportFailed')}: ${error instanceof Error ? error.message : String(error)}`
+    showError.value = true
+  } finally {
+    isExporting.value = false
+  }
+}
 
 // Chart ref for updateSeries
 const chartRef = ref<InstanceType<typeof VueApexCharts> | null>(null)
@@ -369,7 +457,7 @@ const formatCost = (val: number): string => {
 }
 
 // Chart options
-const chartOptions = computed<ApexCharts.ApexOptions>(() => {
+const chartOptions = computed<ApexOptions>(() => {
   const mode = selectedView.value
   const isMultiModelView = (mode === 'traffic' || mode === 'cost') && hasMultiModel.value
 
