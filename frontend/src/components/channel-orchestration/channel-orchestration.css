@@ -81,13 +81,11 @@
 
 .channel-row:hover {
   background: rgba(var(--v-theme-primary), 0.08);
-  transform: translate(-2px, -2px);
   box-shadow: 6px 6px 0 0 rgb(var(--v-theme-on-surface));
   border: 2px solid rgb(var(--v-theme-on-surface));
 }
 
 .channel-row:active {
-  transform: translate(2px, 2px);
   box-shadow: none;
 }
 
@@ -361,12 +359,10 @@
 
 .inactive-channel-row:hover {
   background: rgba(var(--v-theme-primary), 0.08);
-  transform: translate(-1px, -1px);
   box-shadow: 4px 4px 0 0 rgb(var(--v-theme-on-surface));
 }
 
 .inactive-channel-row:active {
-  transform: translate(2px, 2px);
   box-shadow: none;
 }
 
