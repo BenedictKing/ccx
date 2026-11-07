@@ -620,8 +620,6 @@
   "orchestration.resumeReset": "Resume (reset metrics)",
   "orchestration.moveTop": "Move to top",
   "orchestration.moveBottom": "Move to bottom",
-  "orchestration.keepOne": "(keep at least one)",
-  "orchestration.deleteActiveGuard": "Cannot delete: keep at least one active channel in the failover sequence",
   "channelCard.disabledKeys": "Blacklisted keys",
   "channelEditor.title.create": "Add channel",
   "channelEditor.title.edit": "Edit channel",

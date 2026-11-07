@@ -620,8 +620,6 @@
   "orchestration.resumeReset": "恢复 (重置指标)",
   "orchestration.moveTop": "置顶",
   "orchestration.moveBottom": "置底",
-  "orchestration.keepOne": "(至少保留一个)",
-  "orchestration.deleteActiveGuard": "无法删除：故障转移序列中至少需要保留一个活跃渠道",
   "channelCard.disabledKeys": "已拉黑密钥",
   "channelEditor.title.create": "添加渠道",
   "channelEditor.title.edit": "编辑渠道",

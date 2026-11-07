@@ -49,7 +49,6 @@ const props = withDefaults(defineProps<{
   inactive?: boolean
   expanded?: boolean
   supportsCapability?: boolean
-  canDelete?: boolean
   canMoveTop?: boolean
   canMoveBottom?: boolean
 }>(), {
@@ -57,7 +56,6 @@ const props = withDefaults(defineProps<{
   inactive: false,
   expanded: false,
   supportsCapability: true,
-  canDelete: true,
   canMoveTop: false,
   canMoveBottom: false,
 })
@@ -484,10 +482,9 @@ function handleCardClick(event: MouseEvent) {
             {{ keyCount }} {{ t('channelCard.configuredKeys') }}
             <span v-if="disabledKeyCount"> · {{ disabledKeyCount }} {{ t('channelCard.disabledKeys') }}</span>
           </div>
-          <DropdownMenuItem variant="destructive" :disabled="!canDelete" @click="canDelete && emit('delete')">
+          <DropdownMenuItem variant="destructive" @click="emit('delete')">
             <Trash2 class="h-4 w-4" />
             {{ t('orchestration.delete') }}
-            <span v-if="!canDelete" class="ml-1 text-[10px] opacity-70">{{ t('orchestration.keepOne') }}</span>
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

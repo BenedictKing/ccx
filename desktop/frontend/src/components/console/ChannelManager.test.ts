@@ -35,6 +35,7 @@ const dashboardCache = ref({
   gemini: { metrics: [], stats: undefined, recentActivity: [] },
 })
 const apiGet = vi.fn()
+const deleteChannel = vi.fn().mockResolvedValue(undefined)
 const chartUpdateData = vi.fn()
 const chartSetLoading = vi.fn()
 
@@ -63,7 +64,7 @@ vi.mock('@/composables/useConsoleChannels', () => ({
     channelsByType,
     dashboardCache,
     refreshChannels: vi.fn().mockResolvedValue(undefined),
-    deleteChannel: vi.fn().mockResolvedValue(undefined),
+    deleteChannel,
     setChannelStatus: vi.fn().mockResolvedValue(undefined),
     resumeChannel: vi.fn().mockResolvedValue(undefined),
     promoteChannel: vi.fn().mockResolvedValue(undefined),
@@ -123,13 +124,14 @@ vi.mock('@/components/console/ChannelCard.vue', () => ({
       channel: { type: Object, required: true },
       expanded: { type: Boolean, default: false },
     },
-    emits: ['toggle'],
+    emits: ['toggle', 'delete'],
     setup(props, { emit }) {
       return () => {
         const channel = props.channel as { index: number; name: string }
         return h('article', { 'data-testid': 'channel-card' }, [
           h('span', channel.name),
           h('button', { type: 'button', onClick: () => emit('toggle') }, props.expanded ? 'collapse' : 'expand'),
+          h('button', { type: 'button', onClick: () => emit('delete') }, 'delete'),
         ])
       }
     },
@@ -206,6 +208,18 @@ describe('ChannelManager', () => {
 
     expect(apiGet).not.toHaveBeenCalledWith(expect.stringContaining('/global/stats/history'))
     expect(chartUpdateData).not.toHaveBeenCalled()
+  })
+
+  it('deletes the last active channel', async () => {
+    apiGet.mockResolvedValue(createStatsResponse())
+    mountChannelManager()
+    await nextTick()
+
+    clickButton('delete')
+    await nextTick()
+    await Promise.resolve()
+
+    expect(deleteChannel).toHaveBeenCalledWith(1, 'messages')
   })
 
   it('ignores stale global stats responses after switching protocol', async () => {

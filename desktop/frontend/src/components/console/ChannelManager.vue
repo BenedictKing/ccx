@@ -365,20 +365,8 @@ async function refreshCurrentChannels() {
   }
 }
 
-
-function canDeleteChannel(channel: Channel) {
-  const activeCount = orderedActiveChannels.value.filter(ch => ch.status === 'active' || ch.status === undefined || ch.status === '').length
-  const isActive = channel.status === 'active' || channel.status === undefined || channel.status === ''
-  return !(isActive && activeCount <= 1)
-}
-
 async function handleDelete(channel: Channel) {
   clearActionError()
-  if (!canDeleteChannel(channel)) {
-    actionError.value = t('orchestration.deleteActiveGuard')
-    return
-  }
-
   actionLoading.value = true
   try {
     await deleteChannel(channel.index, props.type)
@@ -720,7 +708,6 @@ onBeforeUnmount(() => {
               :activity="activityMap.get(channel.index)"
               :priority="index + 1"
               :supports-capability="supportsCapability"
-              :can-delete="canDeleteChannel(channel)"
               :can-move-top="!isFirstOrderedActiveChannel(channel)"
               :can-move-bottom="!isLastOrderedActiveChannel(channel)"
               :expanded="expandedChannelId === channel.index"
@@ -770,7 +757,6 @@ onBeforeUnmount(() => {
             :priority="index + 1"
             :supports-capability="supportsCapability"
             inactive
-            :can-delete="canDeleteChannel(channel)"
             @edit="handleEdit(channel)"
             @delete="handleDelete(channel)"
             @status="handleStatusToggle(channel.index, channel.status || 'disabled')"
