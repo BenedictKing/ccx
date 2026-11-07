@@ -452,16 +452,11 @@
                       <span v-if="element.disabledApiKeys?.length"> · {{ element.disabledApiKeys.length }} {{ t('channelCard.disabledKeys') }}</span>
                     </v-list-item-title>
                   </v-list-item>
-                  <v-list-item :disabled="!canDeleteChannel(element)" @click="handleDeleteChannel(element)">
+                  <v-list-item @click="handleDeleteChannel(element)">
                     <template #prepend>
-                      <v-icon size="small" :color="canDeleteChannel(element) ? 'error' : 'grey'">mdi-delete</v-icon>
+                      <v-icon size="small" color="error">mdi-delete</v-icon>
                     </template>
-                    <v-list-item-title>
-                      {{ t('orchestration.delete') }}
-                      <span v-if="!canDeleteChannel(element)" class="text-caption text-disabled ml-1">
-                        {{ t('orchestration.keepOne') }}
-                      </span>
-                    </v-list-item-title>
+                    <v-list-item-title>{{ t('orchestration.delete') }}</v-list-item-title>
                   </v-list-item>
                 </v-list>
               </v-menu>
@@ -1281,29 +1276,8 @@ const setPromotion = async (channel: Channel) => {
   }
 }
 
-// Check whether the channel can be deleted
-// Rule: keep at least one active channel in the failover sequence
-const canDeleteChannel = (channel: Channel): boolean => {
-  // Count the number of currently active channels
-  const activeCount = activeChannels.value.filter(
-    ch => ch.status === 'active' || ch.status === undefined || ch.status === ''
-  ).length
-
-  // Do not allow deletion if the target is an active channel and it is the last active one
-  const isActive = channel.status === 'active' || channel.status === undefined || channel.status === ''
-  if (isActive && activeCount <= 1) {
-    return false
-  }
-
-  return true
-}
-
 // Handle channel deletion
 const handleDeleteChannel = (channel: Channel) => {
-  if (!canDeleteChannel(channel)) {
-    emit('error', t('orchestration.deleteActiveGuard'))
-    return
-  }
   emit('delete', channel.index)
 }
 
