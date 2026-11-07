@@ -15,7 +15,7 @@
   "dependencies": {
     "@tailwindcss/vite": "^4.3.1",
     "@vueuse/core": "^14.3.0",
-    "@wailsio/runtime": "3.0.0-alpha.94",
+    "@wailsio/runtime": "3.1.0",
     "apexcharts": "^5.15.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

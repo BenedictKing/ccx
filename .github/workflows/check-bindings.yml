@@ -20,7 +20,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.25.x"
+          go-version: "1.27.x"
           cache-dependency-path: desktop/go.sum
 
       - name: Install Wails3 CLI
