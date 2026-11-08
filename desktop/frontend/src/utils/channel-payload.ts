@@ -53,6 +53,7 @@ export interface ChannelFormLike {
   description: string
   apiKeys: string[]
   apiKeyConfigs?: Channel['apiKeyConfigs']
+  maxGroupMultiplier?: number | null
   modelMapping: Record<string, string>
   modelCapabilitiesText?: string
   modelCapabilityRows?: ModelCapabilityRow[]
@@ -552,6 +553,7 @@ export function buildChannelPayload(
   if (form.apiKeyConfigs !== undefined) {
     channelData.apiKeyConfigs = processedApiKeyConfigs
   }
+  if (form.maxGroupMultiplier !== undefined) channelData.maxGroupMultiplier = form.maxGroupMultiplier
 
   if (deduplicatedUrls.length > 1) {
     channelData.baseUrls = deduplicatedUrls

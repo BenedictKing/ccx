@@ -158,6 +158,8 @@ const { t } = useLanguage()
     routePrefix: '',
     insecureSkipVerify: false,
     apiKeysText: '',
+    apiKeyConfigs: undefined as Channel['apiKeyConfigs'],
+    maxGroupMultiplier: null as number | null,
     customHeadersText: '{}',
     modelMappingText: '{}',
     modelCapabilitiesText: '',
@@ -342,6 +344,8 @@ const { t } = useLanguage()
     form.routePrefix = ''
     form.insecureSkipVerify = false
     form.apiKeysText = ''
+    form.apiKeyConfigs = undefined
+    form.maxGroupMultiplier = null
     form.customHeadersText = '{}'
     form.modelMappingText = '{}'
     form.modelCapabilitiesText = ''
@@ -420,6 +424,8 @@ const { t } = useLanguage()
     form.routePrefix = ch.routePrefix || ''
     form.insecureSkipVerify = ch.insecureSkipVerify ?? false
     existingApiKeys.value = [...(ch.apiKeys || [])]
+    form.apiKeyConfigs = ch.apiKeyConfigs?.map(cfg => ({ ...cfg, models: cfg.models ? [...cfg.models] : undefined }))
+    form.maxGroupMultiplier = ch.maxGroupMultiplier ?? null
     form.apiKeysText = ''
     newApiKeysText.value = ''
     copiedKeyIndex.value = null
@@ -519,6 +525,7 @@ const { t } = useLanguage()
     if (form.serviceType !== 'copilot' && submitBaseUrls.value.length === 0) errs.baseUrl = t('channelEditor.basic.baseUrl.required')
     // copilot 渠道通过 OAuth 登录，apiKeys 由登录流程填充，此处豁免必填校验
     if (!hasConfigurableKeys.value && form.serviceType !== 'copilot') errs.apiKeys = t('channelEditor.auth.apiKeyRequired')
+    if ([form.maxGroupMultiplier, ...(form.apiKeyConfigs || []).map(cfg => cfg.groupMultiplier)].some(value => value != null && (!Number.isFinite(value) || value < 0))) errs.apiKeys = t('channelEditor.auth.multiplierInvalid')
     if (String(form.requestTimeoutMs).trim()) {
       const timeout = Number(form.requestTimeoutMs)
       if (!Number.isInteger(timeout) || timeout < 1000 || timeout > 300000) {
@@ -1030,6 +1037,8 @@ const { t } = useLanguage()
       passbackThinkingBlocks: form.passbackThinkingBlocks,
       description: form.description,
       apiKeys: getSubmitApiKeys(),
+      apiKeyConfigs: form.apiKeyConfigs,
+      maxGroupMultiplier: form.maxGroupMultiplier,
       modelMapping,
       modelCapabilityRows: modelCapabilityRows.value,
       embeddingCapabilityRows: form.embeddingCapabilityRows,

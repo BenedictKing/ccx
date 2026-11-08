@@ -12,9 +12,13 @@ import { useLanguage } from '@/composables/useLanguage'
 import { GetProviderKeyAssets } from '@bindings/github.com/BenedictKing/ccx/desktop/desktopservice'
 import type { Channel, ChannelsResponse } from '@/services/admin-api'
 import type { ProviderKeyAsset } from '@/types'
+import type { AgentPlatform } from '@/types'
+import SiteOnboardingPanel from './SiteOnboardingPanel.vue'
+
+const emit = defineEmits<{ configureAgent: [AgentPlatform] }>()
 
 type CopilotTarget = 'messages' | 'chat' | 'responses' | 'gemini'
-type SubscriptionProvider = 'github-copilot'
+type SubscriptionProvider = 'github-copilot' | 'relay'
 type CopilotKnownAccount = {
   target: CopilotTarget
   key: string
@@ -312,6 +316,9 @@ onMounted(() => {
 
     <div class="grid grid-cols-1 gap-4 md:min-h-0 md:flex-1 md:overflow-hidden md:grid-cols-[280px_1fr]">
       <div class="space-y-1.5 md:min-h-0 md:overflow-y-auto md:overscroll-contain md:pr-1">
+        <button type="button" class="w-full rounded-xl border p-3 text-left" :class="selectedSubscription === 'relay' ? 'border-primary bg-secondary/60' : 'border-border bg-card/40'" @click="selectedSubscription = 'relay'">
+          <span class="font-semibold">new-api / sub2api</span><p class="mt-1 text-xs text-muted-foreground">{{ t('siteOnboarding.title') }}</p>
+        </button>
         <button
           type="button"
           :class="[
@@ -340,7 +347,8 @@ onMounted(() => {
         </button>
       </div>
 
-      <section class="bg-glass dark:bg-glass-dark border border-border rounded-2xl p-5 space-y-5 md:min-h-0 md:overflow-y-auto md:overscroll-contain">
+      <div v-if="selectedSubscription === 'relay'" class="min-h-0 overflow-y-auto"><SiteOnboardingPanel @configure-agent="emit('configureAgent', $event)" /></div>
+      <section v-else class="bg-glass dark:bg-glass-dark border border-border rounded-2xl p-5 space-y-5 md:min-h-0 md:overflow-y-auto md:overscroll-contain">
         <div class="space-y-3">
           <div class="min-w-0">
             <div class="flex flex-wrap items-center gap-2">

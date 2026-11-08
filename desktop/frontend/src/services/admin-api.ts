@@ -96,6 +96,12 @@ export interface DisabledKeyInfo {
 }
 
 export interface APIKeyConfig {
+  groupMultiplier?: number | null
+  multiplierSource?: string
+  multiplierUpdatedAt?: string
+  sourceAccountUid?: string
+  sourceRemoteTokenId?: number
+  remoteStatus?: string
   key: string
   name?: string
   enabled?: boolean
@@ -149,6 +155,9 @@ export interface ModelPricingTier {
 }
 
 export interface Channel {
+  siteAccountUid?: string
+  siteGroup?: string
+  maxGroupMultiplier?: number | null
   name: string
   serviceType: 'openai' | 'gemini' | 'claude' | 'responses' | 'copilot'
   authHeader?: ChannelAuthHeader | ''

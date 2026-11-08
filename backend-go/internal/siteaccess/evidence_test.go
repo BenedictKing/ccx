@@ -138,8 +138,9 @@ func TestReconcileLoop_PeriodicDisable(t *testing.T) {
 	site.deleteTokenByName(account.ProvisionedKeys[0].Name)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go reconcileLoop(ctx, store, cfgManager, adapter, 20*time.Millisecond)
+	done := make(chan struct{})
+	defer func() { cancel(); <-done }()
+	go func() { defer close(done); reconcileLoop(ctx, store, cfgManager, adapter, 20*time.Millisecond) }()
 
 	deadline := time.Now().Add(3 * time.Second)
 	for time.Now().Before(deadline) {

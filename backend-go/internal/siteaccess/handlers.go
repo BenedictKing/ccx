@@ -1,6 +1,7 @@
 package siteaccess
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -25,16 +26,24 @@ type accountResponse struct {
 	BaseURL         string               `json:"baseUrl"`
 	UserID          string               `json:"userId,omitempty"`
 	AuthTokenMode   string               `json:"authTokenMode,omitempty"`
+	CredentialMode  string               `json:"credentialMode,omitempty"`
 	MaskedToken     string               `json:"maskedAccessToken,omitempty"`
 	CreatedAt       time.Time            `json:"createdAt"`
 	UpdatedAt       time.Time            `json:"updatedAt"`
 	ProvisionedKeys []ProvisionedKeyMeta `json:"provisionedKeys,omitempty"`
 	Evidence        []ChannelEvidence    `json:"evidence,omitempty"`
+	LastSyncAt      *time.Time           `json:"lastSyncAt,omitempty"`
+	LastSyncError   string               `json:"lastSyncError,omitempty"`
+	Plans           []ProvisionRequest   `json:"plans,omitempty"`
 }
 
 func toAccountResponse(a SiteAccount) accountResponse {
 	return accountResponse{
 		UID:             a.UID,
+		Plans:           a.Plans,
+		CredentialMode:  a.CredentialMode,
+		LastSyncAt:      a.LastSyncAt,
+		LastSyncError:   a.LastSyncError,
 		SiteType:        a.SiteType,
 		BaseURL:         a.BaseURL,
 		UserID:          a.UserID,
@@ -73,23 +82,36 @@ func RegisterRoutes(apiGroup *gin.RouterGroup, deps *Deps) {
 
 	group.POST("/accounts", func(c *gin.Context) {
 		var req struct {
-			SiteType      string `json:"siteType"`
-			BaseURL       string `json:"baseUrl"`
-			UserID        string `json:"userId"`
-			AuthTokenMode string `json:"authTokenMode"`
-			AccessToken   string `json:"accessToken"`
+			UID            string `json:"uid"`
+			CredentialMode string `json:"credentialMode"`
+			SiteType       string `json:"siteType"`
+			BaseURL        string `json:"baseUrl"`
+			UserID         string `json:"userId"`
+			AuthTokenMode  string `json:"authTokenMode"`
+			AccessToken    string `json:"accessToken"`
 		}
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "请求体解析失败"})
 			return
 		}
-		uid, err := deps.Store.Upsert(SiteAccount{
-			SiteType:      req.SiteType,
-			BaseURL:       req.BaseURL,
-			UserID:        req.UserID,
-			AuthTokenMode: req.AuthTokenMode,
-			AccessToken:   req.AccessToken,
-		})
+		candidate := SiteAccount{
+			UID:            req.UID,
+			CredentialMode: req.CredentialMode,
+			SiteType:       req.SiteType,
+			BaseURL:        req.BaseURL,
+			UserID:         req.UserID,
+			AuthTokenMode:  req.AuthTokenMode,
+			AccessToken:    req.AccessToken,
+		}
+		// 新接入优先使用站点确认的用户身份，同一账号换令牌不会再创建副本。
+		// 管理面不支持自检时仍允许保存，后续明确展示未验证状态。
+		candidate.BaseURL = NormalizeSiteURL(candidate.BaseURL)
+		if candidate.UID == "" && candidate.CredentialMode != "key" && candidate.AccessToken != "" {
+			if _, derived, err := adapterForAccount(candidate, adapter).VerifyWithFallback(c.Request.Context(), candidate.BaseURL, candidate.AccessToken, candidate.UserID, candidate.AuthTokenMode); err == nil && derived != "" {
+				candidate.UserID = derived
+			}
+		}
+		uid, err := deps.Store.Upsert(candidate)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
@@ -118,25 +140,37 @@ func RegisterRoutes(apiGroup *gin.RouterGroup, deps *Deps) {
 	// 协议级接入：每次只为选定协议建渠道
 	group.POST("/accounts/:uid/provision", func(c *gin.Context) {
 		var req struct {
-			Protocol      string            `json:"protocol"`
-			Groups        []string          `json:"groups"`
-			ExcludeGroups []string          `json:"excludeGroups"`
-			MaxMultiplier *float64          `json:"maxMultiplier"`
-			Models        []string          `json:"models"`
-			ModelMapping  map[string]string `json:"modelMapping"`
+			Protocol           string            `json:"protocol"`
+			Agent              string            `json:"agent"`
+			AllowModelFallback bool              `json:"allowModelFallback"`
+			MaxAttempts        int               `json:"maxAttempts"`
+			MaxWaitSeconds     int               `json:"maxWaitSeconds"`
+			ExistingTokenIDs   map[string]int    `json:"existingTokenIds"`
+			AutoSyncGroups     bool              `json:"autoSyncGroups"`
+			Groups             []string          `json:"groups"`
+			ExcludeGroups      []string          `json:"excludeGroups"`
+			MaxMultiplier      *float64          `json:"maxMultiplier"`
+			Models             []string          `json:"models"`
+			ModelMapping       map[string]string `json:"modelMapping"`
 		}
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "请求体解析失败"})
 			return
 		}
 		result, err := ProvisionProtocol(c.Request.Context(), deps.Store, deps.CfgManager, adapter, ProvisionRequest{
-			AccountUID:    c.Param("uid"),
-			Protocol:      req.Protocol,
-			Groups:        req.Groups,
-			ExcludeGroups: req.ExcludeGroups,
-			MaxMultiplier: req.MaxMultiplier,
-			Models:        req.Models,
-			ModelMapping:  req.ModelMapping,
+			AccountUID:         c.Param("uid"),
+			Agent:              req.Agent,
+			AllowModelFallback: req.AllowModelFallback,
+			MaxAttempts:        req.MaxAttempts,
+			MaxWaitSeconds:     req.MaxWaitSeconds,
+			ExistingTokenIDs:   req.ExistingTokenIDs,
+			AutoSyncGroups:     req.AutoSyncGroups,
+			Protocol:           req.Protocol,
+			Groups:             req.Groups,
+			ExcludeGroups:      req.ExcludeGroups,
+			MaxMultiplier:      req.MaxMultiplier,
+			Models:             req.Models,
+			ModelMapping:       req.ModelMapping,
 		})
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -177,10 +211,14 @@ func RegisterRoutes(apiGroup *gin.RouterGroup, deps *Deps) {
 	})
 
 	// 分组/模型预览：接入前展示可选分组、倍率与各组模型，不落任何渠道配置
-	group.GET("/accounts/:uid/groups", func(c *gin.Context) {
+	group.GET("/accounts/:uid/keys", func(c *gin.Context) {
 		account, found, err := deps.Store.Get(c.Param("uid"))
 		if err != nil || !found {
 			c.JSON(http.StatusNotFound, gin.H{"error": "账号不存在"})
+			return
+		}
+		if account.CredentialMode == "key" {
+			c.JSON(http.StatusOK, gin.H{"keys": []any{}})
 			return
 		}
 		token, err := account.plaintextAccessToken()
@@ -188,23 +226,64 @@ func RegisterRoutes(apiGroup *gin.RouterGroup, deps *Deps) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		ratios, err := adapter.FetchGroups(c.Request.Context(), account.BaseURL, token, account.UserID, account.AuthTokenMode)
+		items, err := adapterForAccount(account, adapter).ListAllTokens(c.Request.Context(), account, token)
+		if err != nil {
+			c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+			return
+		}
+		for i := range items {
+			items[i].Key = ""
+		}
+		c.JSON(http.StatusOK, gin.H{"keys": items})
+	})
+
+	group.GET("/accounts/:uid/groups", func(c *gin.Context) {
+		account, found, err := deps.Store.Get(c.Param("uid"))
+		if err != nil || !found {
+			c.JSON(http.StatusNotFound, gin.H{"error": "账号不存在"})
+			return
+		}
+		if account.CredentialMode == "key" {
+			models, err := fetchInferenceModels(c.Request.Context(), account)
+			message := ""
+			if err != nil {
+				message = err.Error()
+			}
+			c.JSON(http.StatusOK, gin.H{"identified": err == nil, "groups": []gin.H{{"name": "imported", "ratio": nil, "models": models}}, "error": message})
+			return
+		}
+		token, err := account.plaintextAccessToken()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		site := adapterForAccount(account, adapter)
+		ratios, err := site.FetchGroups(c.Request.Context(), account.BaseURL, token, account.UserID, account.AuthTokenMode)
 		if err != nil {
 			c.JSON(http.StatusOK, gin.H{"identified": false, "error": err.Error()})
 			return
 		}
 		type groupPreview struct {
-			Name   string   `json:"name"`
-			Ratio  float64  `json:"ratio"`
-			Models []string `json:"models"`
-			Error  string   `json:"error,omitempty"`
+			DisplayName   string   `json:"displayName,omitempty"`
+			Name          string   `json:"name"`
+			Ratio         float64  `json:"ratio"`
+			Models        []string `json:"models"`
+			Error         string   `json:"error,omitempty"`
+			ModelsUnknown bool     `json:"modelsUnknown,omitempty"`
 		}
 		previews := make([]groupPreview, 0, len(ratios))
 		for name, ratio := range ratios {
 			preview := groupPreview{Name: name, Ratio: ratio}
-			models, err := adapter.FetchGroupModels(c.Request.Context(), account.BaseURL, token, account.UserID, account.AuthTokenMode, name)
+			if sub, ok := site.(*sub2APIAdapter); ok {
+				preview.DisplayName = sub.groupNames[name]
+			}
+			models, err := site.FetchGroupModels(c.Request.Context(), account.BaseURL, token, account.UserID, account.AuthTokenMode, name)
 			if err != nil {
-				preview.Error = err.Error()
+				if errors.Is(err, ErrGroupModelsUnknown) {
+					preview.ModelsUnknown = true
+				} else {
+					preview.Error = err.Error()
+				}
 			} else {
 				preview.Models = models
 			}
@@ -225,7 +304,7 @@ func RegisterRoutes(apiGroup *gin.RouterGroup, deps *Deps) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		balance, currency, err := adapter.FetchBalance(c.Request.Context(), account.BaseURL, token, account.UserID, account.AuthTokenMode)
+		balance, currency, err := adapterForAccount(account, adapter).FetchBalance(c.Request.Context(), account.BaseURL, token, account.UserID, account.AuthTokenMode)
 		if err != nil {
 			c.JSON(http.StatusOK, gin.H{"identified": false, "error": err.Error()})
 			return
@@ -253,11 +332,17 @@ func RegisterRoutes(apiGroup *gin.RouterGroup, deps *Deps) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-		channelName := ProvisionedChannelName(account.BaseURL, strings.ToLower(req.Protocol), req.Group)
+		fingerprint := ""
+		for _, meta := range account.ProvisionedKeys {
+			if meta.Protocol == strings.ToLower(req.Protocol) && meta.Group == req.Group {
+				fingerprint = meta.KeyFingerprint
+				break
+			}
+		}
 		var channel *config.UpstreamConfig
 		channels := protocolChannels(deps.CfgManager, apiType)
 		for i := range channels {
-			if channels[i].Name == channelName {
+			if matchesAccountChannel(channels[i], account, req.Group, fingerprint) {
 				channel = &channels[i]
 				break
 			}

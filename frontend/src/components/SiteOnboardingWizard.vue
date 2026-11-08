@@ -1,10 +1,16 @@
 <template>
   <div class="site-onboarding-wizard">
+    <v-alert v-if="verifyError" type="warning" variant="tonal" density="compact" class="mb-3">{{ verifyError }}</v-alert>
     <div class="d-sm-none text-subtitle-2 mb-2">{{ step }} / {{ stepTitles.length }} {{ stepTitles[step - 1] }}</div>
     <v-stepper v-model="step" :items="stepTitles" alt-labels hide-actions class="mb-4">
       <template #[`item.1`]>
         <v-card variant="flat">
           <v-card-text>
+            <v-select v-model="existingAccountUid" :items="existingAccounts" item-title="baseUrl" item-value="uid" :label="t('siteOnboarding.existingAccount')" clearable variant="outlined" density="compact" @update:model-value="selectAccount" />
+            <v-row dense>
+              <v-col cols="6"><v-select v-model="form.siteType" :items="['newapi', 'sub2api']" :label="t('siteOnboarding.siteType')" variant="outlined" density="compact" /></v-col>
+              <v-col cols="6"><v-select v-model="form.credentialMode" :items="credentialModes" :label="t('siteOnboarding.credentialMode')" variant="outlined" density="compact" /></v-col>
+            </v-row>
             <v-text-field
               v-model="form.baseUrl"
               :label="t('siteOnboarding.baseUrl')"
@@ -19,14 +25,14 @@
             </div>
             <v-text-field
               v-model="form.accessToken"
-              :label="t('siteOnboarding.accessToken')"
-              :hint="t('siteOnboarding.accessTokenHint')"
+              :label="t(form.credentialMode === 'key' ? 'siteOnboarding.inferenceKey' : 'siteOnboarding.accessToken')"
+              :hint="t(existingAccountUid ? 'siteOnboarding.keepCredential' : 'siteOnboarding.accessTokenHint')"
               variant="outlined"
               density="compact"
               type="password"
               class="mb-2"
             />
-            <v-row dense>
+            <v-row v-if="form.credentialMode === 'management' && form.siteType === 'newapi'" dense>
               <v-col cols="6">
                 <v-text-field
                   v-model="form.userId"
@@ -46,11 +52,8 @@
                 />
               </v-col>
             </v-row>
-            <v-alert v-if="verifyError" type="warning" variant="tonal" density="compact" class="mt-3">
-              {{ t('siteOnboarding.verifyFailedContinue') }}: {{ verifyError }}
-            </v-alert>
             <div class="d-flex ga-2 mt-4">
-              <v-btn color="primary" :loading="verifying" :disabled="!form.baseUrl || !form.accessToken" @click="verifyAndContinue">
+              <v-btn color="primary" :loading="verifying" :disabled="!form.baseUrl || (!form.accessToken && !existingAccountUid)" @click="verifyAndContinue">
                 {{ t('siteOnboarding.verifyAndContinue') }}
               </v-btn>
             </div>
@@ -61,6 +64,7 @@
       <template #[`item.2`]>
         <v-card variant="flat">
           <v-card-text>
+            <v-select v-model="agent" :items="agents" :label="t('siteOnboarding.agent')" variant="outlined" density="compact" @update:model-value="selectAgent" />
             <v-select
               v-model="protocol"
               :items="protocols"
@@ -68,8 +72,11 @@
               variant="outlined"
               density="compact"
               class="mb-3"
+              :disabled="agent === 'claude' || agent === 'codex'"
             />
+            <v-combobox v-model="selectedModels" :items="availableModels" :label="t('siteOnboarding.targetModels')" :hint="t('siteOnboarding.modelFirstHint')" persistent-hint multiple chips closable-chips variant="outlined" density="compact" class="mb-4" />
             <v-text-field
+              v-if="form.credentialMode !== 'key'"
               v-model.number="maxMultiplier"
               :label="t('siteOnboarding.maxMultiplier')"
               type="number"
@@ -78,32 +85,35 @@
               class="mb-3"
             />
             <v-progress-linear v-if="loadingGroups" indeterminate class="mb-3" />
-            <v-table v-else density="compact">
+            <v-table v-else-if="form.credentialMode !== 'key'" density="compact">
               <thead>
                 <tr>
                   <th></th>
                   <th>{{ t('siteOnboarding.group') }}</th>
                   <th>{{ t('siteOnboarding.ratio') }}</th>
                   <th>{{ t('siteOnboarding.modelCount') }}</th>
+                  <th>{{ t('siteOnboarding.existingKey') }}</th>
                 </tr>
               </thead>
               <tbody>
                 <tr v-for="group in groupsPreview" :key="group.name">
                   <td>
-                    <v-checkbox-btn v-model="selectedGroups" :value="group.name" :disabled="!!group.error || (group.models?.length ?? 0) === 0" />
+                    <v-checkbox-btn v-model="selectedGroups" :value="group.name" :disabled="!groupEligible(group)" />
                   </td>
-                  <td>{{ group.name }}</td>
+                  <td>{{ group.displayName || group.name }}</td>
                   <td>{{ group.ratio }}</td>
                   <td>
                     <span v-if="group.error" class="text-warning">{{ t('siteOnboarding.groupQueryFailed') }}</span>
+                    <span v-else-if="group.modelsUnknown">{{ t('siteOnboarding.modelsUnknown') }}</span>
                     <span v-else>{{ group.models?.length ?? 0 }}</span>
                   </td>
+                  <td><v-select :model-value="existingTokenIds[group.name] || 0" :items="keyOptions(group.name)" variant="outlined" density="compact" hide-details style="min-width: 160px" @update:model-value="existingTokenIds[group.name] = $event" /></td>
                 </tr>
               </tbody>
             </v-table>
             <div class="d-flex ga-2 mt-4">
               <v-btn variant="text" @click="step = 1">{{ t('siteOnboarding.back') }}</v-btn>
-              <v-btn color="primary" :disabled="selectedGroups.length === 0" @click="step = 3">
+              <v-btn color="primary" :disabled="selectedGroups.length === 0 || selectedModels.length === 0" @click="step = 3">
                 {{ t('siteOnboarding.next') }}
               </v-btn>
             </div>
@@ -114,17 +124,10 @@
       <template #[`item.3`]>
         <v-card variant="flat">
           <v-card-text>
-            <v-select
-              v-model="selectedModels"
-              :items="availableModels"
-              :label="t('siteOnboarding.targetModels')"
-              multiple
-              chips
-              closable-chips
-              variant="outlined"
-              density="compact"
-              class="mb-3"
-            />
+            <v-alert variant="tonal" type="info" class="mb-3">{{ t('siteOnboarding.mappingHint', { agent, model: selectedModels[0] || '' }) }}</v-alert>
+            <v-switch v-model="allowModelFallback" :disabled="selectedModels.length < 2" :label="t('siteOnboarding.allowFallback')" :hint="t('siteOnboarding.fallbackOrder', { models: selectedModels.join(' → ') })" persistent-hint />
+            <v-switch v-if="form.credentialMode === 'management'" v-model="autoSyncGroups" :label="t('siteOnboarding.autoGroups')" :hint="t('siteOnboarding.autoGroupsHint')" persistent-hint />
+            <v-row dense class="my-3"><v-col cols="6"><v-text-field v-model.number="maxAttempts" type="number" min="1" max="30" :label="t('siteOnboarding.maxAttempts')" variant="outlined" density="compact" /></v-col><v-col cols="6"><v-text-field v-model.number="maxWaitSeconds" type="number" min="1" max="300" :label="t('siteOnboarding.retryWindow')" variant="outlined" density="compact" /></v-col></v-row>
             <div class="text-subtitle-2 mb-2">{{ t('siteOnboarding.modelMapping') }}</div>
             <div v-for="(row, idx) in mappingRows" :key="idx" class="d-flex ga-2 mb-2">
               <v-text-field v-model="row.from" :placeholder="t('siteOnboarding.mappingFrom')" variant="outlined" density="compact" />
@@ -147,6 +150,11 @@
       <template #[`item.4`]>
         <v-card variant="flat">
           <v-card-text>
+            <v-alert v-if="provisionResult?.groups.some(group => !group.skipped)" type="info" variant="tonal" class="mb-3">
+              {{ t('siteOnboarding.connectionReady') }}
+              <div class="mt-2"><code>{{ connectionUrl }}</code></div>
+              <div>{{ t('siteOnboarding.targetModels') }}: {{ selectedModels.join(', ') }}</div>
+            </v-alert>
             <v-table v-if="provisionResult" density="compact">
               <thead>
                 <tr>
@@ -194,13 +202,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch, onMounted, nextTick } from 'vue'
 import { useI18n } from '../i18n'
 import api from '../services/api'
-import type { SiteAccount, SiteGroupPreview, SiteProvisionResult } from '../services/api-types'
+import type { SiteAccount, SiteGroupPreview, SiteProvisionResult, SiteRemoteKey } from '../services/api-types'
 import { parseQuickInput } from '../utils/quickInputParser'
 
-const emit = defineEmits<{ provisioned: [] }>()
+defineEmits<{ provisioned: [] }>()
 const { t } = useI18n()
 
 const step = ref(1)
@@ -217,7 +225,16 @@ const authModes = [
 ]
 const protocols = ['messages', 'chat', 'responses', 'gemini']
 
-const form = ref({ baseUrl: '', accessToken: '', userId: '', authTokenMode: 'bearer' })
+const agents = [{ title: 'Claude Code', value: 'claude' }, { title: 'Codex', value: 'codex' }, { title: 'OpenCode', value: 'opencode' }, { title: 'API', value: 'custom' }]
+const agent = ref('codex')
+const credentialModes = computed(() => [{ title: t('siteOnboarding.managementCredential'), value: 'management' }, { title: t('siteOnboarding.inferenceKey'), value: 'key' }])
+const existingAccounts = ref<SiteAccount[]>([])
+const existingAccountUid = ref<string | null>(null)
+const remoteKeys = ref<SiteRemoteKey[]>([])
+const existingTokenIds = ref<Record<string, number>>({})
+onMounted(async () => { existingAccounts.value = (await api.listSiteAccounts()).accounts })
+
+const form = ref({ siteType: 'newapi', credentialMode: 'management' as 'management' | 'key', baseUrl: '', accessToken: '', userId: '', authTokenMode: 'bearer' })
 const account = ref<SiteAccount | null>(null)
 const verifying = ref(false)
 const verifyError = ref('')
@@ -227,11 +244,15 @@ const submitBaseUrl = computed(() => recognizedBaseUrl.value || form.value.baseU
 
 const groupsPreview = ref<SiteGroupPreview[]>([])
 const loadingGroups = ref(false)
-const protocol = ref('chat')
+const protocol = ref('responses')
 const selectedGroups = ref<string[]>([])
 const maxMultiplier = ref(1.0)
 
 const selectedModels = ref<string[]>([])
+const allowModelFallback = ref(false)
+const autoSyncGroups = ref(false)
+const maxAttempts = ref(6)
+const maxWaitSeconds = ref(90)
 const mappingRows = ref<{ from: string; to: string }[]>([])
 
 const provisioning = ref(false)
@@ -240,11 +261,45 @@ const verifyingGroup = ref('')
 const realVerifyMessage = ref('')
 const realVerifySuccess = ref(false)
 const reconciling = ref(false)
+const connectionUrl = computed(() => `${window.location.origin}${protocol.value === 'gemini' ? '/v1beta' : protocol.value === 'messages' ? '' : '/v1'}`)
+
+function selectAccount(uid: string | null) {
+  const selected = existingAccounts.value.find(item => item.uid === uid)
+  if (!selected) return
+  form.value = { siteType: selected.siteType, credentialMode: selected.credentialMode || 'management', baseUrl: selected.baseUrl, accessToken: '', userId: selected.userId || '', authTokenMode: selected.authTokenMode || 'bearer' }
+  restorePlan(selected)
+}
+function restorePlan(selected: SiteAccount) {
+  const plan = selected.plans?.find(item => item.protocol === protocol.value)
+  if (!plan) return
+  selectedModels.value = [...(plan.models || [])]
+  maxMultiplier.value = plan.maxMultiplier ?? 1
+  allowModelFallback.value = plan.allowModelFallback ?? false
+  autoSyncGroups.value = plan.autoSyncGroups ?? false
+  maxAttempts.value = plan.maxAttempts || 6
+  maxWaitSeconds.value = plan.maxWaitSeconds || 90
+  existingTokenIds.value = { ...(plan.existingTokenIds || {}) }
+  mappingRows.value = Object.entries(plan.modelMapping || {}).filter(([from, to]) => from !== to && !(['claude', 'gpt'].includes(from) && to === plan.models?.[0])).map(([from, to]) => ({ from, to }))
+}
+function selectAgent() {
+  if (agent.value === 'claude') protocol.value = 'messages'
+  if (agent.value === 'codex') protocol.value = 'responses'
+  const selected = existingAccounts.value.find(item => item.uid === existingAccountUid.value)
+  if (selected) restorePlan(selected)
+}
+function groupEligible(group: SiteGroupPreview) {
+  return !group.error && Number.isFinite(group.ratio) && group.ratio <= maxMultiplier.value && selectedModels.value.length > 0 && (group.modelsUnknown || selectedModels.value.some(model => group.models?.includes(model)))
+}
+function keyOptions(group: string) {
+  return [{ title: t('siteOnboarding.createKey'), value: 0 }, ...remoteKeys.value.filter(key => key.group === group && (key.status === 0 || key.status === 1)).map(key => ({ title: key.name, value: key.id }))]
+}
+watch([selectedModels, maxMultiplier, groupsPreview], () => {
+  selectedGroups.value = form.value.credentialMode === 'key' ? ['imported'] : groupsPreview.value.filter(groupEligible).map(group => group.name)
+}, { deep: true })
 
 const availableModels = computed(() => {
   const models = new Set<string>()
   for (const group of groupsPreview.value) {
-    if (!selectedGroups.value.includes(group.name)) continue
     for (const model of group.models ?? []) models.add(model)
   }
   return [...models].sort()
@@ -255,13 +310,18 @@ async function verifyAndContinue() {
   verifyError.value = ''
   try {
     const { account: created } = await api.upsertSiteAccount({
-      siteType: 'newapi',
+      uid: existingAccountUid.value || undefined,
+      siteType: form.value.siteType,
+      credentialMode: form.value.credentialMode,
       baseUrl: submitBaseUrl.value,
       userId: form.value.userId || undefined,
       authTokenMode: form.value.authTokenMode,
       accessToken: form.value.accessToken
     })
     account.value = created
+    restorePlan(created)
+    existingAccounts.value = [...existingAccounts.value.filter(item => item.uid !== created.uid), created]
+    existingAccountUid.value = created.uid
     const verifyResult = await api.verifySiteAccount(created.uid)
     if (!verifyResult.verified) {
       // 信息验证失败不阻断接入：诊断展示，用户可继续（探针失败 ≠ 站点不可用）
@@ -282,9 +342,12 @@ async function loadGroups() {
   try {
     const response = await api.getSiteAccountGroups(account.value.uid)
     groupsPreview.value = (response.groups ?? []).sort((a, b) => a.ratio - b.ratio || a.name.localeCompare(b.name))
-    selectedGroups.value = groupsPreview.value
-      .filter(g => !g.error && (g.models?.length ?? 0) > 0 && g.ratio <= maxMultiplier.value)
-      .map(g => g.name)
+    if (response.error) verifyError.value = response.error
+    if (form.value.credentialMode !== 'key') {
+      try { remoteKeys.value = (await api.getSiteAccountKeys(account.value.uid)).keys || [] } catch { remoteKeys.value = [] }
+    }
+    const plan = account.value.plans?.find(item => item.protocol === protocol.value)
+    if (plan?.groups?.length) { await nextTick(); selectedGroups.value = plan.groups.filter(name => groupsPreview.value.some(group => group.name === name && groupEligible(group))) }
   } finally {
     loadingGroups.value = false
   }
@@ -293,6 +356,7 @@ async function loadGroups() {
 async function provision() {
   if (!account.value) return
   provisioning.value = true
+  verifyError.value = ''
   realVerifyMessage.value = ''
   try {
     const mapping: Record<string, string> = {}
@@ -301,6 +365,13 @@ async function provision() {
     }
     provisionResult.value = await api.provisionSiteAccount(account.value.uid, {
       protocol: protocol.value,
+      agent: agent.value,
+      allowModelFallback: allowModelFallback.value,
+      autoSyncGroups: autoSyncGroups.value,
+      excludeGroups: groupsPreview.value.filter(group => groupEligible(group) && !selectedGroups.value.includes(group.name)).map(group => group.name),
+      maxAttempts: maxAttempts.value,
+      maxWaitSeconds: maxWaitSeconds.value,
+      existingTokenIds: existingTokenIds.value,
       groups: selectedGroups.value,
       maxMultiplier: maxMultiplier.value,
       models: selectedModels.value,
@@ -319,13 +390,14 @@ async function provision() {
 
 function evidenceLabel(group: string): string {
   const evidence = account.value?.evidence?.find(e => e.group === group && e.protocol === protocol.value)
-  return evidence?.level || 'configured'
+  const labels = { configured: 'siteOnboarding.configured', info_verified: 'siteOnboarding.infoVerified', real_request: 'siteOnboarding.realVerified' }
+  return t(labels[evidence?.level as keyof typeof labels] || labels.configured)
 }
 
 async function verifyReal(group: string) {
   if (!account.value) return
   const groupModels = groupsPreview.value.find(item => item.name === group)?.models ?? []
-  const model = selectedModels.value.find(item => groupModels.includes(item))
+  const model = selectedModels.value.find(item => form.value.credentialMode === 'key' || groupsPreview.value.find(g => g.name === group)?.modelsUnknown || groupModels.includes(item))
   if (!model) return
   verifyingGroup.value = group
   try {

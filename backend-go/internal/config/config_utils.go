@@ -344,6 +344,10 @@ func IsChannelInPromotion(upstream *UpstreamConfig) bool {
 // 使用深拷贝可避免并发请求之间的竞态条件
 func (u *UpstreamConfig) Clone() *UpstreamConfig {
 	cloned := *u // 浅拷贝
+	if u.MaxGroupMultiplier != nil {
+		v := *u.MaxGroupMultiplier
+		cloned.MaxGroupMultiplier = &v
+	}
 
 	// 深拷贝切片字段
 	if u.BaseURLs != nil {
@@ -464,6 +468,15 @@ func applyModelCapabilityUpdates(upstream *UpstreamConfig, updates UpstreamUpdat
 //
 // 六类渠道 Update 函数共用，避免新增字段时遗漏其中某一处。
 func applyAPIKeyConfigUpdate(upstream *UpstreamConfig, updates UpstreamUpdate) {
+	if updates.SiteAccountUID != nil {
+		upstream.SiteAccountUID = *updates.SiteAccountUID
+	}
+	if updates.SiteGroup != nil {
+		upstream.SiteGroup = *updates.SiteGroup
+	}
+	if updates.MaxGroupMultiplier.Present {
+		upstream.MaxGroupMultiplier = updates.MaxGroupMultiplier.Value
+	}
 	if updates.APIKeyConfigs != nil {
 		upstream.APIKeyConfigs = normalizeAPIKeyConfigs(upstream.APIKeys, updates.APIKeyConfigs)
 	} else if updates.APIKeys != nil {

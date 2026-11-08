@@ -28,9 +28,23 @@ import {
   type ConsoleSelection,
 } from '@/composables/useConsoleSelection'
 import type { TabValue } from '@/types'
+import type { AgentPlatform } from '@/types'
+import { useAgentConfig } from '@/composables/useAgentConfig'
 
 const activeTab = ref<TabValue>('status')
 const { status, actionError, syncStatus } = useStatus()
+
+async function configureOnboardedAgent(platform: AgentPlatform) {
+  activeTab.value = 'agent'
+  const config = useAgentConfig()
+  try {
+    await config.loadAgentStatuses()
+    if (platform === 'claude') config.selectedClaudeProvider.value = 'ccx'
+    if (platform === 'codex') config.selectedCodexProvider.value = 'ccx'
+    if (platform === 'opencode') config.selectedOpenCodeProvider.value = 'ccx'
+    await config.showApplyPreview(platform)
+  } catch (error) { actionError.value = String(error) }
+}
 const { t, initializeLanguage } = useLanguage()
 const { init: initTheme } = useTheme()
 const { consoleSelection, setConsoleSelection } = useConsoleSelection()
@@ -245,7 +259,7 @@ onBeforeUnmount(() => {
             <ChannelTab />
           </div>
           <div v-show="activeTab === 'subscriptions'" class="h-full">
-            <SubscriptionTab />
+            <SubscriptionTab @configure-agent="configureOnboardedAgent" />
           </div>
           <div v-show="activeTab === 'cockpit'" class="h-full">
             <ConversationDashboard />

@@ -91,6 +91,11 @@ export interface APIKeyConfig {
   enabled?: boolean
   quotaGroup?: string
   groupMultiplier?: number | null
+  multiplierSource?: string
+  multiplierUpdatedAt?: string
+  sourceAccountUid?: string
+  sourceRemoteTokenId?: number
+  remoteStatus?: string
   rateLimitRpm?: number
   rateLimitWindowMinutes?: number
   rateLimitMaxConcurrent?: number
@@ -140,6 +145,9 @@ export interface ModelPricingTier {
 }
 
 export interface Channel {
+  siteAccountUid?: string
+  siteGroup?: string
+  maxGroupMultiplier?: number | null
   name: string
   serviceType: 'openai' | 'gemini' | 'claude' | 'responses' | 'copilot'
   authHeader?: ChannelAuthHeader | ''
@@ -869,6 +877,10 @@ export interface SiteChannelEvidence {
 }
 
 export interface SiteAccount {
+  plans?: SiteProvisionRequest[]
+  credentialMode?: 'management' | 'key'
+  lastSyncAt?: string
+  lastSyncError?: string
   uid: string
   siteType: string
   baseUrl: string
@@ -882,6 +894,8 @@ export interface SiteAccount {
 }
 
 export interface SiteAccountUpsertRequest {
+  uid?: string
+  credentialMode?: 'management' | 'key'
   siteType: string
   baseUrl: string
   userId?: string
@@ -891,6 +905,8 @@ export interface SiteAccountUpsertRequest {
 
 export interface SiteGroupPreview {
   name: string
+  displayName?: string
+  modelsUnknown?: boolean
   ratio: number
   models?: string[]
   error?: string
@@ -908,6 +924,12 @@ export interface SiteVerifyResponse {
 }
 
 export interface SiteProvisionRequest {
+  autoSyncGroups?: boolean
+  allowModelFallback?: boolean
+  maxAttempts?: number
+  maxWaitSeconds?: number
+  agent?: string
+  existingTokenIds?: Record<string, number>
   protocol: string
   groups?: string[]
   excludeGroups?: string[]
@@ -928,6 +950,15 @@ export interface SiteProvisionResult {
   accountUID: string
   protocol: string
   groups: SiteProvisionGroupResult[]
+}
+
+export interface SiteRemoteKey {
+  id: number
+  name: string
+  group: string
+  status: number
+  model_limits_enabled: boolean
+  model_limits: string
 }
 
 export interface SiteVerifyRequestResponse {

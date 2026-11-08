@@ -149,6 +149,7 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     description: '',
     apiKeys: [] as string[],
     apiKeyConfigs: undefined as Channel['apiKeyConfigs'],
+    maxGroupMultiplier: null as number | null,
     modelMapping: {} as Record<string, string>,
     modelCapabilitiesText: '',
     modelCapabilityRows: [] as ModelCapabilityRow[],
@@ -767,6 +768,7 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     form.description = ''
     form.apiKeys = []
     form.apiKeyConfigs = undefined
+    form.maxGroupMultiplier = null
     form.modelMapping = {}
     form.modelCapabilitiesText = ''
     form.modelCapabilityRows = []
@@ -852,6 +854,7 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
 
     // 直接存储原始密钥，不需要映射关系
     form.apiKeys = [...channel.apiKeys]
+    form.maxGroupMultiplier = channel.maxGroupMultiplier ?? null
     form.apiKeyConfigs = channel.apiKeyConfigs
       ? channel.apiKeyConfigs.map(cfg => ({
           ...cfg,

@@ -17,6 +17,7 @@
       </v-card-title>
 
       <v-card-text class="pt-2">
+        <v-text-field :model-value="maxGroupMultiplier" :label="t('channelEditor.auth.maxMultiplier')" :hint="t('channelEditor.auth.maxMultiplierHint')" persistent-hint clearable type="number" min="0" step="any" variant="outlined" density="compact" class="mb-4" :rules="[validMultiplier]" @update:model-value="updateLimit" />
         <!-- 现有密钥列表 -->
         <div v-if="apiKeys.length" class="mb-4">
           <v-list density="compact" class="bg-transparent">
@@ -94,6 +95,8 @@
                   density="compact"
                   hide-details
                   :aria-label="t('channelEditor.auth.groupMultiplier')"
+                  :readonly="!!apiKeyConfigs?.find(config => config.key === key)?.sourceRemoteTokenId"
+                  :rules="[validMultiplier]"
                   class="group-multiplier-input"
                   @update:model-value="stageGroupMultiplier(key, $event)"
                   @blur="commitGroupMultiplier(key)"
@@ -468,6 +471,7 @@ interface Props {
   channelId?: number
   proxyUrl?: string
   apiKeyConfigs?: APIKeyConfig[]
+  maxGroupMultiplier?: number | null
 }
 
 const props = defineProps<Props>()
@@ -475,6 +479,7 @@ const props = defineProps<Props>()
 const emit = defineEmits<{
   'update:apiKeys': [string[]]
   'update:apiKeyConfigs': [APIKeyConfig[]]
+  'update:maxGroupMultiplier': [number | null]
   'update:proxyUrl': [string]
   'restore-key': [string]
   'restore-key-model': [string, string]
@@ -516,6 +521,11 @@ let copilotPollTimer: number | null = null
 
 const hasConfigurableKeys = computed(() => props.serviceType === 'copilot' || props.apiKeys.length > 0)
 const groupMultiplierDrafts = ref(new Map<string, string>())
+const validMultiplier = (value: unknown) => value == null || value === '' || (Number.isFinite(Number(value)) && Number(value) >= 0) || t('channelEditor.auth.multiplierInvalid')
+const updateLimit = (value: unknown) => {
+  if (validMultiplier(value) !== true) return
+  emit('update:maxGroupMultiplier', value == null || value === '' ? null : Number(value))
+}
 
 const getGroupMultiplier = (key: string): number | null => {
   return props.apiKeyConfigs?.find(config => config.key === key)?.groupMultiplier ?? null

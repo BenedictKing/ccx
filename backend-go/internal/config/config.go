@@ -20,12 +20,15 @@ type UpstreamConfig struct {
 	BaseURL               string                             `json:"baseUrl"`
 	BaseURLs              []string                           `json:"baseUrls,omitempty"` // 多 BaseURL 支持（failover 模式）
 	APIKeys               []string                           `json:"apiKeys"`
-	APIKeyConfigs         []APIKeyConfig                     `json:"apiKeyConfigs,omitempty"`     // API Key 附加配置（限速、权重、配额组、分组倍率等），通过 Key 关联 APIKeys
-	HistoricalAPIKeys     []string                           `json:"historicalApiKeys,omitempty"` // 历史 API Key（用于统计聚合，换 Key 后保留旧 Key 的统计数据）
-	DisabledAPIKeys       []DisabledKeyInfo                  `json:"disabledApiKeys,omitempty"`   // 被拉黑的 API Key（持久化，需手动恢复）
-	DisabledKeyModels     []DisabledKeyModelInfo             `json:"disabledKeyModels,omitempty"` // 被限制的 (Key,模型) 组合（持久化，定时自动恢复）
-	ServiceType           string                             `json:"serviceType"`                 // gemini, openai, claude
-	AuthHeader            string                             `json:"authHeader,omitempty"`        // 认证头覆盖：auto(空)/bearer/x-api-key
+	SiteAccountUID        string                             `json:"siteAccountUid,omitempty"` // 托管归属独立于用户可编辑的渠道名称
+	SiteGroup             string                             `json:"siteGroup,omitempty"`
+	MaxGroupMultiplier    *float64                           `json:"maxGroupMultiplier,omitempty"` // nil=不设上限，0=仅允许零倍率
+	APIKeyConfigs         []APIKeyConfig                     `json:"apiKeyConfigs,omitempty"`      // API Key 附加配置（限速、权重、配额组、分组倍率等），通过 Key 关联 APIKeys
+	HistoricalAPIKeys     []string                           `json:"historicalApiKeys,omitempty"`  // 历史 API Key（用于统计聚合，换 Key 后保留旧 Key 的统计数据）
+	DisabledAPIKeys       []DisabledKeyInfo                  `json:"disabledApiKeys,omitempty"`    // 被拉黑的 API Key（持久化，需手动恢复）
+	DisabledKeyModels     []DisabledKeyModelInfo             `json:"disabledKeyModels,omitempty"`  // 被限制的 (Key,模型) 组合（持久化，定时自动恢复）
+	ServiceType           string                             `json:"serviceType"`                  // gemini, openai, claude
+	AuthHeader            string                             `json:"authHeader,omitempty"`         // 认证头覆盖：auto(空)/bearer/x-api-key
 	Name                  string                             `json:"name,omitempty"`
 	Description           string                             `json:"description,omitempty"`
 	Website               string                             `json:"website,omitempty"`
@@ -112,6 +115,11 @@ type APIKeyConfig struct {
 	Enabled                  *bool    `json:"enabled,omitempty"`
 	QuotaGroup               string   `json:"quotaGroup,omitempty"`
 	GroupMultiplier          *float64 `json:"groupMultiplier,omitempty"`
+	MultiplierSource         string   `json:"multiplierSource,omitempty"`
+	MultiplierUpdatedAt      string   `json:"multiplierUpdatedAt,omitempty"`
+	SourceAccountUID         string   `json:"sourceAccountUid,omitempty"`
+	SourceRemoteTokenID      int      `json:"sourceRemoteTokenId,omitempty"`
+	RemoteStatus             string   `json:"remoteStatus,omitempty"` // 远端明确停用/过期/分组缺失；空表示未发现限制
 	RateLimitRPM             int      `json:"rateLimitRpm,omitempty"`
 	RateLimitWindowMinutes   int      `json:"rateLimitWindowMinutes,omitempty"` // 滑动窗口时长（秒；JSON 字段名保留为兼容旧配置）
 	RateLimitMaxConcurrent   int      `json:"rateLimitMaxConcurrent,omitempty"`
@@ -441,6 +449,10 @@ func (u *UpstreamConfig) GetEffectiveResponseHeaderTimeoutMs(fallbackMs int) int
 
 // UpstreamUpdate 用于部分更新 UpstreamConfig
 type UpstreamUpdate struct {
+	ExpectedSiteSnapshot          *UpstreamConfig                    `json:"-"` // 后台同步的乐观并发保护，不由外部 API 赋值
+	SiteAccountUID                *string                            `json:"siteAccountUid"`
+	SiteGroup                     *string                            `json:"siteGroup"`
+	MaxGroupMultiplier            OptionalMultiplier                 `json:"maxGroupMultiplier"`
 	Name                          *string                            `json:"name"`
 	ServiceType                   *string                            `json:"serviceType"`
 	AuthHeader                    *string                            `json:"authHeader"`
@@ -530,8 +542,9 @@ type CircuitBreakerConfig struct {
 }
 
 type Config struct {
-	Upstream        []UpstreamConfig `json:"upstream"`
-	CurrentUpstream int              `json:"currentUpstream,omitempty"` // 已废弃：旧格式兼容用
+	ModelFallbackPolicies map[string]ModelFallbackPolicy `json:"modelFallbackPolicies,omitempty"`
+	Upstream              []UpstreamConfig               `json:"upstream"`
+	CurrentUpstream       int                            `json:"currentUpstream,omitempty"` // 已废弃：旧格式兼容用
 
 	// Responses 接口专用配置（独立于 /v1/messages）
 	ResponsesUpstream        []UpstreamConfig `json:"responsesUpstream"`
@@ -666,6 +679,13 @@ func (cm *ConfigManager) GetConfig() Config {
 			cloned.AgentModelProfiles[k] = cloneAgentModelProfile(v)
 		}
 	}
+	if cm.config.ModelFallbackPolicies != nil {
+		cloned.ModelFallbackPolicies = make(map[string]ModelFallbackPolicy, len(cm.config.ModelFallbackPolicies))
+		for k, v := range cm.config.ModelFallbackPolicies {
+			v.Models = append([]string(nil), v.Models...)
+			cloned.ModelFallbackPolicies[k] = v
+		}
+	}
 	if cm.config.UpstreamModelCapabilities != nil {
 		cloned.UpstreamModelCapabilities = make(map[string]UpstreamModelCapability, len(cm.config.UpstreamModelCapabilities))
 		for k, v := range cm.config.UpstreamModelCapabilities {
@@ -685,6 +705,14 @@ func (cm *ConfigManager) GetConfig() Config {
 // GetNextAPIKey 获取下一个 API 密钥（纯 failover 模式）
 // apiType: 接口类型（Messages/Responses/Gemini），用于日志标签前缀
 func (cm *ConfigManager) GetNextAPIKey(upstream *UpstreamConfig, failedKeys map[string]bool, apiType string) (string, error) {
+	filtered := *upstream
+	filtered.APIKeys = make([]string, 0, len(upstream.APIKeys))
+	for _, key := range upstream.APIKeys {
+		if upstream.IsAPIKeyGroupMultiplierAllowed(key) {
+			filtered.APIKeys = append(filtered.APIKeys, key)
+		}
+	}
+	upstream = &filtered
 	if len(upstream.APIKeys) == 0 {
 		return "", fmt.Errorf("上游 %s 没有可用的API密钥", upstream.Name)
 	}

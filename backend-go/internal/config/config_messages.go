@@ -57,6 +57,10 @@ func (cm *ConfigManager) AddUpstream(upstream UpstreamConfig) error {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
+	if err := validateKeySettings(upstream.APIKeyConfigs, upstream.MaxGroupMultiplier); err != nil {
+		return err
+	}
+
 	// 检查 Name 是否已存在
 	for _, existing := range cm.config.Upstream {
 		if existing.Name == upstream.Name {
@@ -113,6 +117,14 @@ func (cm *ConfigManager) UpdateUpstream(index int, updates UpstreamUpdate) (shou
 
 	if index < 0 || index >= len(cm.config.Upstream) {
 		return false, fmt.Errorf("无效的上游索引: %d", index)
+	}
+
+	if err := validateKeySettings(updates.APIKeyConfigs, updates.MaxGroupMultiplier.Value); err != nil {
+		return false, err
+	}
+
+	if err := validateSiteChannelIdentity(cm.config.Upstream[index], updates); err != nil {
+		return false, err
 	}
 
 	// 保存修改前的配置快照用于变更检测

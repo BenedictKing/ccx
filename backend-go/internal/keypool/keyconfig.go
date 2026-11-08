@@ -32,6 +32,9 @@ func HasEffectiveConfig(upstream *config.UpstreamConfig) bool {
 	if upstream == nil {
 		return false
 	}
+	if upstream.MaxGroupMultiplier != nil {
+		return true
+	}
 	for _, cfg := range upstream.APIKeyConfigs {
 		if config.IsAPIKeyConfigEffective(cfg) {
 			return true
@@ -59,6 +62,9 @@ func CandidatesForModel(upstream *config.UpstreamConfig, failedKeys map[string]b
 	for i, key := range upstream.APIKeys {
 		key = strings.TrimSpace(key)
 		if key == "" || failedKeys[key] {
+			continue
+		}
+		if !upstream.IsAPIKeyGroupMultiplierAllowed(key) {
 			continue
 		}
 		cfg := byKey[key]

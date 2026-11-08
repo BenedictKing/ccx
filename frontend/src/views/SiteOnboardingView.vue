@@ -18,6 +18,7 @@
               <th>{{ t('siteOnboarding.accessToken') }}</th>
               <th>{{ t('siteOnboarding.provisioned') }}</th>
               <th>{{ t('siteOnboarding.balance') }}</th>
+              <th>{{ t('siteOnboarding.syncStatus') }}</th>
               <th>{{ t('siteOnboarding.actions') }}</th>
             </tr>
           </thead>
@@ -33,7 +34,9 @@
               <td>
                 <v-btn size="small" variant="text" @click="showBalance(account)">{{ t('siteOnboarding.balance') }}</v-btn>
               </td>
+              <td class="text-caption">{{ account.lastSyncError || (account.lastSyncAt ? new Date(account.lastSyncAt).toLocaleString() : '-') }}</td>
               <td>
+                <v-btn size="small" variant="text" @click="syncAccount(account)">{{ t('siteOnboarding.reconcile') }}</v-btn>
                 <v-btn size="small" variant="text" @click="verify(account)">{{ t('siteOnboarding.verify') }}</v-btn>
                 <v-btn size="small" variant="text" color="error" @click="remove(account)">{{ t('siteOnboarding.delete') }}</v-btn>
               </td>
@@ -79,6 +82,14 @@ async function showBalance(account: SiteAccount) {
   actionMessage.value = result.identified
     ? `${account.baseUrl}: ${result.balance} (${result.currency})`
     : (result.error || t('siteOnboarding.realVerifyFailed'))
+}
+
+async function syncAccount(account: SiteAccount) {
+  try {
+    const result = await api.reconcileSiteAccount(account.uid)
+    actionMessage.value = result.actions.map(action => `${action.group}: ${action.detail}`).join('\n') || t('siteOnboarding.reconcileClean')
+  } catch (error) { actionMessage.value = String(error) }
+  await refresh()
 }
 
 async function remove(account: SiteAccount) {

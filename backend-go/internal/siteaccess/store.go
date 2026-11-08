@@ -25,17 +25,19 @@ type ProvisionedKeyMeta struct {
 	// KeyFingerprint 是推理 Key 的 sha256 指纹（16 hex），用于对账时匹配本地渠道
 	// 中的 Key；不明文持久化推理 Key。
 	KeyFingerprint string `json:"keyFingerprint,omitempty"`
+	Imported       bool   `json:"imported,omitempty"` // 已有 Key 由用户导入，不负责远端创建或删除
 }
 
 // SiteAccount 站点托管账号：管理凭证 + 已建远端 Key 元数据。
 type SiteAccount struct {
-	UID           string    `json:"uid"`
-	SiteType      string    `json:"siteType"` // newapi / sub2api
-	BaseURL       string    `json:"baseUrl"`
-	UserID        string    `json:"userId,omitempty"`
-	AuthTokenMode string    `json:"authTokenMode,omitempty"`
-	CreatedAt     time.Time `json:"createdAt"`
-	UpdatedAt     time.Time `json:"updatedAt"`
+	UID            string    `json:"uid"`
+	SiteType       string    `json:"siteType"` // newapi / sub2api
+	BaseURL        string    `json:"baseUrl"`
+	UserID         string    `json:"userId,omitempty"`
+	AuthTokenMode  string    `json:"authTokenMode,omitempty"`
+	CredentialMode string    `json:"credentialMode,omitempty"` // management(默认) 或 key(仅推理凭据)
+	CreatedAt      time.Time `json:"createdAt"`
+	UpdatedAt      time.Time `json:"updatedAt"`
 
 	// AccessToken 是站点系统访问令牌，敏感数据。
 	// 落盘时加密（$enc$ 前缀），通过 PlaintextAccessToken 取明文；
@@ -45,14 +47,21 @@ type SiteAccount struct {
 	ProvisionedKeys []ProvisionedKeyMeta `json:"provisionedKeys,omitempty"`
 
 	// Evidence 按协议+分组记录验收证据等级（配置/信息验证/真实请求）。
-	Evidence []ChannelEvidence `json:"evidence,omitempty"`
+	Evidence      []ChannelEvidence  `json:"evidence,omitempty"`
+	LastSyncAt    *time.Time         `json:"lastSyncAt,omitempty"`
+	LastSyncError string             `json:"lastSyncError,omitempty"`
+	Plans         []ProvisionRequest `json:"plans,omitempty"`
 }
 
-// DeriveAccountUID 从站点身份派生稳定账号 UID：同站点同用户同令牌重复接入幂等。
+// DeriveAccountUID 优先使用站点用户身份；尚未识别用户时才以令牌指纹兜底。
 func DeriveAccountUID(siteType, baseURL, userID, accessToken string) string {
-	normalized := strings.ToLower(strings.TrimRight(strings.TrimSpace(baseURL), "/"))
+	normalized := NormalizeSiteURL(baseURL)
+	identity := "user:" + strings.TrimSpace(userID)
+	if strings.TrimSpace(userID) == "" {
+		identity = "token:" + accessToken
+	}
 	sum := sha256.Sum256([]byte(strings.Join([]string{
-		strings.TrimSpace(siteType), normalized, strings.TrimSpace(userID), strings.TrimSpace(accessToken),
+		strings.TrimSpace(siteType), normalized, identity,
 	}, "|")))
 	return strings.TrimSpace(siteType) + "_" + hex.EncodeToString(sum[:8])
 }
@@ -88,8 +97,9 @@ func (a *SiteAccount) plaintextAccessToken() (string, error) {
 
 // AccountStore 是站点账号的 JSON 持久化存储，落盘字段加密、写盘原子化。
 type AccountStore struct {
-	path string
-	mu   sync.RWMutex
+	path       string
+	mu         sync.RWMutex
+	operations sync.Mutex // 接入与对账串行化，避免同一远端 Key 被并发创建
 }
 
 var (
@@ -111,15 +121,25 @@ func NewAccountStore(path string) *AccountStore {
 }
 
 // Upsert 写入或更新账号；AccessToken 为明文，落盘前加密。
-// UID 为空时按 DeriveAccountUID 派生；同 UID 覆盖更新并保留 CreatedAt。
+// 更新凭据时保留已有托管记录；元数据写入应使用 Patch 在锁内完成。
 // 返回实际使用的账号 UID。
 func (s *AccountStore) Upsert(account SiteAccount) (string, error) {
+	if account.CredentialMode == "" {
+		account.CredentialMode = "management"
+	}
+	if account.CredentialMode != "management" && account.CredentialMode != "key" {
+		return "", fmt.Errorf("不支持的凭据类型")
+	}
+	if account.SiteType != "newapi" && account.SiteType != "sub2api" {
+		return "", fmt.Errorf("不支持的站点类型")
+	}
 	account.BaseURL = NormalizeSiteURL(account.BaseURL)
 	if strings.TrimSpace(account.SiteType) == "" || strings.TrimSpace(account.BaseURL) == "" {
 		return "", fmt.Errorf("[SiteAccess-Store] siteType 与 baseUrl 不能为空")
 	}
-	if account.UID == "" {
-		account.UID = DeriveAccountUID(account.SiteType, account.BaseURL, account.UserID, account.AccessToken)
+	plain, err := account.plaintextAccessToken()
+	if err != nil {
+		return "", err
 	}
 	enc, err := sharedTokenEncryption()
 	if err != nil {
@@ -140,17 +160,74 @@ func (s *AccountStore) Upsert(account SiteAccount) (string, error) {
 	}
 	now := time.Now()
 	for i := range accounts {
-		if accounts[i].UID == account.UID {
+		existing := accounts[i]
+		matches := account.UID != "" && existing.UID == account.UID
+		existingMode := existing.CredentialMode
+		if existingMode == "" {
+			existingMode = "management"
+		}
+		if account.UID == "" && existingMode == account.CredentialMode && existing.SiteType == account.SiteType && existing.BaseURL == account.BaseURL {
+			oldToken, _ := existing.plaintextAccessToken()
+			matches = (account.UserID != "" && existing.UserID == account.UserID) || (plain != "" && oldToken == plain)
+		}
+		if matches {
+			if existingMode != account.CredentialMode || existing.SiteType != account.SiteType || existing.BaseURL != account.BaseURL ||
+				(existing.UserID != "" && account.UserID != "" && existing.UserID != account.UserID) {
+				return "", fmt.Errorf("账号身份不匹配，请单独接入新账号")
+			}
+			account.UID = existing.UID
 			account.CreatedAt = accounts[i].CreatedAt
+			account.ProvisionedKeys = existing.ProvisionedKeys
+			account.Evidence = existing.Evidence
+			account.LastSyncAt, account.LastSyncError = existing.LastSyncAt, existing.LastSyncError
+			account.Plans = existing.Plans
+			if account.UserID == "" {
+				account.UserID = existing.UserID
+			}
+			if plain == "" {
+				account.AccessToken = existing.AccessToken
+			}
 			account.UpdatedAt = now
 			accounts[i] = account
 			return account.UID, s.saveLocked(accounts)
 		}
 	}
+	if account.UID != "" {
+		return "", fmt.Errorf("账号不存在: %s", account.UID)
+	}
+	if strings.TrimSpace(plain) == "" {
+		return "", fmt.Errorf("新账号必须提供管理令牌或推理 Key")
+	}
+	identityType := account.SiteType
+	if account.CredentialMode == "key" {
+		identityType += "_key"
+	}
+	account.UID = DeriveAccountUID(identityType, account.BaseURL, account.UserID, plain)
 	account.CreatedAt = now
 	account.UpdatedAt = now
 	accounts = append(accounts, account)
 	return account.UID, s.saveLocked(accounts)
+}
+
+// Patch 在同一临界区读取、修改并保存账号，避免接入与业务证据相互覆盖。
+func (s *AccountStore) Patch(uid string, mutate func(*SiteAccount) error) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	accounts, err := s.loadLocked()
+	if err != nil {
+		return err
+	}
+	for i := range accounts {
+		if accounts[i].UID != uid {
+			continue
+		}
+		if err := mutate(&accounts[i]); err != nil {
+			return err
+		}
+		accounts[i].UpdatedAt = time.Now()
+		return s.saveLocked(accounts)
+	}
+	return fmt.Errorf("账号不存在: %s", uid)
 }
 
 // Get 按 UID 取账号；返回副本的 AccessToken 仍为密文，需要明文时用 PlaintextAccessToken。

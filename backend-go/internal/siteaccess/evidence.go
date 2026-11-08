@@ -101,12 +101,19 @@ func RecordRealRequest(store *AccountStore, accountUID, protocol, group string, 
 }
 
 func mutateAccountEvidence(store *AccountStore, accountUID, protocol, group string, fn func(*ChannelEvidence)) {
-	account, found, err := store.Get(accountUID)
-	if err != nil || !found {
+	_ = store.Patch(accountUID, func(account *SiteAccount) error { fn(account.evidenceFor(protocol, group)); return nil })
+}
+
+// RecordRealTraffic 使用持久化归属回填，改名不影响账号证据。
+func RecordRealTraffic(channel config.UpstreamConfig, protocol string, success bool, diagnostic string) {
+	if defaultStore == nil {
 		return
 	}
-	fn(account.evidenceFor(protocol, group))
-	_, _ = store.Upsert(account)
+	if channel.SiteAccountUID != "" {
+		RecordRealRequest(defaultStore, channel.SiteAccountUID, strings.ToLower(protocol), channel.SiteGroup, success, diagnostic)
+		return
+	}
+	RecordRealTrafficByChannelName(channel.Name, success, diagnostic)
 }
 
 var defaultStore *AccountStore
@@ -148,30 +155,36 @@ func VerifyAccountInfo(ctx context.Context, store *AccountStore, adapter *NewApi
 	if !found {
 		return fmt.Errorf("[SiteAccess-Verify] 账号不存在: %s", accountUID)
 	}
+	if account.CredentialMode == "key" {
+		_, err := fetchInferenceModels(ctx, account)
+		return err
+	}
 	accessToken, err := account.plaintextAccessToken()
 	if err != nil {
 		return err
 	}
 
-	self, derivedUserID, err := adapter.VerifyWithFallback(ctx, account.BaseURL, accessToken, account.UserID, account.AuthTokenMode)
+	self, derivedUserID, err := adapterForAccount(account, adapter).VerifyWithFallback(ctx, account.BaseURL, accessToken, account.UserID, account.AuthTokenMode)
 	if err != nil {
-		for i := range account.Evidence {
-			account.Evidence[i].LastDiagnostic = fmt.Sprintf("令牌校验失败: %v", err)
-		}
-		_, _ = store.Upsert(account)
+		_ = store.Patch(account.UID, func(current *SiteAccount) error {
+			for i := range current.Evidence {
+				current.Evidence[i].LastDiagnostic = fmt.Sprintf("令牌校验失败: %v", err)
+			}
+			return nil
+		})
 		return err
 	}
 
 	// fork 回退派生出的 userID 写回账号，后续 provision/对账复用
 	if account.UserID != derivedUserID {
 		account.UserID = derivedUserID
-		_, _ = store.Upsert(account)
+		_ = store.Patch(account.UID, func(current *SiteAccount) error { current.UserID = derivedUserID; return nil })
 	}
 	_ = self
 
 	for _, meta := range account.ProvisionedKeys {
 		// 分组被撤销时 new-api 会返回空模型或错误：仅记录诊断，不自动禁用
-		_, err := adapter.FetchGroupModels(ctx, account.BaseURL, accessToken, derivedUserID, account.AuthTokenMode, meta.Group)
+		_, err := adapterForAccount(account, adapter).FetchGroupModels(ctx, account.BaseURL, accessToken, derivedUserID, account.AuthTokenMode, meta.Group)
 		RecordInfoVerified(store, accountUID, meta.Protocol, meta.Group, err)
 	}
 	return nil
@@ -194,8 +207,15 @@ func VerifyRealRequest(ctx context.Context, store *AccountStore, cfgManager *con
 	channelName := ProvisionedChannelName(account.BaseURL, strings.ToLower(protocol), group)
 	channels := protocolChannels(cfgManager, apiType)
 	var channel *config.UpstreamConfig
+	fingerprint := ""
+	for _, meta := range account.ProvisionedKeys {
+		if meta.Protocol == strings.ToLower(protocol) && meta.Group == group {
+			fingerprint = meta.KeyFingerprint
+			break
+		}
+	}
 	for i := range channels {
-		if channels[i].Name == channelName {
+		if matchesAccountChannel(channels[i], account, group, fingerprint) {
 			channel = &channels[i]
 			break
 		}

@@ -242,6 +242,10 @@ const embeddingTargetModels = computed(() =>
                     <!-- Section: 认证管理 -->
                     <section :ref="(el: any) => setSectionRef('auth', el)" data-section-id="auth" class="scroll-mt-4">
                       <AuthPanel
+                        :api-key-configs="form.apiKeyConfigs"
+                        :max-group-multiplier="form.maxGroupMultiplier"
+                        @update:api-key-configs="form.apiKeyConfigs = $event"
+                        @update:max-group-multiplier="form.maxGroupMultiplier = $event"
                         :existing-api-keys="existingApiKeys"
                         :new-api-keys-text="newApiKeysText"
                         :copied-key-index="copiedKeyIndex"

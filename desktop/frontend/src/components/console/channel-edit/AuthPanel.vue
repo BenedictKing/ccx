@@ -17,6 +17,7 @@ import {
 } from 'lucide-vue-next'
 import { useLanguage } from '@/composables/useLanguage'
 import { maskApiKey } from '@/utils/api-key-mask'
+import type { APIKeyConfig } from '@/services/admin-api'
 
 interface DisabledKeyInfo {
   key: string
@@ -33,6 +34,8 @@ interface KeyModelsStatus {
 }
 
 const props = defineProps<{
+  apiKeyConfigs?: APIKeyConfig[]
+  maxGroupMultiplier?: number | null
   existingApiKeys: string[]
   newApiKeysText: string
   copiedKeyIndex: number | null
@@ -47,6 +50,8 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
+  'update:apiKeyConfigs': [APIKeyConfig[]]
+  'update:maxGroupMultiplier': [number | null]
   'update:newApiKeysText': [value: string]
   'addNewApiKeys': []
   'removeExistingApiKey': [index: number]
@@ -57,6 +62,18 @@ const emit = defineEmits<{
 }>()
 
 const { t, tf } = useLanguage()
+
+function updateMultiplier(key: string, raw: unknown) {
+  const value = raw == null || raw === '' ? null : Number(raw)
+  let found = false
+  const configs = (props.apiKeyConfigs || []).map(cfg => {
+    if (cfg.key !== key) return cfg
+    found = true
+    return { ...cfg, groupMultiplier: value }
+  })
+  if (!found) configs.push({ key, groupMultiplier: value })
+  emit('update:apiKeyConfigs', configs)
+}
 
 function getKeyStatus(key: string) {
   return props.keyModelsStatus.get(key)
@@ -97,6 +114,10 @@ const visibleDisabledKeys = computed(() => {
     </div>
 
     <p v-if="errors.apiKeys" class="text-[10px] text-destructive">{{ errors.apiKeys }}</p>
+    <div class="space-y-1">
+      <label class="text-xs">{{ t('channelEditor.auth.maxMultiplier') }}<Input :model-value="maxGroupMultiplier ?? ''" type="number" min="0" step="any" class="mt-1 max-w-40" @update:model-value="emit('update:maxGroupMultiplier', $event === '' ? null : Number($event))" /></label>
+      <p class="text-xs text-muted-foreground">{{ t('channelEditor.auth.maxMultiplierHint') }}</p>
+    </div>
 
     <!-- API Keys 列表 -->
     <div v-if="existingApiKeys.length" class="grid gap-2 max-h-[160px] overflow-y-auto pr-1">
@@ -110,6 +131,7 @@ const visibleDisabledKeys = computed(() => {
           <AlertTriangle v-if="duplicateKeyIndex === index" class="h-3.5 w-3.5 shrink-0 text-destructive" />
           <Key v-else class="h-3.5 w-3.5 shrink-0 text-primary/70" />
           <code class="font-mono text-muted-foreground font-medium select-all">{{ maskApiKey(key) }}</code>
+          <Input :model-value="apiKeyConfigs?.find(cfg => cfg.key === key)?.groupMultiplier ?? ''" :aria-label="t('channelEditor.auth.groupMultiplier')" :title="t('channelEditor.auth.groupMultiplier')" type="number" min="0" step="any" class="h-8 w-24" :readonly="!!apiKeyConfigs?.find(cfg => cfg.key === key)?.sourceRemoteTokenId" @update:model-value="updateMultiplier(key, $event)" />
           <span
             v-if="getKeyStatus(key)?.loading"
             class="rounded bg-sky-500/10 px-1.5 py-0.5 text-[9px] font-medium text-sky-600"

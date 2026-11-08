@@ -3,6 +3,8 @@ package siteaccess
 import (
 	"context"
 	"fmt"
+	"strings"
+	"time"
 
 	"github.com/BenedictKing/ccx/internal/config"
 )
@@ -17,53 +19,101 @@ type ReconcileAction struct {
 	Detail      string `json:"detail"`
 }
 
-// ReconcileAccount 对账单个站点账号：逐个核对已建远端 Key 是否仍存在，
-// 远端已删除的 Key 在本地对应渠道中停用（拉黑，需手动恢复）。
-// 只停用有明确证据的 Key；查询失败一律跳过，不做任何变更。
-func ReconcileAccount(ctx context.Context, store *AccountStore, cfgManager *config.ConfigManager, adapter *NewApiAdapter, accountUID string) ([]ReconcileAction, error) {
+// ReconcileAccount 按远端 ID 同步 Key 状态与倍率，并按用户授权补接新分组。
+// 查询失败保留最近可信值；明确删除才拉黑，不把管理面失败当作推理不可用。
+func ReconcileAccount(ctx context.Context, store *AccountStore, cfgManager *config.ConfigManager, adapter *NewApiAdapter, accountUID string) (actions []ReconcileAction, retErr error) {
+	store.operations.Lock()
+	defer store.operations.Unlock()
 	account, found, err := store.Get(accountUID)
 	if err != nil {
 		return nil, err
 	}
 	if !found {
-		return nil, fmt.Errorf("[SiteAccess-Reconcile] 账号不存在: %s", accountUID)
+		return nil, fmt.Errorf("账号不存在: %s", accountUID)
 	}
+	defer func() {
+		_ = store.Patch(accountUID, func(current *SiteAccount) error {
+			now := time.Now()
+			current.LastSyncAt = &now
+			current.LastSyncError = ""
+			if retErr != nil {
+				current.LastSyncError = retErr.Error()
+			}
+			for _, action := range actions {
+				if action.Action == "error" {
+					current.LastSyncError = action.Detail
+					break
+				}
+			}
+			return nil
+		})
+	}()
+	managed := false
+	for _, meta := range account.ProvisionedKeys {
+		if meta.TokenID > 0 {
+			managed = true
+			break
+		}
+	}
+	if !managed {
+		return nil, nil
+	}
+	site := adapterForAccount(account, adapter)
 	accessToken, err := account.plaintextAccessToken()
 	if err != nil {
 		return nil, err
 	}
-
-	var actions []ReconcileAction
+	tokens, err := site.ListAllTokens(ctx, account, accessToken)
+	if err != nil {
+		return nil, err
+	}
+	ratios, err := site.FetchGroups(ctx, account.BaseURL, accessToken, account.UserID, account.AuthTokenMode)
+	if err != nil {
+		return nil, err
+	}
 	for _, meta := range account.ProvisionedKeys {
-		action := ReconcileAction{
-			Protocol: meta.Protocol,
-			Group:    meta.Group,
-			KeyName:  meta.Name,
-		}
-		remote, err := adapter.FindTokenByName(ctx, account.BaseURL, accessToken, account.UserID, account.AuthTokenMode, meta.Name)
-		if err != nil {
-			action.Action = "error"
-			action.Detail = fmt.Sprintf("远端查询失败，跳过: %v", err)
-			actions = append(actions, action)
+		if meta.TokenID <= 0 {
 			continue
 		}
-		if remote != nil {
-			continue // 远端仍存在，无需动作
+		action := ReconcileAction{Protocol: meta.Protocol, Group: meta.Group, KeyName: meta.Name}
+		var remote *NewApiToken
+		for i := range tokens {
+			if tokens[i].ID == meta.TokenID {
+				remote = &tokens[i]
+				break
+			}
 		}
-
 		apiType, _, err := provisionProtocolInfo(meta.Protocol)
 		if err != nil {
-			action.Action = "error"
-			action.Detail = err.Error()
+			action.Action, action.Detail = "error", err.Error()
 			actions = append(actions, action)
 			continue
 		}
-		action.ChannelName = ProvisionedChannelName(account.BaseURL, meta.Protocol, meta.Group)
-		disabled, detail := disableLocalProvisionedKey(cfgManager, apiType, action.ChannelName, meta.KeyFingerprint)
-		action.Action = disabled
-		action.Detail = detail
-		actions = append(actions, action)
+		foundLocal := false
+		for i, channel := range protocolChannels(cfgManager, apiType) {
+			if !matchesAccountChannel(channel, account, meta.Group, meta.KeyFingerprint) {
+				continue
+			}
+			foundLocal = true
+			action.ChannelName = channel.Name
+			if remote == nil {
+				action.Action, action.Detail = disableLocalProvisionedKey(cfgManager, apiType, channel.Name, meta.KeyFingerprint)
+				actions = append(actions, action)
+			} else {
+				_, err := syncRemoteKey(cfgManager, apiType, i, channel, meta, *remote, ratios)
+				if err != nil {
+					action.Action, action.Detail = "error", err.Error()
+					actions = append(actions, action)
+				}
+			}
+			break
+		}
+		if !foundLocal {
+			action.Action, action.Detail = "missing_local", "本地渠道已删除，保留人工选择"
+			actions = append(actions, action)
+		}
 	}
+	actions = append(actions, catchUpGroups(ctx, store, cfgManager, site, account, ratios)...)
 	return actions, nil
 }
 
@@ -76,7 +126,7 @@ func disableLocalProvisionedKey(cfgManager *config.ConfigManager, apiType, chann
 			continue
 		}
 		for _, key := range channels[i].APIKeys {
-			if fingerprint != "" && keyFingerprint(key) != fingerprint {
+			if strings.TrimSpace(fingerprint) == "" || keyFingerprint(key) != fingerprint {
 				continue
 			}
 			if err := cfgManager.BlacklistKey(apiType, i, key, "remote_token_deleted", "远端站点已删除该 Key，对账自动停用"); err != nil {

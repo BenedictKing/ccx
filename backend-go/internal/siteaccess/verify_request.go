@@ -3,6 +3,7 @@ package siteaccess
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -11,6 +12,8 @@ import (
 
 	"github.com/BenedictKing/ccx/internal/config"
 	"github.com/BenedictKing/ccx/internal/httpclient"
+	"github.com/BenedictKing/ccx/internal/providers"
+	"github.com/gin-gonic/gin"
 )
 
 // doMinimalInferenceRequest 用渠道现有 Key 发一次最小真实推理请求。
@@ -20,7 +23,16 @@ func doMinimalInferenceRequest(ctx context.Context, channel config.UpstreamConfi
 	if baseURL == "" {
 		return fmt.Errorf("渠道缺少 baseUrl")
 	}
-	apiKey := channel.APIKeys[0]
+	apiKey := ""
+	for _, key := range channel.APIKeys {
+		if channel.IsAPIKeyGroupMultiplierAllowed(key) {
+			apiKey = key
+			break
+		}
+	}
+	if apiKey == "" {
+		return fmt.Errorf("没有符合倍率上限和远端状态的 Key")
+	}
 
 	var method, path string
 	var body []byte
@@ -54,8 +66,19 @@ func doMinimalInferenceRequest(ctx context.Context, channel config.UpstreamConfi
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
+	// Responses 验收复用实际转换器，避免测试原生端点、业务却走 Chat 转换。
+	if protocol == "responses" {
+		c := &gin.Context{Request: req}
+		req, _, err = (&providers.ResponsesProvider{}).ConvertToProviderRequest(c, &channel, apiKey)
+		if err != nil {
+			return fmt.Errorf("构建实际上游请求失败: %w", err)
+		}
+	}
+	for k, v := range channel.CustomHeaders {
+		req.Header.Set(k, v)
+	}
 
-	client := httpclient.GetManager().GetStandardClient(60*time.Second, channel.InsecureSkipVerify)
+	client := httpclient.GetManager().GetStandardClient(60*time.Second, channel.InsecureSkipVerify, channel.ProxyURL)
 	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("真实请求发送失败: %w", err)
@@ -68,5 +91,15 @@ func doMinimalInferenceRequest(ctx context.Context, channel config.UpstreamConfi
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("真实请求 HTTP %d: %s", resp.StatusCode, truncateForError(respBody))
 	}
-	return nil
+	var payload map[string]json.RawMessage
+	if json.Unmarshal(respBody, &payload) != nil || payload["error"] != nil {
+		return fmt.Errorf("上游未返回有效推理结果")
+	}
+	for _, field := range []string{"content", "choices", "output", "candidates"} {
+		var items []json.RawMessage
+		if json.Unmarshal(payload[field], &items) == nil && len(items) > 0 {
+			return nil
+		}
+	}
+	return fmt.Errorf("上游返回成功状态但没有推理内容")
 }

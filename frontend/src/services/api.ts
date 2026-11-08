@@ -1211,6 +1211,10 @@ export class ApiService {
     return this.request(`/siteaccess/accounts/${uid}/groups`)
   }
 
+  async getSiteAccountKeys(uid: string): Promise<{ keys: import('./api-types').SiteRemoteKey[] }> {
+    return this.request(`/siteaccess/accounts/${uid}/keys`)
+  }
+
   async provisionSiteAccount(uid: string, req: import('./api-types').SiteProvisionRequest): Promise<import('./api-types').SiteProvisionResult> {
     return this.request(`/siteaccess/accounts/${uid}/provision`, { method: 'POST', body: JSON.stringify(req) })
   }

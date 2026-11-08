@@ -44,11 +44,11 @@ func (f *fakeNewApiSite) handler(w http.ResponseWriter, r *http.Request) {
 	case path == "/api/user/self":
 		writeEnvelope(w, true, map[string]interface{}{"id": 1, "username": "tester"}, "")
 	case path == "/api/user/self/groups":
-		writeEnvelope(w, true, map[string]interface{}{
-			"default": map[string]interface{}{"desc": "", "ratio": f.groups["default"]},
-			"vip":     map[string]interface{}{"desc": "", "ratio": f.groups["vip"]},
-			"empty":   map[string]interface{}{"desc": "", "ratio": f.groups["empty"]},
-		}, "")
+		groups := map[string]any{}
+		for name, ratio := range f.groups {
+			groups[name] = map[string]any{"desc": "", "ratio": ratio}
+		}
+		writeEnvelope(w, true, groups, "")
 	case path == "/api/user/models":
 		group := r.URL.Query().Get("group")
 		writeEnvelope(w, true, f.models[group], "")
@@ -95,7 +95,7 @@ func (f *fakeNewApiSite) handler(w http.ResponseWriter, r *http.Request) {
 			for _, model := range f.models[token.Group] {
 				if model == body.Model {
 					w.Header().Set("Content-Type", "application/json")
-					_, _ = w.Write([]byte(`{"id":"fake-response"}`))
+					_, _ = w.Write([]byte(`{"id":"fake-response","choices":[{"message":{"role":"assistant","content":"pong"}}]}`))
 					return
 				}
 			}
@@ -125,6 +125,7 @@ func newProvisionTestDeps(t *testing.T) (*fakeNewApiSite, string, *AccountStore,
 	if err != nil {
 		t.Fatalf("NewConfigManager: %v", err)
 	}
+	t.Cleanup(func() { _ = cfgManager.Close() })
 	uid, err := store.Upsert(SiteAccount{
 		SiteType:    "newapi",
 		BaseURL:     srv.URL,

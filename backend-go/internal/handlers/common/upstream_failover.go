@@ -377,6 +377,10 @@ func TryUpstreamWithAllKeys(
 				return false, "", 0, nil, nil, fmt.Errorf("request build failed: %w", err)
 			}
 			req = WithRequestLogContext(req, c)
+			budget := requestRetryBudget(c)
+			if err := budget.consume(); err != nil {
+				return false, "", 0, lastFailoverError, nil, err
+			}
 			originalReasoningEffort := extractReasoningEffortForLog(requestBody)
 			actualReasoningEffort := extractActualReasoningEffortForLog(req)
 
@@ -401,7 +405,33 @@ func TryUpstreamWithAllKeys(
 				},
 			}
 			attemptStartedAt := time.Now()
+			var budgetTimer *time.Timer
+			if budget != nil {
+				budgetCtx, cancel := context.WithCancelCause(req.Context())
+				defer cancel(nil)
+				budgetTimer = time.AfterFunc(time.Until(budget.deadline), func() { cancel(context.DeadlineExceeded) })
+				defer budgetTimer.Stop()
+				req = req.WithContext(budgetCtx)
+			}
 			resp, err := SendRequestWithLifecycleTrace(req, upstream, envCfg, isStream, apiType, lifecycleTrace)
+			if budgetTimer != nil {
+				if isStream {
+					budgetTimer.Stop()
+					remainingMs := int(time.Until(budget.deadline).Milliseconds())
+					if remainingMs < 1 {
+						remainingMs = 1
+					}
+					if upstreamCopy.StreamFirstContentTimeoutMs <= 0 || upstreamCopy.StreamFirstContentTimeoutMs > remainingMs {
+						upstreamCopy.StreamFirstContentTimeoutMs = remainingMs
+					}
+				}
+				if errors.Is(context.Cause(req.Context()), context.DeadlineExceeded) {
+					err = context.DeadlineExceeded
+					if resp != nil {
+						_ = resp.Body.Close()
+					}
+				}
+			}
 			if err != nil {
 				lastError = err
 				// 区分客户端取消和真实渠道故障（统一口径）
@@ -587,7 +617,7 @@ func TryUpstreamWithAllKeys(
 				trafficDiagnostic = err.Error()
 			}
 			if !isClientSideError(err) && !isClientWriteDisconnect(err) {
-				siteaccess.RecordRealTrafficByChannelName(upstreamCopy.Name, err == nil, trafficDiagnostic)
+				siteaccess.RecordRealTraffic(*upstreamCopy, string(kind), err == nil, trafficDiagnostic)
 			}
 			if isStream {
 				FinishStreamTimeoutObservation(c)

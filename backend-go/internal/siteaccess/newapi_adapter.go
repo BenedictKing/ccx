@@ -58,6 +58,9 @@ type NewApiToken struct {
 	Key                string `json:"key"`
 	Name               string `json:"name"`
 	Status             int    `json:"status"`
+	ExpiredTime        int64  `json:"expired_time"`
+	RemainQuota        *int64 `json:"remain_quota,omitempty"`
+	UnlimitedQuota     *bool  `json:"unlimited_quota,omitempty"`
 	Group              string `json:"group"`
 	ModelLimitsEnabled bool   `json:"model_limits_enabled"`
 	ModelLimits        string `json:"model_limits"`
