@@ -20,7 +20,7 @@ type UpstreamConfig struct {
 	BaseURL               string                             `json:"baseUrl"`
 	BaseURLs              []string                           `json:"baseUrls,omitempty"` // 多 BaseURL 支持（failover 模式）
 	APIKeys               []string                           `json:"apiKeys"`
-	APIKeyConfigs         []APIKeyConfig                     `json:"apiKeyConfigs,omitempty"`     // API Key 附加配置（限速、权重、配额组等），通过 Key 关联 APIKeys
+	APIKeyConfigs         []APIKeyConfig                     `json:"apiKeyConfigs,omitempty"`     // API Key 附加配置（限速、权重、配额组、分组倍率等），通过 Key 关联 APIKeys
 	HistoricalAPIKeys     []string                           `json:"historicalApiKeys,omitempty"` // 历史 API Key（用于统计聚合，换 Key 后保留旧 Key 的统计数据）
 	DisabledAPIKeys       []DisabledKeyInfo                  `json:"disabledApiKeys,omitempty"`   // 被拉黑的 API Key（持久化，需手动恢复）
 	DisabledKeyModels     []DisabledKeyModelInfo             `json:"disabledKeyModels,omitempty"` // 被限制的 (Key,模型) 组合（持久化，定时自动恢复）
@@ -111,6 +111,7 @@ type APIKeyConfig struct {
 	Name                     string   `json:"name,omitempty"`
 	Enabled                  *bool    `json:"enabled,omitempty"`
 	QuotaGroup               string   `json:"quotaGroup,omitempty"`
+	GroupMultiplier          *float64 `json:"groupMultiplier,omitempty"`
 	RateLimitRPM             int      `json:"rateLimitRpm,omitempty"`
 	RateLimitWindowMinutes   int      `json:"rateLimitWindowMinutes,omitempty"` // 滑动窗口时长（秒；JSON 字段名保留为兼容旧配置）
 	RateLimitMaxConcurrent   int      `json:"rateLimitMaxConcurrent,omitempty"`
@@ -309,7 +310,7 @@ func IsAPIKeyConfigEffective(cfg APIKeyConfig) bool {
 	if cfg.RateLimitAutoFromHeaders != nil {
 		return true
 	}
-	if cfg.Weight > 0 || len(cfg.Models) > 0 {
+	if cfg.Weight > 0 || len(cfg.Models) > 0 || cfg.GroupMultiplier != nil {
 		return true
 	}
 	return false

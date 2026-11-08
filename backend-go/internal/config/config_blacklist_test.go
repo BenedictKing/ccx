@@ -707,6 +707,7 @@ func TestBlacklistKeyConfigSnapshotDeepCopy(t *testing.T) {
 				"key": "sk-1",
 				"name": "test-key",
 				"enabled": true,
+					"groupMultiplier": 0.35,
 				"rateLimitAutoFromHeaders": true,
 				"weight": 5,
 				"models": ["claude-sonnet"]
@@ -734,6 +735,8 @@ func TestBlacklistKeyConfigSnapshotDeepCopy(t *testing.T) {
 	cm.config.Upstream[0].APIKeyConfigs[0].Models[0] = "mutated-model"
 	cm.config.Upstream[0].APIKeyConfigs[0].Enabled = &falseVal
 	cm.config.Upstream[0].APIKeyConfigs[0].RateLimitAutoFromHeaders = &falseVal
+	changedMultiplier := 0.8
+	cm.config.Upstream[0].APIKeyConfigs[0].GroupMultiplier = &changedMultiplier
 	cm.mu.Unlock()
 
 	cfg := cm.GetConfig()
@@ -743,6 +746,9 @@ func TestBlacklistKeyConfigSnapshotDeepCopy(t *testing.T) {
 	dk := cfg.Upstream[0].DisabledAPIKeys[0]
 	if dk.Config == nil {
 		t.Fatal("dk.Config is nil, want non-nil snapshot")
+	}
+	if dk.Config.GroupMultiplier == nil || *dk.Config.GroupMultiplier != 0.35 {
+		t.Fatalf("snapshot GroupMultiplier = %v, want 0.35", dk.Config.GroupMultiplier)
 	}
 	if dk.Config.Name != "test-key" {
 		t.Fatalf("snapshot Name = %q, want test-key", dk.Config.Name)

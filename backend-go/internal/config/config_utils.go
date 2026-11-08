@@ -483,6 +483,10 @@ func cloneEmbeddingCapability(capability EmbeddingCapability) EmbeddingCapabilit
 }
 
 func cloneAPIKeyConfig(cfg APIKeyConfig) APIKeyConfig {
+	if cfg.GroupMultiplier != nil {
+		v := *cfg.GroupMultiplier
+		cfg.GroupMultiplier = &v
+	}
 	if cfg.Enabled != nil {
 		v := *cfg.Enabled
 		cfg.Enabled = &v

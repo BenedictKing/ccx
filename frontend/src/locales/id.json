@@ -735,6 +735,7 @@
   "channelEditor.auth.apiKeyRequired": "Minimal satu API Key diperlukan",
   "channelEditor.auth.duplicateKey": "API Key duplikat",
   "channelEditor.auth.addNewApiKey.placeholder": "Masukkan API Key baru",
+  "channelEditor.auth.groupMultiplier": "Pengali grup",
   "channelEditor.mapping.redirect.title": "Redirect Model",
   "channelEditor.mapping.configured.label": "Dikonfigurasi",
   "channelEditor.mapping.source.label": "Model sumber",

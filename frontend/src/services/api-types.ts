@@ -90,6 +90,7 @@ export interface APIKeyConfig {
   name?: string
   enabled?: boolean
   quotaGroup?: string
+  groupMultiplier?: number | null
   rateLimitRpm?: number
   rateLimitWindowMinutes?: number
   rateLimitMaxConcurrent?: number

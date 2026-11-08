@@ -735,6 +735,7 @@
   "channelEditor.auth.apiKeyRequired": "At least one API key is required",
   "channelEditor.auth.duplicateKey": "Duplicate API key",
   "channelEditor.auth.addNewApiKey.placeholder": "Enter new API key",
+  "channelEditor.auth.groupMultiplier": "Group multiplier",
   "channelEditor.mapping.redirect.title": "Model Redirect",
   "channelEditor.mapping.configured.label": "Configured",
   "channelEditor.mapping.source.label": "Source model",

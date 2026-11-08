@@ -83,6 +83,24 @@
                 </div>
               </v-list-item-title>
 
+              <v-list-item-subtitle class="d-flex align-center ga-2 mt-1">
+                <span class="text-caption">{{ t('channelEditor.auth.groupMultiplier') }}</span>
+                <v-text-field
+                  :model-value="getGroupMultiplierInput(key)"
+                  type="number"
+                  min="0"
+                  step="any"
+                  variant="outlined"
+                  density="compact"
+                  hide-details
+                  :aria-label="t('channelEditor.auth.groupMultiplier')"
+                  class="group-multiplier-input"
+                  @update:model-value="stageGroupMultiplier(key, $event)"
+                  @blur="commitGroupMultiplier(key)"
+                  @keydown.enter="commitGroupMultiplier(key)"
+                />
+              </v-list-item-subtitle>
+
               <template #append>
                 <div class="d-flex align-center ga-1">
                   <!-- 置顶/置底：仅首尾密钥显示 -->
@@ -413,6 +431,7 @@
 import { ref, computed, onBeforeUnmount } from 'vue'
 import { useI18n } from '../../i18n'
 import { ApiService } from '../../services/api'
+import type { APIKeyConfig } from '../../services/api-types'
 import { maskApiKey } from '../../utils/apiKeyMask'
 
 interface KeyModelsStatus {
@@ -448,12 +467,14 @@ interface Props {
   serviceType?: string
   channelId?: number
   proxyUrl?: string
+  apiKeyConfigs?: APIKeyConfig[]
 }
 
 const props = defineProps<Props>()
 
 const emit = defineEmits<{
   'update:apiKeys': [string[]]
+  'update:apiKeyConfigs': [APIKeyConfig[]]
   'update:proxyUrl': [string]
   'restore-key': [string]
   'restore-key-model': [string, string]
@@ -494,6 +515,50 @@ const copilotDiagnoseError = ref('')
 let copilotPollTimer: number | null = null
 
 const hasConfigurableKeys = computed(() => props.serviceType === 'copilot' || props.apiKeys.length > 0)
+const groupMultiplierDrafts = ref(new Map<string, string>())
+
+const getGroupMultiplier = (key: string): number | null => {
+  return props.apiKeyConfigs?.find(config => config.key === key)?.groupMultiplier ?? null
+}
+
+const getGroupMultiplierInput = (key: string): string | number => {
+  return groupMultiplierDrafts.value.get(key) ?? getGroupMultiplier(key) ?? ''
+}
+
+const stageGroupMultiplier = (key: string, value: unknown) => {
+  const drafts = new Map(groupMultiplierDrafts.value)
+  const raw = value == null ? '' : String(value)
+  drafts.set(key, raw)
+  groupMultiplierDrafts.value = drafts
+
+  const groupMultiplier = raw.trim() === '' ? null : Number(raw.trim())
+  if (groupMultiplier === null || (Number.isFinite(groupMultiplier) && groupMultiplier >= 0)) {
+    saveGroupMultiplier(key, groupMultiplier)
+  }
+}
+
+const commitGroupMultiplier = (key: string) => {
+  const drafts = new Map(groupMultiplierDrafts.value)
+  const raw = drafts.get(key)
+  if (raw === undefined) return
+
+  const groupMultiplier = raw.trim() === '' ? null : Number(raw.trim())
+  drafts.delete(key)
+  groupMultiplierDrafts.value = drafts
+  if (groupMultiplier !== null && (!Number.isFinite(groupMultiplier) || groupMultiplier < 0)) return
+  saveGroupMultiplier(key, groupMultiplier)
+}
+
+const saveGroupMultiplier = (key: string, groupMultiplier: number | null) => {
+  let found = false
+  const configs = (props.apiKeyConfigs ?? []).map(config => {
+    if (config.key !== key) return config
+    found = true
+    return { ...config, groupMultiplier }
+  })
+  if (!found && groupMultiplier !== null) configs.push({ key, groupMultiplier })
+  emit('update:apiKeyConfigs', configs)
+}
 
 const visibleDisabledKeys = computed(() => {
   return props.disabledKeys.filter(dk => !props.apiKeys.includes(dk.key))
@@ -670,6 +735,10 @@ const getDisabledKeyLabel = (reason: string) => {
 </script>
 
 <style scoped>
+.group-multiplier-input {
+  max-width: 140px;
+}
+
 .section-title {
   font-size: 1.125rem;
   font-weight: 600;

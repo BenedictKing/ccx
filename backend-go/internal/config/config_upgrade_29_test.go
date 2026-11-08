@@ -98,3 +98,41 @@ func TestV3ConfigIsRejectedWithoutChangingFile(t *testing.T) {
 		})
 	}
 }
+
+func TestAPIKeyGroupMultiplierSurvivesLoadSaveAndRestart(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+	original := []byte(`{"upstream":[{"name":"test","apiKeys":["sk-test"],"apiKeyConfigs":[{"key":"sk-test","groupMultiplier":0.35}]}]}`)
+	if err := os.WriteFile(path, original, 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	open := func() *ConfigManager {
+		t.Helper()
+		cm, err := NewConfigManager(path, filepath.Join(dir, "backups"))
+		if err != nil {
+			t.Fatalf("加载配置失败: %v", err)
+		}
+		return cm
+	}
+	check := func(cm *ConfigManager) {
+		t.Helper()
+		configs := NormalizeAPIKeyConfigsForView(cm.GetConfig().Upstream[0])
+		if len(configs) != 1 || configs[0].GroupMultiplier == nil || *configs[0].GroupMultiplier != 0.35 {
+			t.Fatalf("API Key 分组倍率未保留: %+v", configs)
+		}
+	}
+
+	cm := open()
+	check(cm)
+	if err := cm.SaveConfig(); err != nil {
+		t.Fatalf("保存配置失败: %v", err)
+	}
+	if err := cm.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	cm = open()
+	defer cm.Close()
+	check(cm)
+}

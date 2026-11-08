@@ -735,6 +735,7 @@
   "channelEditor.auth.apiKeyRequired": "至少需要一个 API Key",
   "channelEditor.auth.duplicateKey": "重复的 API Key",
   "channelEditor.auth.addNewApiKey.placeholder": "输入新的 API Key",
+  "channelEditor.auth.groupMultiplier": "分组倍率",
   "channelEditor.mapping.redirect.title": "模型重定向",
   "channelEditor.mapping.configured.label": "已配置",
   "channelEditor.mapping.source.label": "源模型",
