@@ -209,6 +209,19 @@ export class ApiService {
     })
   }
 
+  async setApiKeySuspended(
+    channelType: 'messages' | 'chat' | 'responses' | 'gemini' | 'images' | 'vectors',
+    channelId: number,
+    apiKey: string,
+    suspended: boolean
+  ): Promise<void> {
+    const action = suspended ? 'suspend' : 'resume'
+    await this.request(`/${channelType}/channels/${channelId}/keys/${action}`, {
+      method: 'POST',
+      body: JSON.stringify({ apiKey })
+    })
+  }
+
   async restoreApiKey(channelId: number, apiKey: string): Promise<void> {
     await this.request(`/messages/channels/${channelId}/keys/restore`, {
       method: 'POST',

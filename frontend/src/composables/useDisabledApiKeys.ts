@@ -1,9 +1,11 @@
 import { computed, ref, type ComputedRef } from 'vue'
 import { ApiService, type Channel } from '../services/api'
+import type { APIKeyConfig } from '../services/api-types'
 
 type ChannelType = 'messages' | 'chat' | 'responses' | 'gemini' | 'images' | 'vectors'
 type FormLike = {
   apiKeys: string[]
+  apiKeyConfigs?: APIKeyConfig[]
 }
 
 type DisabledApiKeyOptions = {
@@ -34,12 +36,43 @@ export function useDisabledApiKeys(options: DisabledApiKeyOptions) {
     )
   )
 
+  const suspendingKey = ref('')
+
   const resetRestoredKeys = () => {
     localRestoredKeys.value = new Set<string>()
     restoringKey.value = ''
     localRestoredKeyModels.value = new Set<string>()
     restoringKeyModel.value = ''
+    suspendingKey.value = ''
   }
+
+  const setKeyEnabled = (apiKey: string, enabled: boolean | undefined) => {
+    let found = false
+    const configs = (options.form.apiKeyConfigs || []).map(config => {
+      if (config.key !== apiKey) return config
+      found = true
+      return { ...config, enabled }
+    })
+    if (!found && enabled !== undefined) configs.push({ key: apiKey, enabled })
+    options.form.apiKeyConfigs = configs
+  }
+
+  const setKeySuspended = async (apiKey: string, suspended: boolean) => {
+    const channel = options.channel.value
+    if (!channel || suspendingKey.value) return
+    suspendingKey.value = apiKey
+    try {
+      await options.apiService.setApiKeySuspended(options.channelType.value, channel.index, apiKey, suspended)
+      setKeyEnabled(apiKey, suspended ? false : undefined)
+    } catch (error) {
+      options.emitError(error instanceof Error ? error.message : suspended ? 'Suspend failed' : 'Resume failed')
+    } finally {
+      suspendingKey.value = ''
+    }
+  }
+
+  const suspendKey = (apiKey: string) => setKeySuspended(apiKey, true)
+  const resumeKey = (apiKey: string) => setKeySuspended(apiKey, false)
 
   const restoreDisabledKey = async (apiKey: string) => {
     const channel = options.channel.value
@@ -119,5 +152,8 @@ export function useDisabledApiKeys(options: DisabledApiKeyOptions) {
     disabledKeyModels,
     visibleDisabledKeyModels,
     restoreDisabledKeyModel,
+    suspendingKey,
+    suspendKey,
+    resumeKey,
   }
 }

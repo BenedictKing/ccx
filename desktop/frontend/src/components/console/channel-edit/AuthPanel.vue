@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -11,13 +11,17 @@ import {
   Copy,
   Key,
   Loader2,
+  Pause,
+  Play,
   Plus,
   RotateCcw,
   Trash2,
 } from 'lucide-vue-next'
 import { useLanguage } from '@/composables/useLanguage'
+import { useAdminApi } from '@/composables/useAdminApi'
 import { maskApiKey } from '@/utils/api-key-mask'
 import type { APIKeyConfig } from '@/services/admin-api'
+import type { ManagedChannelType } from '@/utils/channel-type-api'
 
 interface DisabledKeyInfo {
   key: string
@@ -46,6 +50,8 @@ const props = defineProps<{
   localRestoredKeys: Set<string>
   keyModelsStatus: Map<string, KeyModelsStatus>
   serviceType: string
+  channelKind: ManagedChannelType
+  channelId?: number
   errors: { apiKeys?: string }
 }>()
 
@@ -62,6 +68,39 @@ const emit = defineEmits<{
 }>()
 
 const { t, tf } = useLanguage()
+const adminApi = useAdminApi()
+const suspendingKey = ref('')
+const suspendError = ref('')
+
+function isKeyPaused(key: string) {
+  return props.apiKeyConfigs?.find(cfg => cfg.key === key)?.enabled === false
+}
+
+function setKeyEnabled(key: string, enabled: boolean | undefined) {
+  let found = false
+  const configs = (props.apiKeyConfigs || []).map(cfg => {
+    if (cfg.key !== key) return cfg
+    found = true
+    return { ...cfg, enabled }
+  })
+  if (!found && enabled !== undefined) configs.push({ key, enabled })
+  emit('update:apiKeyConfigs', configs)
+}
+
+async function setKeySuspended(key: string, suspended: boolean) {
+  if (props.channelId === undefined || suspendingKey.value) return
+  suspendingKey.value = key
+  suspendError.value = ''
+  try {
+    const action = suspended ? 'suspend' : 'resume'
+    await adminApi.post(`/api/${props.channelKind}/channels/${props.channelId}/keys/${action}`, { apiKey: key })
+    setKeyEnabled(key, suspended ? false : undefined)
+  } catch (cause) {
+    suspendError.value = cause instanceof Error ? cause.message : String(cause)
+  } finally {
+    suspendingKey.value = ''
+  }
+}
 
 function updateMultiplier(key: string, raw: unknown) {
   const value = raw == null || raw === '' ? null : Number(raw)
@@ -114,6 +153,7 @@ const visibleDisabledKeys = computed(() => {
     </div>
 
     <p v-if="errors.apiKeys" class="text-[10px] text-destructive">{{ errors.apiKeys }}</p>
+    <p v-if="suspendError" class="text-[10px] text-destructive">{{ suspendError }}</p>
     <div class="space-y-1">
       <label class="text-xs">{{ t('channelEditor.auth.maxMultiplier') }}<Input :model-value="maxGroupMultiplier ?? ''" type="number" min="0" step="any" class="mt-1 max-w-40" @update:model-value="emit('update:maxGroupMultiplier', $event === '' ? null : Number($event))" /></label>
       <p class="text-xs text-muted-foreground">{{ t('channelEditor.auth.maxMultiplierHint') }}</p>
@@ -131,6 +171,9 @@ const visibleDisabledKeys = computed(() => {
           <AlertTriangle v-if="duplicateKeyIndex === index" class="h-3.5 w-3.5 shrink-0 text-destructive" />
           <Key v-else class="h-3.5 w-3.5 shrink-0 text-primary/70" />
           <code class="font-mono text-muted-foreground font-medium select-all">{{ maskApiKey(key) }}</code>
+          <span v-if="isKeyPaused(key)" class="shrink-0 rounded bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-medium text-amber-600">
+            {{ t('channelCard.keyPaused') }}
+          </span>
           <Input :model-value="apiKeyConfigs?.find(cfg => cfg.key === key)?.groupMultiplier ?? ''" :aria-label="t('channelEditor.auth.groupMultiplier')" :title="t('channelEditor.auth.groupMultiplier')" type="number" min="0" step="any" class="h-8 w-24" :readonly="!!apiKeyConfigs?.find(cfg => cfg.key === key)?.sourceRemoteTokenId" @update:model-value="updateMultiplier(key, $event)" />
           <span
             v-if="getKeyStatus(key)?.loading"
@@ -165,6 +208,21 @@ const visibleDisabledKeys = computed(() => {
           </span>
         </div>
         <div class="flex shrink-0 items-center gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
+          <Button
+            v-if="channelId !== undefined"
+            type="button"
+            size="icon-sm"
+            variant="ghost"
+            class="h-7 w-7 rounded-md"
+            :class="isKeyPaused(key) ? 'text-emerald-600 hover:bg-emerald-500/10' : 'text-amber-600 hover:bg-amber-500/10'"
+            :title="isKeyPaused(key) ? t('channelCard.resumeKey') : t('channelCard.suspendKey')"
+            :disabled="!!suspendingKey"
+            @click="setKeySuspended(key, !isKeyPaused(key))"
+          >
+            <Loader2 v-if="suspendingKey === key" class="h-3.5 w-3.5 animate-spin" />
+            <Play v-else-if="isKeyPaused(key)" class="h-3.5 w-3.5" />
+            <Pause v-else class="h-3.5 w-3.5" />
+          </Button>
           <Button
             type="button"
             size="icon-sm"

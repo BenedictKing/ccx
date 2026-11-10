@@ -76,6 +76,9 @@
                         </v-chip>
                       </template>
                     </v-tooltip>
+                    <v-chip v-if="isKeyPaused(key)" size="x-small" color="warning" variant="tonal">
+                      {{ t('channelCard.keyPaused') }}
+                    </v-chip>
                     <!-- 重复密钥标签 -->
                     <v-chip v-if="duplicateKeyIndex === index" size="x-small" color="error" variant="text">
                       {{ t('channelEditor.auth.duplicateKey') }}
@@ -106,6 +109,29 @@
 
               <template #append>
                 <div class="d-flex align-center ga-1">
+                  <v-tooltip
+                    v-if="isEditing && channelId !== undefined"
+                    :text="isKeyPaused(key) ? t('channelCard.resumeKey') : t('channelCard.suspendKey')"
+                    location="top"
+                    :open-delay="150"
+                    content-class="key-tooltip"
+                  >
+                    <template #activator="{ props: tooltipProps }">
+                      <v-btn
+                        v-bind="tooltipProps"
+                        size="small"
+                        :color="isKeyPaused(key) ? 'success' : 'warning'"
+                        icon
+                        variant="text"
+                        rounded="md"
+                        :loading="suspendingKey === key"
+                        :disabled="!!suspendingKey"
+                        @click="isKeyPaused(key) ? $emit('resume-key', key) : $emit('suspend-key', key)"
+                      >
+                        <v-icon size="small">{{ isKeyPaused(key) ? 'mdi-play' : 'mdi-pause' }}</v-icon>
+                      </v-btn>
+                    </template>
+                  </v-tooltip>
                   <!-- 置顶/置底：仅首尾密钥显示 -->
                   <v-tooltip
                     v-if="index === apiKeys.length - 1 && apiKeys.length > 1"
@@ -467,6 +493,7 @@ interface Props {
   isEditing: boolean
   restoringKey: string
   restoringKeyModel?: string
+  suspendingKey?: string
   serviceType?: string
   channelId?: number
   proxyUrl?: string
@@ -483,6 +510,8 @@ const emit = defineEmits<{
   'update:proxyUrl': [string]
   'restore-key': [string]
   'restore-key-model': [string, string]
+  'suspend-key': [string]
+  'resume-key': [string]
 }>()
 
 const { t } = useI18n()
@@ -520,6 +549,7 @@ const copilotDiagnoseError = ref('')
 let copilotPollTimer: number | null = null
 
 const hasConfigurableKeys = computed(() => props.serviceType === 'copilot' || props.apiKeys.length > 0)
+const isKeyPaused = (key: string) => props.apiKeyConfigs?.find(config => config.key === key)?.enabled === false
 const groupMultiplierDrafts = ref(new Map<string, string>())
 const validMultiplier = (value: unknown) => value == null || value === '' || (Number.isFinite(Number(value)) && Number(value) >= 0) || t('channelEditor.auth.multiplierInvalid')
 const updateLimit = (value: unknown) => {

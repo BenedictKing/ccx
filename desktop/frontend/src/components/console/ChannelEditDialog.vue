@@ -256,6 +256,8 @@ const embeddingTargetModels = computed(() =>
                         :local-restored-keys="localRestoredKeys"
                         :key-models-status="keyModelsStatus"
                         :service-type="form.serviceType"
+                        :channel-kind="props.channelType"
+                        :channel-id="props.channel?.index"
                         :errors="errors"
                         @update:new-api-keys-text="newApiKeysText = $event; clearDuplicateKeyHighlight()"
                         @add-new-api-keys="addNewApiKeys"
