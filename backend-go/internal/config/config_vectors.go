@@ -506,6 +506,9 @@ func (cm *ConfigManager) RemoveVectorsAPIKey(index int, apiKey string) error {
 		}
 	}
 
+	if cm.removeDisabledKeyEntryLocked(&cm.config.VectorsUpstream[index], "Vectors", apiKey) {
+		found = true
+	}
 	if !found {
 		return fmt.Errorf("API密钥不存在")
 	}

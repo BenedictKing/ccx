@@ -13,10 +13,20 @@ function createState(channelType: ChannelType = 'chat') {
   })
   const apiService = {
     setApiKeySuspended: vi.fn().mockResolvedValue(undefined),
+    removeChatApiKey: vi.fn().mockResolvedValue(undefined),
+    updateGroupModelRestriction: vi.fn().mockResolvedValue({
+      success: true,
+      quotaGroup: 'vip',
+      model: 'Model-A',
+      affectedKeyCount: 2,
+    }),
   } as unknown as ApiService
   const state = useDisabledApiKeys({
     apiService,
-    channel: computed(() => ({ index: 7 } as Channel)),
+    channel: computed(() => ({
+      index: 7,
+      disabledApiKeys: [{ key: 'sk-blocked', reason: 'invalid', message: '', disabledAt: '' }],
+    } as Channel)),
     channelType: computed(() => channelType),
     emitError: vi.fn(),
     form,
@@ -58,5 +68,31 @@ describe('useDisabledApiKeys 暂停与恢复', () => {
     await state.suspendKey('sk-test')
 
     expect(form.apiKeyConfigs).toEqual([{ key: 'sk-test', enabled: false }])
+  })
+
+  it('彻底删除拉黑 Key 后立即从列表隐藏', async () => {
+    const { apiService, state } = createState()
+
+    await state.removeDisabledKey('sk-blocked')
+
+    expect(apiService.removeChatApiKey).toHaveBeenCalledWith(7, 'sk-blocked')
+    expect(state.visibleDisabledKeys.value).toEqual([])
+    expect(state.removingKey.value).toBe('')
+  })
+
+  it('分组模型可禁用并按策略标识恢复', async () => {
+    const { apiService, state } = createState()
+
+    await state.disableGroupModel('sk-test', 'Model-A')
+
+    expect(apiService.updateGroupModelRestriction).toHaveBeenCalledWith('chat', 7, 'sk-test', '', 'Model-A', true)
+    expect(state.visibleDisabledGroupModels.value).toHaveLength(1)
+    const record = state.visibleDisabledGroupModels.value[0]
+    expect(record).toMatchObject({ quotaGroup: 'vip', model: 'Model-A' })
+
+    await state.restoreDisabledGroupModel(record)
+
+    expect(apiService.updateGroupModelRestriction).toHaveBeenLastCalledWith('chat', 7, '', 'vip', 'Model-A', false)
+    expect(state.visibleDisabledGroupModels.value).toEqual([])
   })
 })

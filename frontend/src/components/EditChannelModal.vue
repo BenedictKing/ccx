@@ -54,13 +54,16 @@
             <section :ref="(el: any) => setSectionRef('auth', el)" data-section-id="auth" class="pa-6 scroll-mt-4">
               <ApiKeyManagementSection
                 :api-keys="form.apiKeys"
-                :disabled-keys="disabledKeys"
+                :disabled-keys="visibleDisabledKeys"
                 :disabled-key-models="disabledKeyModels"
+                :disabled-group-models="visibleDisabledGroupModels"
                 :key-models-status="keyModelsStatus"
                 :is-editing="isEditing"
                 :restoring-key="restoringKey"
                 :restoring-key-model="restoringKeyModel"
                 :suspending-key="suspendingKey"
+                :removing-key="removingKey"
+                :changing-group-model="changingGroupModel"
                 :service-type="form.serviceType"
                 :channel-id="props.channel?.index"
                 :proxy-url="form.proxyUrl"
@@ -74,6 +77,9 @@
                 @restore-key-model="restoreDisabledKeyModel"
                 @suspend-key="suspendKey"
                 @resume-key="resumeKey"
+                @remove-key="removeDisabledKey"
+                @disable-group-model="disableGroupModel"
+                @restore-group-model="restoreDisabledGroupModel"
               />
             </section>
 
@@ -484,6 +490,7 @@ const {
   restoringKey,
   submitting,
   disabledKeys,
+  visibleDisabledKeys,
   expectedRequestUrls,
   customHeadersArray,
   updateCustomHeaders,
@@ -494,6 +501,12 @@ const {
   suspendingKey,
   suspendKey,
   resumeKey,
+  removingKey,
+  removeDisabledKey,
+  changingGroupModel,
+  visibleDisabledGroupModels,
+  disableGroupModel,
+  restoreDisabledGroupModel,
   appendSupportedModelFilter,
   ensureTargetModelsLoaded,
   updateForm,

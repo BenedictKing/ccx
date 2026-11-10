@@ -465,6 +465,9 @@ func (cm *ConfigManager) RemoveGeminiAPIKey(index int, apiKey string) error {
 		}
 	}
 
+	if cm.removeDisabledKeyEntryLocked(&cm.config.GeminiUpstream[index], "Gemini", apiKey) {
+		found = true
+	}
 	if !found {
 		return fmt.Errorf("API密钥不存在")
 	}

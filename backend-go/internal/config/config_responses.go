@@ -470,6 +470,9 @@ func (cm *ConfigManager) RemoveResponsesAPIKey(index int, apiKey string) error {
 		}
 	}
 
+	if cm.removeDisabledKeyEntryLocked(&cm.config.ResponsesUpstream[index], "Responses", apiKey) {
+		found = true
+	}
 	if !found {
 		return fmt.Errorf("API密钥不存在")
 	}

@@ -95,6 +95,20 @@ export interface DisabledKeyInfo {
   config?: APIKeyConfig
 }
 
+export interface DisabledGroupModelInfo {
+  quotaGroup?: string
+  key?: string
+  model: string
+  disabledAt: string
+}
+
+export interface GroupModelMutationResponse {
+  success: boolean
+  quotaGroup: string
+  model: string
+  affectedKeyCount: number
+}
+
 export interface APIKeyConfig {
   groupMultiplier?: number | null
   multiplierSource?: string
@@ -166,6 +180,7 @@ export interface Channel {
   apiKeys: string[]
   apiKeyConfigs?: APIKeyConfig[]
   disabledApiKeys?: DisabledKeyInfo[]
+  disabledGroupModels?: DisabledGroupModelInfo[]
   historicalApiKeys?: string[]
   description?: string
   website?: string

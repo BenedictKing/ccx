@@ -22,13 +22,14 @@ type UpstreamConfig struct {
 	APIKeys               []string                           `json:"apiKeys"`
 	SiteAccountUID        string                             `json:"siteAccountUid,omitempty"` // 托管归属独立于用户可编辑的渠道名称
 	SiteGroup             string                             `json:"siteGroup,omitempty"`
-	MaxGroupMultiplier    *float64                           `json:"maxGroupMultiplier,omitempty"` // nil=不设上限，0=仅允许零倍率
-	APIKeyConfigs         []APIKeyConfig                     `json:"apiKeyConfigs,omitempty"`      // API Key 附加配置（限速、权重、配额组、分组倍率等），通过 Key 关联 APIKeys
-	HistoricalAPIKeys     []string                           `json:"historicalApiKeys,omitempty"`  // 历史 API Key（用于统计聚合，换 Key 后保留旧 Key 的统计数据）
-	DisabledAPIKeys       []DisabledKeyInfo                  `json:"disabledApiKeys,omitempty"`    // 被拉黑的 API Key（持久化，需手动恢复）
-	DisabledKeyModels     []DisabledKeyModelInfo             `json:"disabledKeyModels,omitempty"`  // 被限制的 (Key,模型) 组合（持久化，定时自动恢复）
-	ServiceType           string                             `json:"serviceType"`                  // gemini, openai, claude
-	AuthHeader            string                             `json:"authHeader,omitempty"`         // 认证头覆盖：auto(空)/bearer/x-api-key
+	MaxGroupMultiplier    *float64                           `json:"maxGroupMultiplier,omitempty"`  // nil=不设上限，0=仅允许零倍率
+	APIKeyConfigs         []APIKeyConfig                     `json:"apiKeyConfigs,omitempty"`       // API Key 附加配置（限速、权重、配额组、分组倍率等），通过 Key 关联 APIKeys
+	HistoricalAPIKeys     []string                           `json:"historicalApiKeys,omitempty"`   // 历史 API Key（用于统计聚合，换 Key 后保留旧 Key 的统计数据）
+	DisabledAPIKeys       []DisabledKeyInfo                  `json:"disabledApiKeys,omitempty"`     // 被拉黑的 API Key（持久化，需手动恢复）
+	DisabledKeyModels     []DisabledKeyModelInfo             `json:"disabledKeyModels,omitempty"`   // 被限制的 (Key,模型) 组合（持久化，定时自动恢复）
+	DisabledGroupModels   []DisabledGroupModelInfo           `json:"disabledGroupModels,omitempty"` // 人工禁用的 (配额组,模型) 组合（持久化，需手动恢复）
+	ServiceType           string                             `json:"serviceType"`                   // gemini, openai, claude
+	AuthHeader            string                             `json:"authHeader,omitempty"`          // 认证头覆盖：auto(空)/bearer/x-api-key
 	Name                  string                             `json:"name,omitempty"`
 	Description           string                             `json:"description,omitempty"`
 	Website               string                             `json:"website,omitempty"`
@@ -868,16 +869,26 @@ func (cm *ConfigManager) clearFailedKeysForUpstream(upstream *UpstreamConfig, ap
 // removeDisabledKeyModelsForKey 移除指定 Key 的所有 (Key,模型) 组合限制。
 // 用于 Key 重新加入渠道时清理其历史模型限制。调用方需持有锁。
 func removeDisabledKeyModelsForKey(upstream *UpstreamConfig, apiKey string) {
-	if len(upstream.DisabledKeyModels) == 0 {
-		return
-	}
-	newList := make([]DisabledKeyModelInfo, 0, len(upstream.DisabledKeyModels))
-	for _, dm := range upstream.DisabledKeyModels {
-		if dm.Key != apiKey {
-			newList = append(newList, dm)
+	upstream.DisabledKeyModels = slices.DeleteFunc(upstream.DisabledKeyModels, func(dm DisabledKeyModelInfo) bool {
+		return dm.Key == apiKey
+	})
+	upstream.DisabledGroupModels = slices.DeleteFunc(upstream.DisabledGroupModels, func(dm DisabledGroupModelInfo) bool {
+		return dm.QuotaGroup == "" && dm.Key == apiKey
+	})
+}
+
+// removeDisabledKeyEntryLocked 从拉黑列表移除指定 Key 及其模型限制与内存失败记录。
+// 用于直接删除已拉黑（不在活跃列表中）的 Key。调用方需持有锁。
+func (cm *ConfigManager) removeDisabledKeyEntryLocked(upstream *UpstreamConfig, apiType, apiKey string) bool {
+	for i, dk := range upstream.DisabledAPIKeys {
+		if dk.Key == apiKey {
+			upstream.DisabledAPIKeys = append(upstream.DisabledAPIKeys[:i], upstream.DisabledAPIKeys[i+1:]...)
+			removeDisabledKeyModelsForKey(upstream, apiKey)
+			delete(cm.failedKeysCache, failedKeyCacheKey(apiType, apiKey))
+			return true
 		}
 	}
-	upstream.DisabledKeyModels = newList
+	return false
 }
 
 // cleanupExpiredFailures 清理过期的失败记录
@@ -1298,8 +1309,8 @@ func (cm *ConfigManager) ResumeKey(apiType string, channelIndex int, apiKey stri
 	return cm.saveConfigLocked(cm.config)
 }
 
-// RestoreAllKeys 恢复指定渠道所有被拉黑的 Key（持久化）
-// 返回恢复的 Key 数量
+// RestoreAllKeys 恢复指定渠道所有不可用的 Key（被拉黑或手动暂停，持久化）。
+// 返回实际恢复的唯一 Key 数量。
 func (cm *ConfigManager) RestoreAllKeys(apiType string, channelIndex int) (int, error) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
@@ -1310,14 +1321,11 @@ func (cm *ConfigManager) RestoreAllKeys(apiType string, channelIndex int) (int, 
 	}
 
 	upstream := &(*upstreams)[channelIndex]
-	restoredCount := len(upstream.DisabledAPIKeys)
-	if restoredCount == 0 {
-		return 0, nil
-	}
-
-	// 将所有被拉黑的 Key 移回活跃列表
-	savedConfigs := make(map[string]*APIKeyConfig, restoredCount)
+	disabledCount := len(upstream.DisabledAPIKeys)
+	restoredKeys := make(map[string]struct{}, disabledCount)
+	savedConfigs := make(map[string]*APIKeyConfig, disabledCount)
 	for _, dk := range upstream.DisabledAPIKeys {
+		restoredKeys[dk.Key] = struct{}{}
 		if !slices.Contains(upstream.APIKeys, dk.Key) {
 			upstream.APIKeys = append(upstream.APIKeys, dk.Key)
 		}
@@ -1325,24 +1333,45 @@ func (cm *ConfigManager) RestoreAllKeys(apiType string, channelIndex int) (int, 
 			copyCfg := *dk.Config
 			savedConfigs[dk.Key] = &copyCfg
 		}
-		// 从 HistoricalAPIKeys 移除，避免 active∩historical 重复
 		upstream.HistoricalAPIKeys = slices.DeleteFunc(upstream.HistoricalAPIKeys, func(k string) bool {
 			return k == dk.Key
 		})
-		// 清除内存中的失败记录
-		cacheKey := failedKeyCacheKey(apiType, dk.Key)
-		delete(cm.failedKeysCache, cacheKey)
+		delete(cm.failedKeysCache, failedKeyCacheKey(apiType, dk.Key))
 	}
 
-	for _, cfg := range savedConfigs {
-		upstream.APIKeyConfigs = restoreAPIKeyConfig(upstream.APIKeyConfigs, cfg.Key, cfg)
+	if disabledCount > 0 {
+		for _, cfg := range savedConfigs {
+			upstream.APIKeyConfigs = restoreAPIKeyConfig(upstream.APIKeyConfigs, cfg.Key, cfg)
+		}
+		upstream.APIKeyConfigs = normalizeAPIKeyConfigs(upstream.APIKeys, upstream.APIKeyConfigs)
+		upstream.DisabledAPIKeys = nil
 	}
-	upstream.APIKeyConfigs = normalizeAPIKeyConfigs(upstream.APIKeys, upstream.APIKeyConfigs)
 
-	log.Printf("[%s-Blacklist] 渠道 [%d] %s 的 %d 个 Key 已全部恢复", apiType, channelIndex, upstream.Name, restoredCount)
-	upstream.DisabledAPIKeys = nil
+	activeKeys := make(map[string]struct{}, len(upstream.APIKeys))
+	for _, key := range upstream.APIKeys {
+		activeKeys[key] = struct{}{}
+	}
+	resumedCount := 0
+	for i := range upstream.APIKeyConfigs {
+		cfg := &upstream.APIKeyConfigs[i]
+		if _, active := activeKeys[cfg.Key]; !active || cfg.Enabled == nil || *cfg.Enabled {
+			continue
+		}
+		cfg.Enabled = nil
+		restoredKeys[cfg.Key] = struct{}{}
+		resumedCount++
+	}
 
-	return restoredCount, cm.saveConfigLocked(cm.config)
+	if len(restoredKeys) == 0 {
+		return 0, nil
+	}
+	if disabledCount > 0 {
+		log.Printf("[%s-Blacklist] 渠道 [%d] %s 的 %d 个被拉黑 Key 已全部恢复", apiType, channelIndex, upstream.Name, disabledCount)
+	}
+	if resumedCount > 0 {
+		log.Printf("[%s-Suspend] 渠道 [%d] %s 的 %d 个手动暂停 Key 已全部恢复", apiType, channelIndex, upstream.Name, resumedCount)
+	}
+	return len(restoredKeys), cm.saveConfigLocked(cm.config)
 }
 
 // RestoreDisabledKeys 恢复指定渠道中命中的被拉黑 Key，并返回实际恢复的 key 列表。

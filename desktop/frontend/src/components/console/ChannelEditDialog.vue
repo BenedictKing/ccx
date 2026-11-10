@@ -31,6 +31,7 @@ const {
   isMac,
   saving,
   restoringKey,
+  removingKey,
   error,
   success,
   diagnosingCompat,
@@ -41,6 +42,7 @@ const {
   copiedKeyIndex,
   duplicateKeyIndex,
   localRestoredKeys,
+  visibleDisabledKeys,
   copilotOAuthLoading,
   copilotPolling,
   copilotOAuthError,
@@ -68,7 +70,7 @@ const {
   DEFAULT_SELECT_VALUE,
   reasoningEffortOptions,
   form,
-  disabledApiKeys,
+  disabledGroupModels,
   historicalApiKeys,
   detectedBaseUrls,
   detectedApiKeys,
@@ -140,6 +142,7 @@ const {
   addNewApiKeys,
   copyApiKey,
   handleDisabledKeyRestore,
+  handleDisabledKeyRemove,
   handleTestCapability,
   handleDiagnoseCompat,
   handleDiscoverChannelConfig,
@@ -250,9 +253,11 @@ const embeddingTargetModels = computed(() =>
                         :new-api-keys-text="newApiKeysText"
                         :copied-key-index="copiedKeyIndex"
                         :duplicate-key-index="duplicateKeyIndex"
-                        :disabled-api-keys="disabledApiKeys"
+                        :disabled-api-keys="visibleDisabledKeys"
+                        :disabled-group-models="disabledGroupModels"
                         :historical-api-keys="historicalApiKeys"
                         :restoring-key="restoringKey"
+                        :removing-key="removingKey"
                         :local-restored-keys="localRestoredKeys"
                         :key-models-status="keyModelsStatus"
                         :service-type="form.serviceType"
@@ -266,6 +271,7 @@ const embeddingTargetModels = computed(() =>
                         @move-api-key-to-bottom="moveApiKeyToBottom"
                         @copy-api-key="copyApiKey"
                         @handle-disabled-key-restore="handleDisabledKeyRestore"
+                        @handle-disabled-key-remove="handleDisabledKeyRemove"
                       />
 
                       <!-- GitHub Copilot OAuth 登录（仅 copilot 渠道显示） -->

@@ -85,6 +85,20 @@ export interface DisabledKeyModelInfo {
   recoverAt: string   // 自动恢复时间（ISO8601）
 }
 
+export interface DisabledGroupModelInfo {
+  quotaGroup?: string
+  key?: string
+  model: string
+  disabledAt: string
+}
+
+export interface GroupModelMutationResponse {
+  success: boolean
+  quotaGroup: string
+  model: string
+  affectedKeyCount: number
+}
+
 export interface APIKeyConfig {
   key: string
   name?: string
@@ -157,6 +171,7 @@ export interface Channel {
   apiKeyConfigs?: APIKeyConfig[]
   disabledApiKeys?: DisabledKeyInfo[]  // 被拉黑的 API Key
   disabledKeyModels?: DisabledKeyModelInfo[]  // 被限制的 (Key, 模型) 组合
+  disabledGroupModels?: DisabledGroupModelInfo[]  // 人工禁用的 (配额组, 模型) 组合
   historicalApiKeys?: string[]
   description?: string
   website?: string

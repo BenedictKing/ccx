@@ -471,6 +471,9 @@ func (cm *ConfigManager) RemoveAPIKey(index int, apiKey string) error {
 		}
 	}
 
+	if cm.removeDisabledKeyEntryLocked(&cm.config.Upstream[index], "Messages", apiKey) {
+		found = true
+	}
 	if !found {
 		return fmt.Errorf("API密钥不存在")
 	}

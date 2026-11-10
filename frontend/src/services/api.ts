@@ -25,6 +25,7 @@ import type {
   CopilotUserResponse,
   ConversationsResponse,
   GlobalStatsHistoryResponse,
+  GroupModelMutationResponse,
   MetricsHistoryResponse,
   ModelStatsHistoryResponse,
   ModelsResponse,
@@ -219,6 +220,21 @@ export class ApiService {
     await this.request(`/${channelType}/channels/${channelId}/keys/${action}`, {
       method: 'POST',
       body: JSON.stringify({ apiKey })
+    })
+  }
+
+  async updateGroupModelRestriction(
+    channelType: 'messages' | 'chat' | 'responses' | 'gemini' | 'images' | 'vectors',
+    channelId: number,
+    apiKey: string,
+    quotaGroup: string,
+    model: string,
+    disabled: boolean
+  ): Promise<GroupModelMutationResponse> {
+    const action = disabled ? 'disable' : 'restore'
+    return this.request(`/${channelType}/channels/${channelId}/keys/group-model/${action}`, {
+      method: 'POST',
+      body: JSON.stringify({ apiKey, quotaGroup, model })
     })
   }
 

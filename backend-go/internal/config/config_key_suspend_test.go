@@ -63,6 +63,35 @@ func TestSuspendAndResumeKey(t *testing.T) {
 	}
 }
 
+func TestRestoreAllKeysAlsoResumesManuallyPausedKeys(t *testing.T) {
+	cm := &ConfigManager{configFile: filepath.Join(t.TempDir(), "config.json")}
+	disabled := false
+	cm.config.Upstream = []UpstreamConfig{{
+		APIKeys: []string{"sk-paused"},
+		APIKeyConfigs: []APIKeyConfig{{
+			Key:     "sk-paused",
+			Enabled: &disabled,
+			Name:    "primary",
+		}},
+	}}
+
+	restored, err := cm.RestoreAllKeys("Messages", 0)
+	if err != nil {
+		t.Fatalf("RestoreAllKeys() error = %v", err)
+	}
+	if restored != 1 {
+		t.Fatalf("restored = %d, want 1", restored)
+	}
+	cfg := cm.config.Upstream[0].APIKeyConfigs[0]
+	if cfg.Enabled != nil || cfg.Name != "primary" {
+		t.Fatalf("恢复结果 = %+v, 应解除暂停并保留其他配置", cfg)
+	}
+	restored, err = cm.RestoreAllKeys("Messages", 0)
+	if err != nil || restored != 0 {
+		t.Fatalf("重复恢复 restored = %d, err = %v, want 0, nil", restored, err)
+	}
+}
+
 func TestSuspendKeyRejectsUnknownKey(t *testing.T) {
 	cm := &ConfigManager{configFile: filepath.Join(t.TempDir(), "config.json")}
 	cm.config.Upstream = []UpstreamConfig{{APIKeys: []string{"sk-test"}}}

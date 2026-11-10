@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -20,8 +20,9 @@ import {
 import { useLanguage } from '@/composables/useLanguage'
 import { useAdminApi } from '@/composables/useAdminApi'
 import { maskApiKey } from '@/utils/api-key-mask'
-import type { APIKeyConfig } from '@/services/admin-api'
+import type { APIKeyConfig, DisabledGroupModelInfo, GroupModelMutationResponse } from '@/services/admin-api'
 import type { ManagedChannelType } from '@/utils/channel-type-api'
+import { groupModelPolicyKey } from '@/utils/group-model-policy'
 
 interface DisabledKeyInfo {
   key: string
@@ -45,8 +46,10 @@ const props = defineProps<{
   copiedKeyIndex: number | null
   duplicateKeyIndex: number | null
   disabledApiKeys: DisabledKeyInfo[]
+  disabledGroupModels: DisabledGroupModelInfo[]
   historicalApiKeys: string[]
   restoringKey: string
+  removingKey: string
   localRestoredKeys: Set<string>
   keyModelsStatus: Map<string, KeyModelsStatus>
   serviceType: string
@@ -65,15 +68,95 @@ const emit = defineEmits<{
   'moveApiKeyToBottom': [index: number]
   'copyApiKey': [key: string, index: number]
   'handleDisabledKeyRestore': [key: string]
+  'handleDisabledKeyRemove': [key: string]
 }>()
 
 const { t, tf } = useLanguage()
 const adminApi = useAdminApi()
 const suspendingKey = ref('')
 const suspendError = ref('')
+const selectedGroupModelKey = ref('')
+const groupModelName = ref('')
+const groupModelBusy = ref('')
+const groupModelError = ref('')
+const localDisabledGroupModels = ref<DisabledGroupModelInfo[]>([])
+const localRestoredGroupModels = ref(new Set<string>())
+
+watch(() => props.existingApiKeys, keys => {
+  if (!keys.includes(selectedGroupModelKey.value)) selectedGroupModelKey.value = keys[0] || ''
+}, { immediate: true, deep: true })
+
+const visibleDisabledGroupModels = computed(() => {
+  const records = new Map<string, DisabledGroupModelInfo>()
+  for (const record of [...props.disabledGroupModels, ...localDisabledGroupModels.value]) {
+    records.set(groupModelPolicyKey(record), record)
+  }
+  return [...records.values()].filter(record => !localRestoredGroupModels.value.has(groupModelPolicyKey(record)))
+})
+
+function confirmRemoveDisabledKey(key: string) {
+  if (window.confirm(t('channelCard.confirmRemoveDisabledKey', { key: maskApiKey(key) }))) {
+    emit('handleDisabledKeyRemove', key)
+  }
+}
+
+async function disableSelectedGroupModel() {
+  const apiKey = selectedGroupModelKey.value
+  const model = groupModelName.value.trim()
+  if (props.channelId === undefined || !apiKey || !model || groupModelBusy.value) return
+  groupModelBusy.value = 'disable'
+  groupModelError.value = ''
+  try {
+    const result = await adminApi.post<GroupModelMutationResponse>(
+      `/api/${props.channelKind}/channels/${props.channelId}/keys/group-model/disable`,
+      { apiKey, model }
+    )
+    const record: DisabledGroupModelInfo = {
+      quotaGroup: result.quotaGroup,
+      key: result.quotaGroup ? undefined : apiKey,
+      model: result.model,
+      disabledAt: new Date().toISOString(),
+    }
+    const policyKey = groupModelPolicyKey(record)
+    localDisabledGroupModels.value = [
+      ...localDisabledGroupModels.value.filter(item => groupModelPolicyKey(item) !== policyKey),
+      record,
+    ]
+    localRestoredGroupModels.value.delete(policyKey)
+    groupModelName.value = ''
+  } catch (cause) {
+    groupModelError.value = cause instanceof Error ? cause.message : String(cause)
+  } finally {
+    groupModelBusy.value = ''
+  }
+}
+
+async function restoreGroupModel(record: DisabledGroupModelInfo) {
+  const policyKey = groupModelPolicyKey(record)
+  if (props.channelId === undefined || groupModelBusy.value) return
+  groupModelBusy.value = policyKey
+  groupModelError.value = ''
+  try {
+    await adminApi.post(`/api/${props.channelKind}/channels/${props.channelId}/keys/group-model/restore`, {
+      apiKey: record.key || undefined,
+      quotaGroup: record.quotaGroup || undefined,
+      model: record.model,
+    })
+    localRestoredGroupModels.value = new Set([...localRestoredGroupModels.value, policyKey])
+    localDisabledGroupModels.value = localDisabledGroupModels.value.filter(item => groupModelPolicyKey(item) !== policyKey)
+  } catch (cause) {
+    groupModelError.value = cause instanceof Error ? cause.message : String(cause)
+  } finally {
+    groupModelBusy.value = ''
+  }
+}
 
 function isKeyPaused(key: string) {
   return props.apiKeyConfigs?.find(cfg => cfg.key === key)?.enabled === false
+}
+
+function getQuotaGroup(key: string) {
+  return props.apiKeyConfigs?.find(cfg => cfg.key === key)?.quotaGroup?.trim() || ''
 }
 
 function setKeyEnabled(key: string, enabled: boolean | undefined) {
@@ -269,6 +352,42 @@ const visibleDisabledKeys = computed(() => {
       </div>
     </div>
 
+    <div v-if="channelId !== undefined && existingApiKeys.length" class="space-y-3 rounded-lg border border-border/60 bg-background/40 p-3">
+      <div class="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+        {{ t('channelCard.groupModelPolicy') }}
+      </div>
+      <div class="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
+        <select v-model="selectedGroupModelKey" class="h-9 rounded-md border border-input bg-background px-2 text-xs">
+          <option v-for="key in existingApiKeys" :key="key" :value="key">
+            {{ maskApiKey(key) }}{{ getQuotaGroup(key) ? ' · ' + getQuotaGroup(key) : '' }}
+          </option>
+        </select>
+        <Input v-model="groupModelName" :placeholder="t('channelCard.groupModelPlaceholder')" class="h-9 text-xs" @keydown.enter.prevent="disableSelectedGroupModel" />
+        <Button type="button" size="sm" variant="outline" :disabled="!groupModelName.trim() || !!groupModelBusy" @click="disableSelectedGroupModel">
+          <Loader2 v-if="groupModelBusy === 'disable'" class="h-3.5 w-3.5 animate-spin" />
+          {{ t('channelCard.disableModel') }}
+        </Button>
+      </div>
+      <p v-if="groupModelError" class="text-[10px] text-destructive">{{ groupModelError }}</p>
+      <div v-if="visibleDisabledGroupModels.length" class="space-y-2 border-t border-border/50 pt-2">
+        <div class="text-[10px] font-medium text-amber-700 dark:text-amber-300">
+          {{ t('channelCard.disabledGroupModels') }} ({{ visibleDisabledGroupModels.length }})
+        </div>
+        <div v-for="record in visibleDisabledGroupModels" :key="groupModelPolicyKey(record)" class="flex items-center justify-between gap-2 text-xs">
+          <div class="flex min-w-0 items-center gap-1.5">
+            <span class="rounded bg-secondary px-1.5 py-0.5">{{ record.quotaGroup || t('channelCard.independentKey') }}</span>
+            <code v-if="!record.quotaGroup && record.key" class="text-muted-foreground">{{ maskApiKey(record.key) }}</code>
+            <span class="font-medium">{{ record.model }}</span>
+          </div>
+          <Button type="button" size="sm" variant="outline" :disabled="!!groupModelBusy" @click="restoreGroupModel(record)">
+            <Loader2 v-if="groupModelBusy === groupModelPolicyKey(record)" class="h-3 w-3 animate-spin" />
+            <RotateCcw v-else class="h-3 w-3" />
+            {{ t('channelCard.restoreKey') }}
+          </Button>
+        </div>
+      </div>
+    </div>
+
     <!-- 添加新 API Key -->
     <div class="flex gap-2">
       <Input
@@ -310,17 +429,30 @@ const visibleDisabledKeys = computed(() => {
           </div>
           <div v-if="item.disabledAt" class="text-[10px] text-muted-foreground">{{ item.disabledAt }}</div>
         </div>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          :disabled="restoringKey === item.key"
-          @click="emit('handleDisabledKeyRestore', item.key)"
-        >
-          <Loader2 v-if="restoringKey === item.key" class="h-3 w-3 animate-spin" />
-          <RotateCcw v-else class="h-3 w-3" />
-          {{ t('channelEditor.auth.restoreKey') }}
-        </Button>
+        <div class="flex items-center gap-1">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            :disabled="restoringKey === item.key || !!removingKey"
+            @click="emit('handleDisabledKeyRestore', item.key)"
+          >
+            <Loader2 v-if="restoringKey === item.key" class="h-3 w-3 animate-spin" />
+            <RotateCcw v-else class="h-3 w-3" />
+            {{ t('channelEditor.auth.restoreKey') }}
+          </Button>
+          <Button
+            type="button"
+            size="icon-sm"
+            variant="ghost"
+            class="text-destructive"
+            :disabled="!!removingKey"
+            @click="confirmRemoveDisabledKey(item.key)"
+          >
+            <Loader2 v-if="removingKey === item.key" class="h-3.5 w-3.5 animate-spin" />
+            <Trash2 v-else class="h-3.5 w-3.5" />
+          </Button>
+        </div>
       </div>
     </div>
   </section>

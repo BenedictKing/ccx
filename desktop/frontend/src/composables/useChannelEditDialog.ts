@@ -47,7 +47,7 @@ export type ChannelEditDialogEmit = {
 
 export function useChannelEditDialog(props: ChannelEditDialogProps, emit: ChannelEditDialogEmit) {
 const { t } = useLanguage()
-  const { saveChannel, restoreApiKey } = useConsoleChannels()
+  const { saveChannel, restoreApiKey, removeApiKey } = useConsoleChannels()
   const adminApi = useAdminApi()
 
   const isEditMode = computed(() => !!props.channel)
@@ -66,9 +66,12 @@ const { t } = useLanguage()
   const copilotDefaultBaseUrl = 'https://api.githubcopilot.com'
   const defaultNormalizeMetadataUserId = () => props.channelType === 'messages'
   const disabledApiKeys = computed<DisabledKeyInfo[]>(() => props.channel?.disabledApiKeys ?? [])
+  const disabledGroupModels = computed(() => props.channel?.disabledGroupModels ?? [])
   const historicalApiKeys = computed(() => props.channel?.historicalApiKeys ?? [])
   const {
     restoringKey,
+    removingKey,
+    localRemovedKeys,
     existingApiKeys,
     newApiKeysText,
     copiedKeyIndex,
@@ -83,6 +86,7 @@ const { t } = useLanguage()
     moveApiKeyToTop,
     moveApiKeyToBottom,
     handleDisabledKeyRestore,
+    handleDisabledKeyRemove,
   } = useChannelApiKeys({
     channel: computed(() => props.channel),
     channelType: () => props.channelType,
@@ -92,6 +96,7 @@ const { t } = useLanguage()
     isEditMode,
     parseLines,
     restoreApiKey,
+    removeApiKey,
     t,
   })
 
@@ -386,6 +391,7 @@ const { t } = useLanguage()
     keyModelsStatus.value.clear()
     resetTargetModelState()
     localRestoredKeys.value = new Set()
+    localRemovedKeys.value = new Set()
     modelMappingRows.value = []
     modelCapabilityRows.value = []
     headerRows.value = []
@@ -432,6 +438,7 @@ const { t } = useLanguage()
     keyModelsStatus.value.clear()
     resetTargetModelState()
     localRestoredKeys.value = new Set()
+    localRemovedKeys.value = new Set()
     modelMappingRows.value = modelMappingFromChannel(ch)
     modelCapabilityRows.value = modelCapabilitiesToRows(ch.modelCapabilities || {}, () => ++rowId)
     form.embeddingCapabilityRows = embeddingCapabilitiesToRows(ch.embeddingCapabilities || {}, nextEmbeddingRowId)
@@ -1081,6 +1088,7 @@ const { t } = useLanguage()
     isMac,
     saving,
     restoringKey,
+    removingKey,
     error,
     success,
     diagnosingCompat,
@@ -1120,6 +1128,8 @@ const { t } = useLanguage()
     reasoningEffortOptions,
     form,
     disabledApiKeys,
+    visibleDisabledKeys,
+    disabledGroupModels,
     historicalApiKeys,
     detectedBaseUrls,
     detectedApiKeys,
@@ -1191,6 +1201,7 @@ const { t } = useLanguage()
     addNewApiKeys,
     copyApiKey,
     handleDisabledKeyRestore,
+    handleDisabledKeyRemove,
     handleTestCapability,
     handleDiagnoseCompat,
     handleDiscoverChannelConfig,

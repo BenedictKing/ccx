@@ -81,6 +81,27 @@ func TestCandidatesForModel_EnabledFalseFiltered(t *testing.T) {
 	}
 }
 
+func TestCandidatesForModel_GroupModelDisabledFiltered(t *testing.T) {
+	up := &config.UpstreamConfig{
+		APIKeys: []string{"k1", "k2", "k3"},
+		APIKeyConfigs: []config.APIKeyConfig{
+			{Key: "k1", QuotaGroup: "vip"},
+			{Key: "k2", QuotaGroup: "vip"},
+			{Key: "k3", QuotaGroup: "basic"},
+		},
+		DisabledGroupModels: []config.DisabledGroupModelInfo{{QuotaGroup: "vip", Model: "model-a"}},
+	}
+
+	cands := CandidatesForModel(up, nil, "model-a")
+	if len(cands) != 1 || cands[0].APIKey != "k3" {
+		t.Fatalf("模型限制应过滤整个分组，got %v", cands)
+	}
+	cands = CandidatesForModel(up, nil, "model-b")
+	if len(cands) != 3 {
+		t.Fatalf("其他模型不应受影响，got %v", cands)
+	}
+}
+
 func TestCandidatesForModel_FailedKeysFiltered(t *testing.T) {
 	up := &config.UpstreamConfig{
 		APIKeys: []string{"k1", "k2"},

@@ -106,9 +106,53 @@
                   @keydown.enter="commitGroupMultiplier(key)"
                 />
               </v-list-item-subtitle>
+              <v-list-item-subtitle v-if="expandedGroupModelKey === key" class="d-flex align-center ga-2 mt-2">
+                <v-chip size="x-small" color="secondary" variant="tonal">
+                  {{ getQuotaGroup(key) || t('channelCard.independentKey') }}
+                </v-chip>
+                <v-text-field
+                  v-model="groupModelDrafts[key]"
+                  :label="t('channelCard.groupModelPlaceholder')"
+                  variant="outlined"
+                  density="compact"
+                  hide-details
+                  @keydown.enter="disableGroupModel(key)"
+                />
+                <v-btn
+                  size="small"
+                  color="warning"
+                  variant="tonal"
+                  :disabled="!groupModelDrafts[key]?.trim() || !!changingGroupModel"
+                  :loading="changingGroupModel === (key + '|' + groupModelDrafts[key]?.trim())"
+                  @click="disableGroupModel(key)"
+                >
+                  {{ t('channelCard.disableModel') }}
+                </v-btn>
+              </v-list-item-subtitle>
 
               <template #append>
                 <div class="d-flex align-center ga-1">
+                  <v-tooltip
+                    v-if="isEditing && channelId !== undefined"
+                    :text="t('channelCard.groupModelPolicy')"
+                    location="top"
+                    :open-delay="150"
+                    content-class="key-tooltip"
+                  >
+                    <template #activator="{ props: tooltipProps }">
+                      <v-btn
+                        v-bind="tooltipProps"
+                        size="small"
+                        :color="expandedGroupModelKey === key ? 'primary' : 'secondary'"
+                        icon
+                        variant="text"
+                        rounded="md"
+                        @click="expandedGroupModelKey = expandedGroupModelKey === key ? '' : key"
+                      >
+                        <v-icon size="small">mdi-shield-key-outline</v-icon>
+                      </v-btn>
+                    </template>
+                  </v-tooltip>
                   <v-tooltip
                     v-if="isEditing && channelId !== undefined"
                     :text="isKeyPaused(key) ? t('channelCard.resumeKey') : t('channelCard.suspendKey')"
@@ -394,13 +438,62 @@
                 <span class="text-caption">{{ new Date(dk.disabledAt).toLocaleDateString() }}</span>
               </v-list-item-subtitle>
               <template #append>
+                <div class="d-flex align-center ga-1">
+                  <v-btn
+                    size="x-small"
+                    color="success"
+                    variant="tonal"
+                    rounded="lg"
+                    :loading="restoringKey === dk.key"
+                    :disabled="!!removingKey"
+                    @click="$emit('restore-key', dk.key)"
+                  >
+                    <v-icon start size="small">mdi-restore</v-icon>
+                    {{ t('channelCard.restoreKey') }}
+                  </v-btn>
+                  <v-btn
+                    size="x-small"
+                    color="error"
+                    icon
+                    variant="text"
+                    :loading="removingKey === dk.key"
+                    :disabled="!!removingKey"
+                    @click="confirmRemoveDisabledKey(dk.key)"
+                  >
+                    <v-icon size="small">mdi-delete-outline</v-icon>
+                  </v-btn>
+                </div>
+              </template>
+            </v-list-item>
+          </v-list>
+        </div>
+
+        <div v-if="isEditing && disabledGroupModels.length" class="mt-4">
+          <div class="d-flex align-center ga-2 mb-2">
+            <v-icon size="small" color="warning">mdi-shield-key-outline</v-icon>
+            <span class="text-body-2 font-weight-medium text-warning">{{ t('channelCard.disabledGroupModels') }}</span>
+            <v-chip size="x-small" color="warning" variant="tonal">{{ disabledGroupModels.length }}</v-chip>
+          </div>
+          <v-list density="compact" class="rounded-lg">
+            <v-list-item v-for="record in disabledGroupModels" :key="groupModelPolicyKey(record)" class="px-3">
+              <v-list-item-title class="d-flex align-center ga-2 text-caption">
+                <v-chip size="x-small" color="secondary" variant="tonal">
+                  {{ record.quotaGroup || t('channelCard.independentKey') }}
+                </v-chip>
+                <code v-if="!record.quotaGroup && record.key">{{ maskApiKey(record.key) }}</code>
+                <v-chip size="x-small" color="primary" variant="tonal">{{ record.model }}</v-chip>
+              </v-list-item-title>
+              <v-list-item-subtitle class="text-caption">
+                {{ new Date(record.disabledAt).toLocaleString() }}
+              </v-list-item-subtitle>
+              <template #append>
                 <v-btn
                   size="x-small"
                   color="success"
                   variant="tonal"
-                  rounded="lg"
-                  :loading="restoringKey === dk.key"
-                  @click="$emit('restore-key', dk.key)"
+                  :loading="changingGroupModel === groupModelPolicyKey(record)"
+                  :disabled="!!changingGroupModel"
+                  @click="$emit('restore-group-model', record)"
                 >
                   <v-icon start size="small">mdi-restore</v-icon>
                   {{ t('channelCard.restoreKey') }}
@@ -460,8 +553,9 @@
 import { ref, computed, onBeforeUnmount } from 'vue'
 import { useI18n } from '../../i18n'
 import { ApiService } from '../../services/api'
-import type { APIKeyConfig } from '../../services/api-types'
+import type { APIKeyConfig, DisabledGroupModelInfo } from '../../services/api-types'
 import { maskApiKey } from '../../utils/apiKeyMask'
+import { groupModelPolicyKey } from '../../utils/channelApiKeys'
 
 interface KeyModelsStatus {
   loading?: boolean
@@ -489,11 +583,14 @@ interface Props {
   apiKeys: string[]
   disabledKeys: DisabledKey[]
   disabledKeyModels?: DisabledKeyModel[]
+  disabledGroupModels: DisabledGroupModelInfo[]
   keyModelsStatus: Map<string, KeyModelsStatus>
   isEditing: boolean
   restoringKey: string
   restoringKeyModel?: string
   suspendingKey?: string
+  removingKey?: string
+  changingGroupModel?: string
   serviceType?: string
   channelId?: number
   proxyUrl?: string
@@ -512,6 +609,9 @@ const emit = defineEmits<{
   'restore-key-model': [string, string]
   'suspend-key': [string]
   'resume-key': [string]
+  'remove-key': [string]
+  'disable-group-model': [string, string]
+  'restore-group-model': [DisabledGroupModelInfo]
 }>()
 
 const { t } = useI18n()
@@ -521,6 +621,8 @@ const newApiKey = ref('')
 const apiKeyError = ref('')
 const duplicateKeyIndex = ref<number | null>(null)
 const copiedKeyIndex = ref<number | null>(null)
+const expandedGroupModelKey = ref('')
+const groupModelDrafts = ref<Record<string, string>>({})
 interface CopilotDiagnoseResponse {
   githubUser?: {
     login?: string
@@ -550,6 +652,16 @@ let copilotPollTimer: number | null = null
 
 const hasConfigurableKeys = computed(() => props.serviceType === 'copilot' || props.apiKeys.length > 0)
 const isKeyPaused = (key: string) => props.apiKeyConfigs?.find(config => config.key === key)?.enabled === false
+const getQuotaGroup = (key: string) => props.apiKeyConfigs?.find(config => config.key === key)?.quotaGroup?.trim() || ''
+const confirmRemoveDisabledKey = (key: string) => {
+  if (window.confirm(t('channelCard.confirmRemoveDisabledKey', { key: maskApiKey(key) }))) {
+    emit('remove-key', key)
+  }
+}
+const disableGroupModel = (key: string) => {
+  const model = groupModelDrafts.value[key]?.trim()
+  if (model) emit('disable-group-model', key, model)
+}
 const groupMultiplierDrafts = ref(new Map<string, string>())
 const validMultiplier = (value: unknown) => value == null || value === '' || (Number.isFinite(Number(value)) && Number(value) >= 0) || t('channelEditor.auth.multiplierInvalid')
 const updateLimit = (value: unknown) => {

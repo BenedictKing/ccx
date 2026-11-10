@@ -461,6 +461,9 @@ func (cm *ConfigManager) RemoveChatAPIKey(index int, apiKey string) error {
 		}
 	}
 
+	if cm.removeDisabledKeyEntryLocked(&cm.config.ChatUpstream[index], "Chat", apiKey) {
+		found = true
+	}
 	if !found {
 		return fmt.Errorf("API密钥不存在")
 	}

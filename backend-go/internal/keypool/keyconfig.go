@@ -83,6 +83,9 @@ func CandidatesForModel(upstream *config.UpstreamConfig, failedKeys map[string]b
 			continue
 		}
 		quotaGroup := strings.TrimSpace(cfg.QuotaGroup)
+		if model != "" && upstream.IsGroupModelDisabled(key, quotaGroup, model) {
+			continue
+		}
 		scope := "key:" + stableKeyID(key)
 		if quotaGroup != "" {
 			scope = "quota:" + stableKeyID("quota:"+quotaGroup)

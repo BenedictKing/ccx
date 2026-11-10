@@ -13,6 +13,7 @@ type ChannelApiKeyOptions = {
   isEditMode: ComputedRef<boolean>
   parseLines: (text: string) => string[]
   restoreApiKey: (channelId: number, key: string, channelType: ManagedChannelType) => Promise<void>
+  removeApiKey: (channelId: number, key: string, channelType: ManagedChannelType) => Promise<void>
   t: Translator
 }
 
@@ -23,11 +24,15 @@ export function useChannelApiKeys(options: ChannelApiKeyOptions) {
   const copiedKeyIndex = ref<number | null>(null)
   const duplicateKeyIndex = ref<number | null>(null)
   const localRestoredKeys = ref<Set<string>>(new Set())
+  const removingKey = ref('')
+  const localRemovedKeys = ref<Set<string>>(new Set())
   let duplicateKeyTimer: ReturnType<typeof setTimeout> | null = null
 
   const visibleDisabledKeys = computed(() => {
     if (!options.isEditMode.value) return []
-    return options.disabledApiKeys.value.filter(dk => !localRestoredKeys.value.has(dk.key))
+    return options.disabledApiKeys.value.filter(
+      dk => !localRestoredKeys.value.has(dk.key) && !localRemovedKeys.value.has(dk.key)
+    )
   })
 
   const hasDisabledKeys = computed(() => visibleDisabledKeys.value.length > 0)
@@ -124,8 +129,26 @@ export function useChannelApiKeys(options: ChannelApiKeyOptions) {
     }
   }
 
+  async function handleDisabledKeyRemove(key: string) {
+    const channel = options.channel.value
+    if (!channel || removingKey.value) return
+    removingKey.value = key
+    options.error.value = ''
+    try {
+      await options.removeApiKey(channel.index, key, options.channelType())
+      localRemovedKeys.value = new Set([...localRemovedKeys.value, key])
+      existingApiKeys.value = existingApiKeys.value.filter(item => item !== key)
+    } catch (e) {
+      options.error.value = e instanceof Error ? e.message : String(e)
+    } finally {
+      removingKey.value = ''
+    }
+  }
+
   return {
     restoringKey,
+    removingKey,
+    localRemovedKeys,
     existingApiKeys,
     newApiKeysText,
     copiedKeyIndex,
@@ -141,5 +164,6 @@ export function useChannelApiKeys(options: ChannelApiKeyOptions) {
     moveApiKeyToTop,
     moveApiKeyToBottom,
     handleDisabledKeyRestore,
+    handleDisabledKeyRemove,
   }
 }

@@ -47,6 +47,8 @@ func BuildChannelView(up config.UpstreamConfig, index int) gin.H {
 		"supportedModels":               up.SupportedModels,
 		"routePrefix":                   up.RoutePrefix,
 		"disabledApiKeys":               up.DisabledAPIKeys,
+		"disabledKeyModels":             up.DisabledKeyModels,
+		"disabledGroupModels":           up.DisabledGroupModels,
 		"autoBlacklistBalance":          up.IsAutoBlacklistBalanceEnabled(),
 		"circuitBreakerDisabled":        up.CircuitBreakerDisabled,
 		"normalizeMetadataUserId":       up.IsNormalizeMetadataUserIDEnabled(),
