@@ -129,12 +129,62 @@
       "reasoningEfforts": ["max"]
     },
     {
-      "patterns": ["(?:^|[-/])gpt-6(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)"],
+      "patterns": ["(?:^|[-/])gpt-6-astra(?=$|@)"],
       "provider": "openai",
-      "displayName": "gpt-6",
-      "contextWindowTokens": 1000000,
+      "displayName": "GPT-6 Astra",
+      "description": "GPT-6 flagship for the most demanding reasoning, coding and professional work. Does not support reasoning effort none; use low instead.",
+      "contextWindowTokens": 1050000,
       "maxOutputTokens": 128000,
-      "reasoningEfforts": ["low", "medium", "high", "xhigh"]
+      "reasoningEfforts": ["low", "medium", "high", "xhigh", "max"],
+      "pricing": {
+        "inputCacheMissPrice": 10,
+        "outputPrice": 50
+      },
+      "sources": ["https://developers.openai.com/api/docs/guides/latest-model", "https://openrouter.ai/openai/gpt-6-astra"]
+    },
+    {
+      "patterns": ["(?:^|[-/])gpt-6\\.1-sol(?=$|@)"],
+      "provider": "openai",
+      "displayName": "GPT-6.1 Sol",
+      "description": "Released 2026-09-29 (DevDay). Near-Astra performance at lower cost; Codex CLI default since 0.161.0. Codex/ChatGPT Work default context is 500K. Inputs above 272K tokens bill the full request at 2x input/cache and 1.5x output rates. Ultrafast mode bills 6x standard.",
+      "contextWindowTokens": 1050000,
+      "maxOutputTokens": 128000,
+      "reasoningEfforts": ["low", "medium", "high", "xhigh", "max"],
+      "pricing": {
+        "inputCacheHitPrice": 0.1,
+        "inputCacheMissPrice": 2,
+        "outputPrice": 10
+      },
+      "sources": ["https://developers.openai.com/api/docs/models/gpt-6.1-sol"]
+    },
+    {
+      "patterns": ["(?:^|[-/])gpt-6-sol(?=$|@)"],
+      "provider": "openai",
+      "displayName": "GPT-6 Sol",
+      "description": "Mid-tier of the GPT-6 family (distinct from GPT-5.6 Sol). Supports reasoning effort none.",
+      "contextWindowTokens": 1050000,
+      "maxOutputTokens": 128000,
+      "reasoningEfforts": ["none", "low", "medium", "high", "xhigh", "max"],
+      "pricing": {
+        "inputCacheHitPrice": 0.2,
+        "inputCacheMissPrice": 2,
+        "outputPrice": 10
+      },
+      "sources": ["https://openai.com/index/introducing-gpt-6-sol-and-luna", "https://www.explainx.ai/blog/gpt-6-sol-luna-launch-pricing-2026"]
+    },
+    {
+      "patterns": ["(?:^|[-/])gpt-6-luna(?=$|@)"],
+      "provider": "openai",
+      "displayName": "GPT-6 Luna",
+      "description": "Fast, cost-efficient GPT-6 tier for high-volume and latency-sensitive workloads. Supports reasoning effort none.",
+      "contextWindowTokens": 1050000,
+      "maxOutputTokens": 128000,
+      "reasoningEfforts": ["none", "low", "medium", "high", "xhigh", "max"],
+      "pricing": {
+        "inputCacheMissPrice": 0.1,
+        "outputPrice": 0.5
+      },
+      "sources": ["https://openai.com/index/introducing-gpt-6-sol-and-luna"]
     },
     {
       "patterns": [

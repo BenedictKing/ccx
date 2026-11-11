@@ -18,6 +18,10 @@ const modelPriorityPatterns: RegExp[] = [
   /haiku-4-5/i,
 
   // OpenAI GPT-5 系列
+  /gpt-6\.1-sol/i,
+  /gpt-6-astra/i,
+  /gpt-6-sol/i,
+  /gpt-6-luna/i,
   /gpt-6/i,
   /gpt-5\.5-pro/i,
   /gpt-5\.5/i,
