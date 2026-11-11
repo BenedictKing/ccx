@@ -562,7 +562,7 @@ func isRequestSideStreamErrorCode(value string) bool {
 // truncateMsg 截断消息（最多200字符）
 func truncateMsg(msg string) string {
 	if len(msg) > 200 {
-		return msg[:200]
+		return utils.TruncateStringForLog(msg, 200)
 	}
 	return msg
 }
@@ -597,8 +597,5 @@ func extractSSEEventInfo(event string) (eventType string, blockIndex int, blockT
 
 // truncateForLog 截断字符串用于日志输出
 func truncateForLog(s string, maxLen int) string {
-	if len(s) <= maxLen {
-		return s
-	}
-	return s[:maxLen] + "..."
+	return utils.TruncateStringForLog(s, maxLen)
 }

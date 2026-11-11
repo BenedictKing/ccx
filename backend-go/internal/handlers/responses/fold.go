@@ -34,8 +34,10 @@ type responsesFoldRoundOpener func(body map[string]interface{}) (*http.Response,
 type responsesFoldEmitter func(event map[string]interface{}) error
 
 type responsesFoldResult struct {
-	AgentUsage  map[string]interface{}
-	BilledUsage map[string]interface{}
+	AgentUsage       map[string]interface{}
+	BilledUsage      map[string]interface{}
+	IncompleteReason string
+	EOFRetries       int
 }
 
 type responsesFoldBufferedOutput struct {
@@ -97,6 +99,12 @@ func handleFoldedResponsesStreamSuccess(
 	}
 
 	result, err := runResponsesFold(baseBody, resp, openRound, emitter.emit)
+	if result.EOFRetries > 0 {
+		common.RequestLogf(c, "[Responses-UpstreamEOF-Retry] 上游未发送终止事件，已自动重试: retries=%d committed=%t", result.EOFRetries, emitter.committed)
+	}
+	if result.IncompleteReason != "" {
+		common.RequestLogf(c, "[Responses-StreamIncomplete] 上游流未正常结束: reason=%s committed=%t", result.IncompleteReason, emitter.committed)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -104,7 +112,11 @@ func handleFoldedResponsesStreamSuccess(
 		return nil, common.ErrEmptyStreamResponse
 	}
 	emitter.finish()
-	return responsesFoldMetricsUsage(result.BilledUsage), nil
+	usage := responsesFoldMetricsUsage(result.BilledUsage)
+	if result.IncompleteReason != "" {
+		return usage, fmt.Errorf("upstream Responses stream incomplete: %s", result.IncompleteReason)
+	}
+	return usage, nil
 }
 
 func runResponsesFold(
@@ -130,7 +142,14 @@ func runResponsesFold(
 	}
 
 	currentResp := firstResp
+	currentBody := baseBody
+	eofRetries := 0
+	retryingRound := false
 	for roundNo := 1; ; roundNo++ {
+	roundStart:
+		suppressLifecycle := roundNo > 1 || retryingRound
+		retryingRound = false
+		roundCanRetry := true
 		iterator := newResponsesSSEIterator(currentResp.Body)
 		outputIndexToDownstream := make(map[string]int)
 		outputKind := make(map[string]string)
@@ -145,7 +164,7 @@ func runResponsesFold(
 			if err != nil {
 				_ = currentResp.Body.Close()
 				incomplete := responsesFoldTerminalEvent(nil, baseResponse, finalOutput, responsesFoldAgentUsage(firstUsage, summedUsage, usage, false), roundsInfo, summedUsage, "upstream_error", "upstream_error")
-				return responsesFoldResult{AgentUsage: responseUsageMap(incomplete), BilledUsage: summedUsage}, emit(stamp(incomplete))
+				return responsesFoldResult{AgentUsage: responseUsageMap(incomplete), BilledUsage: summedUsage, IncompleteReason: "upstream_error", EOFRetries: eofRetries}, emit(stamp(incomplete))
 			}
 			if !ok {
 				break
@@ -157,13 +176,13 @@ func runResponsesFold(
 			eventType, _ := frame.event["type"].(string)
 			switch eventType {
 			case "response.created", "response.in_progress":
-				if roundNo == 1 {
+				if !suppressLifecycle {
 					if eventType == "response.created" {
 						baseResponse = mapFromInterface(frame.event["response"])
 					}
 					if err := emit(stamp(frame.event)); err != nil {
 						_ = currentResp.Body.Close()
-						return responsesFoldResult{BilledUsage: summedUsage}, err
+						return responsesFoldResult{BilledUsage: summedUsage, EOFRetries: eofRetries}, err
 					}
 				}
 				continue
@@ -178,13 +197,14 @@ func runResponsesFold(
 			if eventType == "response.output_item.added" {
 				item := mapFromInterface(frame.event["item"])
 				if item["type"] == "reasoning" {
+					roundCanRetry = false
 					outputKind[outputIndexKey] = "reasoning"
 					outputIndexToDownstream[outputIndexKey] = dsOutputIndex
 					frame.event["output_index"] = dsOutputIndex
 					dsOutputIndex++
 					if err := emit(stamp(frame.event)); err != nil {
 						_ = currentResp.Body.Close()
-						return responsesFoldResult{BilledUsage: summedUsage}, err
+						return responsesFoldResult{BilledUsage: summedUsage, EOFRetries: eofRetries}, err
 					}
 				} else {
 					outputKind[outputIndexKey] = "buffered"
@@ -207,7 +227,7 @@ func runResponsesFold(
 				}
 				if err := emit(stamp(frame.event)); err != nil {
 					_ = currentResp.Body.Close()
-					return responsesFoldResult{BilledUsage: summedUsage}, err
+					return responsesFoldResult{BilledUsage: summedUsage, EOFRetries: eofRetries}, err
 				}
 			case "buffered":
 				entry := bufferedByIndex[outputIndexKey]
@@ -219,15 +239,27 @@ func runResponsesFold(
 					entry.item = mapFromInterface(frame.event["item"])
 				}
 			default:
+				roundCanRetry = false
 				if err := emit(stamp(frame.event)); err != nil {
 					_ = currentResp.Body.Close()
-					return responsesFoldResult{BilledUsage: summedUsage}, err
+					return responsesFoldResult{BilledUsage: summedUsage, EOFRetries: eofRetries}, err
 				}
 			}
 		}
 
 	roundDone:
 		_ = currentResp.Body.Close()
+		if terminal == nil && roundCanRetry && eofRetries < 1 {
+			nextResp, _, err := openRound(currentBody)
+			if err != nil {
+				incomplete := responsesFoldTerminalEvent(nil, baseResponse, finalOutput, responsesFoldAgentUsage(firstUsage, summedUsage, usage, false), roundsInfo, summedUsage, "upstream_error", "upstream_error")
+				return responsesFoldResult{AgentUsage: responseUsageMap(incomplete), BilledUsage: summedUsage, IncompleteReason: "upstream_error", EOFRetries: eofRetries}, emit(stamp(incomplete))
+			}
+			eofRetries++
+			retryingRound = true
+			currentResp = nextResp
+			goto roundStart
+		}
 		responsesFoldSumUsage(summedUsage, usage)
 		if roundNo == 1 {
 			firstUsage = usage
@@ -274,15 +306,16 @@ func runResponsesFold(
 			nextResp, _, err := openRound(nextBody)
 			if err != nil {
 				incomplete := responsesFoldTerminalEvent(nil, baseResponse, finalOutput, responsesFoldAgentUsage(firstUsage, summedUsage, usage, false), roundsInfo, summedUsage, "upstream_error", "upstream_error")
-				return responsesFoldResult{AgentUsage: responseUsageMap(incomplete), BilledUsage: summedUsage}, emit(stamp(incomplete))
+				return responsesFoldResult{AgentUsage: responseUsageMap(incomplete), BilledUsage: summedUsage, IncompleteReason: "upstream_error", EOFRetries: eofRetries}, emit(stamp(incomplete))
 			}
 			currentResp = nextResp
+			currentBody = nextBody
 			continue
 		}
 
 		if terminal == nil {
 			incomplete := responsesFoldTerminalEvent(nil, baseResponse, finalOutput, responsesFoldAgentUsage(firstUsage, summedUsage, usage, false), roundsInfo, summedUsage, "upstream_eof", "upstream_eof")
-			return responsesFoldResult{AgentUsage: responseUsageMap(incomplete), BilledUsage: summedUsage}, emit(stamp(incomplete))
+			return responsesFoldResult{AgentUsage: responseUsageMap(incomplete), BilledUsage: summedUsage, IncompleteReason: "upstream_eof", EOFRetries: eofRetries}, emit(stamp(incomplete))
 		}
 
 		for _, entry := range bufferedOrder {
@@ -291,7 +324,7 @@ func runResponsesFold(
 					event["output_index"] = dsOutputIndex
 				}
 				if err := emit(stamp(event)); err != nil {
-					return responsesFoldResult{BilledUsage: summedUsage}, err
+					return responsesFoldResult{BilledUsage: summedUsage, EOFRetries: eofRetries}, err
 				}
 			}
 			dsOutputIndex++
@@ -301,9 +334,9 @@ func runResponsesFold(
 		agentUsage := responsesFoldAgentUsage(firstUsage, summedUsage, usage, true)
 		terminalEvent := responsesFoldTerminalEvent(terminal, baseResponse, finalOutput, agentUsage, roundsInfo, summedUsage, stoppedReason, "")
 		if err := emit(stamp(terminalEvent)); err != nil {
-			return responsesFoldResult{AgentUsage: agentUsage, BilledUsage: summedUsage}, err
+			return responsesFoldResult{AgentUsage: agentUsage, BilledUsage: summedUsage, EOFRetries: eofRetries}, err
 		}
-		return responsesFoldResult{AgentUsage: agentUsage, BilledUsage: summedUsage}, nil
+		return responsesFoldResult{AgentUsage: agentUsage, BilledUsage: summedUsage, EOFRetries: eofRetries}, nil
 	}
 }
 

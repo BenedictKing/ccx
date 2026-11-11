@@ -33,11 +33,7 @@ func TruncateJSONIntelligently(data interface{}, maxTextLength int) interface{} 
 
 	switch v := data.(type) {
 	case string:
-		runes := []rune(v)
-		if len(runes) > maxTextLength {
-			return string(runes[:maxTextLength]) + "..."
-		}
-		return v
+		return TruncateStringForLog(v, maxTextLength)
 
 	case float64, int, int64, bool:
 		return v
@@ -59,6 +55,18 @@ func TruncateJSONIntelligently(data interface{}, maxTextLength int) interface{} 
 	default:
 		return v
 	}
+}
+
+// TruncateStringForLog 按字符数截断日志文本，避免切断 UTF-8 编码。
+func TruncateStringForLog(value string, maxLength int) string {
+	if maxLength <= 0 {
+		return value
+	}
+	runes := []rune(value)
+	if len(runes) <= maxLength {
+		return value
+	}
+	return string(runes[:maxLength]) + "..."
 }
 
 // SimplifyToolsArray 简化tools数组为名称列表,减少日志输出
@@ -127,7 +135,7 @@ func compactContentArray(contents []interface{}) []interface{} {
 					if text, ok := contentMap["text"].(string); ok {
 						// 文本内容截断到前200个字符
 						if len(text) > 200 {
-							compact["text"] = text[:200] + "..."
+							compact["text"] = TruncateStringForLog(text, 200)
 						} else {
 							compact["text"] = text
 						}
@@ -136,7 +144,7 @@ func compactContentArray(contents []interface{}) []interface{} {
 					// Responses API 的 input/output 类型
 					if text, ok := contentMap["text"].(string); ok {
 						if len(text) > 200 {
-							compact["text"] = text[:200] + "..."
+							compact["text"] = TruncateStringForLog(text, 200)
 						} else {
 							compact["text"] = text
 						}
@@ -160,7 +168,7 @@ func compactContentArray(contents []interface{}) []interface{} {
 					// content字段显示前200字符
 					if content, ok := contentMap["content"].(string); ok {
 						if len(content) > 200 {
-							compact["content"] = content[:200] + "..."
+							compact["content"] = TruncateStringForLog(content, 200)
 						} else {
 							compact["content"] = content
 						}
@@ -182,7 +190,7 @@ func compactContentArray(contents []interface{}) []interface{} {
 					}
 					if encryptedContent, ok := contentMap["encrypted_content"].(string); ok {
 						if len(encryptedContent) > 100 {
-							compact["encrypted_content"] = encryptedContent[:100] + "..."
+							compact["encrypted_content"] = TruncateStringForLog(encryptedContent, 100)
 						} else {
 							compact["encrypted_content"] = encryptedContent
 						}
@@ -202,7 +210,7 @@ func compactContentArray(contents []interface{}) []interface{} {
 					// arguments 字段截断显示
 					if args, ok := contentMap["arguments"].(string); ok {
 						if len(args) > 200 {
-							compact["arguments"] = args[:200] + "..."
+							compact["arguments"] = TruncateStringForLog(args, 200)
 						} else {
 							compact["arguments"] = args
 						}
@@ -215,7 +223,7 @@ func compactContentArray(contents []interface{}) []interface{} {
 					// output 字段截断显示
 					if output, ok := contentMap["output"].(string); ok {
 						if len(output) > 200 {
-							compact["output"] = output[:200] + "..."
+							compact["output"] = TruncateStringForLog(output, 200)
 						} else {
 							compact["output"] = output
 						}
@@ -272,7 +280,7 @@ func compactGeminiPart(partMap map[string]interface{}) map[string]interface{} {
 	// 处理text字段
 	if text, ok := partMap["text"].(string); ok {
 		if len(text) > 200 {
-			compact["text"] = text[:200] + "..."
+			compact["text"] = TruncateStringForLog(text, 200)
 		} else {
 			compact["text"] = text
 		}
@@ -340,7 +348,7 @@ func truncateInputValues(data interface{}, maxLength int) interface{} {
 	switch v := data.(type) {
 	case string:
 		if len(v) > maxLength {
-			return v[:maxLength] + "..."
+			return TruncateStringForLog(v, maxLength)
 		}
 		return v
 
@@ -501,7 +509,7 @@ func formatMapAsOneLine(m map[string]interface{}) string {
 					maxLen = 200
 				}
 				if len(strVal) > maxLen {
-					truncated := strVal[:maxLen] + "..."
+					truncated := TruncateStringForLog(strVal, maxLen)
 					valueJSON, _ := json.Marshal(truncated)
 					pairs = append(pairs, string(keyJSON)+": "+string(valueJSON))
 					continue
