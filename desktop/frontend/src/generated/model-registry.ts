@@ -82,12 +82,54 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
       "max"
     ]
   },
+  "(?:^|[-/])claude-opus-5-\\d{1,2}(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)": {
+    "provider": "anthropic",
+    "displayName": "Claude Opus 5",
+    "contextWindowTokens": 1000000,
+    "maxOutputTokens": 128000,
+    "thinkingMode": "adaptive_only",
+    "reasoningEfforts": [
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max"
+    ]
+  },
+  "(?:^|[-/])claude-opus-5(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)": {
+    "provider": "anthropic",
+    "displayName": "Claude Opus 5",
+    "contextWindowTokens": 1000000,
+    "maxOutputTokens": 128000,
+    "thinkingMode": "adaptive_only",
+    "reasoningEfforts": [
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max"
+    ]
+  },
   "(?:^|[-/])claude-sonnet-5(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)": {
     "provider": "anthropic",
     "displayName": "Claude Sonnet 5",
     "contextWindowTokens": 1000000,
     "maxOutputTokens": 128000,
     "thinkingMode": "adaptive_only",
+    "reasoningEfforts": [
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max"
+    ]
+  },
+  "(?:^|[-/])claude-fable-5-\\d{1,2}(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)": {
+    "provider": "anthropic",
+    "displayName": "Claude Fable 5",
+    "contextWindowTokens": 1000000,
+    "maxOutputTokens": 128000,
+    "thinkingMode": "adaptive_always_on",
     "reasoningEfforts": [
       "low",
       "medium",

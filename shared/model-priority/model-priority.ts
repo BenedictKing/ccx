@@ -3,6 +3,7 @@
 const modelPriorityPatterns: RegExp[] = [
   // Anthropic Claude
   /fable-5/i,
+  /opus-5/i,
   /opus-4-8/i,
   /opus-4-7/i,
   /sonnet-5/i,
