@@ -57,8 +57,8 @@ export function useChannelTargetModels(options: ChannelTargetModelsOptions) {
   })
 
   const sourceModelPresetOptions = computed(() => {
-    if (options.channelType() === 'chat') {
-      return ['codex', 'gpt', 'mini', 'gpt-5', 'gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini']
+    if (options.channelType() === 'chat' || options.channelType() === 'responses') {
+      return ['astra', 'sol', 'terra', 'luna', 'codex-auto-review']
     }
     if (options.channelType() === 'images') {
       return ['gpt-image-2', 'gpt-image-1', 'dall-e-3', 'dall-e-2']
@@ -68,9 +68,6 @@ export function useChannelTargetModels(options: ChannelTargetModelsOptions) {
     }
     if (options.channelType() === 'gemini') {
       return ['gemini-3.5-flash', 'gemini-3.1-pro-preview', 'gemini-3-pro-preview', 'gemini-3-flash-preview', 'gemini-3.1-flash-lite', 'gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2']
-    }
-    if (options.channelType() === 'responses') {
-      return ['codex', 'codex-auto-review', 'gpt-5', 'gpt', 'mini', 'gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini']
     }
     return ['fable', 'opus', 'sonnet', 'haiku']
   })

@@ -45,18 +45,13 @@ export function useEditChannelOptions(
   })
 
   const allSourceModelOptions = computed(() => {
-    if (channelType.value === 'chat') {
+    if (channelType.value === 'chat' || channelType.value === 'responses') {
       return [
-        { title: 'codex', value: 'codex' },
-        { title: 'gpt', value: 'gpt' },
-        { title: 'mini', value: 'mini' },
-        { title: 'gpt-5', value: 'gpt-5' },
-        { title: 'gpt-5.5', value: 'gpt-5.5' },
-        { title: 'gpt-5.4', value: 'gpt-5.4' },
-        { title: 'gpt-5.6-sol', value: 'gpt-5.6-sol' },
-        { title: 'gpt-5.6-terra', value: 'gpt-5.6-terra' },
-        { title: 'gpt-5.6-luna', value: 'gpt-5.6-luna' },
-        { title: 'gpt-5.4-mini', value: 'gpt-5.4-mini' },
+        { title: 'astra', value: 'astra' },
+        { title: 'sol', value: 'sol' },
+        { title: 'terra', value: 'terra' },
+        { title: 'luna', value: 'luna' },
+        { title: 'codex-auto-review', value: 'codex-auto-review' },
       ]
     }
     if (channelType.value === 'images') {
@@ -81,21 +76,6 @@ export function useEditChannelOptions(
         { title: 'gemini-2.5-flash', value: 'gemini-2.5-flash' },
         { title: 'gemini-2.5-flash-lite', value: 'gemini-2.5-flash-lite' },
         { title: 'gemini-2', value: 'gemini-2' },
-      ]
-    }
-    if (channelType.value === 'responses') {
-      return [
-        { title: 'codex', value: 'codex' },
-        { title: 'codex-auto-review', value: 'codex-auto-review' },
-        { title: 'gpt-5', value: 'gpt-5' },
-        { title: 'gpt', value: 'gpt' },
-        { title: 'mini', value: 'mini' },
-        { title: 'gpt-5.5', value: 'gpt-5.5' },
-        { title: 'gpt-5.4', value: 'gpt-5.4' },
-        { title: 'gpt-5.6-sol', value: 'gpt-5.6-sol' },
-        { title: 'gpt-5.6-terra', value: 'gpt-5.6-terra' },
-        { title: 'gpt-5.6-luna', value: 'gpt-5.6-luna' },
-        { title: 'gpt-5.4-mini', value: 'gpt-5.4-mini' },
       ]
     }
     return [
