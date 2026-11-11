@@ -142,13 +142,14 @@ Codex CLI/App 默认使用 GPT 模型名。配置映射让 CCX 自动重定向�
 
 | 请求模型 | 重定向到 |
 |----------|----------|
-| `gpt` | `deepseek-v4-pro` |
-| `mini` | `deepseek-v4-flash` |
+| `astra` | `deepseek-v4-pro` |
+| `sol` | `deepseek-v4-flash` |
+| `luna` | `deepseek-v4-flash` |
 
 ![Responses 渠道模型映射](/images/guide/model-mapping-deepseek.png)
 
 ::: tip 映射规则
-CCX 优先使用更长的匹配键。`gpt` 匹配 `gpt-5` 等常规模型，`mini` 匹配 `gpt-5-mini` 等轻量模型。不要把 pro 路由键写成 `gpt-5`，否则 `gpt-5-mini` 会先命中 `gpt-5`。
+CCX 优先使用更长的匹配键。内置预设使用 `astra`、`sol`、`terra`、`luna` 和 `codex-auto-review` 作为源模型别名；`sol` 也能匹配 `gpt-6.1-sol` 等真实模型名。需要区分具体型号时，为真实模型名配置更精确的映射即可。
 :::
 
 ### 客户端配置

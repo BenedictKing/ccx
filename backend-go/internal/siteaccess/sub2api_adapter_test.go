@@ -87,7 +87,7 @@ func TestSub2APIProvisionSyncAndImportContract(t *testing.T) {
 		t.Fatalf("重复创建 Key: %d", created)
 	}
 	ch := cm.GetConfig().ResponsesUpstream[0]
-	if ch.ServiceType != "responses" || ch.ModelMapping["gpt"] != "gpt-test" || *ch.APIKeyConfigs[0].GroupMultiplier != 0 {
+	if ch.ServiceType != "responses" || ch.ModelMapping["sol"] != "gpt-test" || *ch.APIKeyConfigs[0].GroupMultiplier != 0 {
 		t.Fatalf("默认 Agent 配置或零倍率丢失: %+v", ch)
 	}
 	ratio = 2

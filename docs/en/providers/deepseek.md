@@ -115,10 +115,11 @@ After Codex Responses requests are converted to Chat Completions, they may conta
 
 | Request Model | Redirects To |
 |---------------|--------------|
-| `gpt` | `deepseek-v4-pro` |
-| `mini` | `deepseek-v4-flash` |
+| `astra` | `deepseek-v4-pro` |
+| `sol` | `deepseek-v4-flash` |
+| `luna` | `deepseek-v4-flash` |
 
-CCX uses the longest matching key first. `gpt` matches `gpt-5`, while `mini` matches `gpt-5-mini`.
+CCX uses the longest matching key first. `astra` matches the flagship alias, while `sol` also matches names like `gpt-6.1-sol`.
 
 ### Client Configuration
 

@@ -59,9 +59,9 @@ GitHub Copilot 的可用模型取决于你的订阅与组织策略，请以诊�
 
 | 源别名 | 目标模型（示例） |
 |--------|------------------|
-| `codex` | `gpt-5-codex` |
-| `gpt` | `gpt-5` |
-| `mini` | `gpt-5-mini` |
+| `sol` | `gpt-5-codex` |
+| `astra` | `gpt-5` |
+| `luna` | `gpt-5-mini` |
 
 实际可用模型名以「诊断 Copilot」结果中的 `Models` 返回为准，不要照抄示例。
 

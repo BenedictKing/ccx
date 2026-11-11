@@ -36,7 +36,7 @@ func applyAgentDefaults(req *ProvisionRequest) error {
 	case "claude":
 		req.Protocol, alias = "messages", "claude"
 	case "codex":
-		req.Protocol, alias = "responses", "gpt"
+		req.Protocol, alias = "responses", "sol"
 	case "opencode":
 		if req.Protocol == "" {
 			req.Protocol = "chat"
@@ -72,7 +72,7 @@ func saveAgentRouting(cm *config.ConfigManager, req ProvisionRequest) error {
 		pattern = "claude"
 	}
 	if req.Agent == "codex" {
-		pattern = "gpt"
+		pattern = "sol"
 	}
 	models := req.Models[:1]
 	if req.AllowModelFallback {

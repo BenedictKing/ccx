@@ -820,14 +820,20 @@ func applyKimiPlanOverrides(config channelTargetConfig, target string, planID st
 		if isCodingPlan {
 			// Coding Plan: 使用 kimi-for-coding
 			config.ModelMapping = map[string]string{
-				"codex": "kimi-for-coding",
-				"gpt":   "kimi-for-coding",
+				"astra":             "kimi-for-coding",
+				"codex-auto-review": "kimi-for-coding",
+				"luna":              "kimi-for-coding",
+				"sol":               "kimi-for-coding",
+				"terra":             "kimi-for-coding",
 			}
 		} else {
 			// 普通按量: 使用 kimi-k2.7
 			config.ModelMapping = map[string]string{
-				"codex": "kimi-k2.7",
-				"gpt":   "kimi-k2.7",
+				"astra":             "kimi-k2.7",
+				"codex-auto-review": "kimi-k2.7",
+				"luna":              "kimi-k2.7",
+				"sol":               "kimi-k2.7",
+				"terra":             "kimi-k2.7",
 			}
 		}
 	}

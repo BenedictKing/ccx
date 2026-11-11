@@ -427,9 +427,11 @@ func buildDiscoveryMappingRecommendation(
 		add("haiku", selected.Fast)
 		add("fable", selected.Strong)
 	case "responses", "chat":
-		add("gpt", selected.Primary)
-		add("mini", selected.Fast)
-		add("codex", firstSuccessfulDiscoveryModel(successful, selected.Strong, selected.Primary))
+		add("astra", selected.Strong)
+		add("sol", selected.Primary)
+		add("terra", selected.Primary)
+		add("luna", selected.Fast)
+		add("codex-auto-review", firstSuccessfulDiscoveryModel(successful, selected.Strong, selected.Primary))
 	case "gemini":
 		add("gemini", selected.Primary)
 		add("pro", selected.Strong)
@@ -472,9 +474,11 @@ func discoveryReasoningMapping(channelKind string, modelMapping map[string]strin
 		add("sonnet", "max")
 		add("haiku", "high")
 	case "responses", "chat":
-		add("gpt", "max")
-		add("mini", "high")
-		add("codex", "high")
+		add("astra", "max")
+		add("sol", "max")
+		add("terra", "high")
+		add("luna", "high")
+		add("codex-auto-review", "high")
 		// gemini: reasoningMapping 暂不推荐，Gemini handler 目前不消费该字段，
 		// 写入配置只会产生无效噪声。待 Gemini thinking 路径完整支持后再启用。
 	}

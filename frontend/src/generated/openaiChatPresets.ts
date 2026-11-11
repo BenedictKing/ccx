@@ -183,14 +183,18 @@ export const openaiChatPresets: Record<string, OpenAIChatPreset> = {
   },
   "opencode-zen": {
     "modelMapping": {
-      "codex": "deepseek-v4-flash",
-      "gpt": "glm-5.2",
-      "mini": "deepseek-v4-flash"
+      "astra": "glm-5.2",
+      "codex-auto-review": "glm-5.2",
+      "luna": "deepseek-v4-flash",
+      "sol": "deepseek-v4-flash",
+      "terra": "deepseek-v4-flash"
     },
     "reasoningMapping": {
-      "codex": "high",
-      "gpt": "max",
-      "mini": "high"
+      "astra": "max",
+      "codex-auto-review": "max",
+      "luna": "high",
+      "sol": "high",
+      "terra": "high"
     },
     "reasoningParamStyle": "reasoning",
     "authHeader": "bearer",
@@ -209,14 +213,18 @@ export const openaiChatPresets: Record<string, OpenAIChatPreset> = {
   },
   "opencode-go": {
     "modelMapping": {
-      "codex": "deepseek-v4-flash",
-      "gpt": "glm-5.2",
-      "mini": "deepseek-v4-flash"
+      "astra": "glm-5.2",
+      "codex-auto-review": "glm-5.2",
+      "luna": "deepseek-v4-flash",
+      "sol": "deepseek-v4-flash",
+      "terra": "deepseek-v4-flash"
     },
     "reasoningMapping": {
-      "codex": "high",
-      "gpt": "max",
-      "mini": "high"
+      "astra": "max",
+      "codex-auto-review": "max",
+      "luna": "high",
+      "sol": "high",
+      "terra": "high"
     },
     "reasoningParamStyle": "reasoning",
     "authHeader": "bearer",
@@ -265,9 +273,11 @@ export const openaiChatPresets: Record<string, OpenAIChatPreset> = {
   },
   "xfyun": {
     "modelMapping": {
-      "codex": "astron-code-latest",
-      "gpt": "astron-code-latest",
-      "mini": "astron-code-latest"
+      "astra": "astron-code-latest",
+      "codex-auto-review": "astron-code-latest",
+      "luna": "astron-code-latest",
+      "sol": "astron-code-latest",
+      "terra": "astron-code-latest"
     },
     "reasoningMapping": {},
     "reasoningParamStyle": "",

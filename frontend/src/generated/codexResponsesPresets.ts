@@ -22,12 +22,15 @@ export interface CodexResponsesPreset {
 export const codexResponsesPresets: Record<string, CodexResponsesPreset> = {
   "deepseek": {
     "modelMapping": {
-      "codex": "deepseek-v4-flash",
-      "gpt": "deepseek-v4-pro",
-      "mini": "deepseek-v4-flash"
+      "astra": "deepseek-v4-pro",
+      "codex-auto-review": "deepseek-v4-pro",
+      "luna": "deepseek-v4-flash",
+      "sol": "deepseek-v4-flash",
+      "terra": "deepseek-v4-flash"
     },
     "reasoningMapping": {
-      "gpt": "max"
+      "astra": "max",
+      "codex-auto-review": "max"
     },
     "reasoningParamStyle": "reasoning",
     "codexNativeToolPassthrough": true,
@@ -41,15 +44,19 @@ export const codexResponsesPresets: Record<string, CodexResponsesPreset> = {
   },
   "mimo": {
     "modelMapping": {
-      "codex": "mimo-v2.5-pro",
-      "gpt": "mimo-v2.5-pro",
-      "mini": "mimo-v2.5-pro"
+      "astra": "mimo-v2.5-pro",
+      "codex-auto-review": "mimo-v2.5-pro",
+      "luna": "mimo-v2.5-pro",
+      "sol": "mimo-v2.5-pro",
+      "terra": "mimo-v2.5-pro"
     },
     "reasoningMapping": {
-      "codex": "high",
-      "gpt": "high",
+      "astra": "high",
+      "codex-auto-review": "high",
+      "luna": "high",
       "mimo-v2.5": "high",
-      "mini": "high"
+      "sol": "high",
+      "terra": "high"
     },
     "reasoningParamStyle": "reasoning",
     "codexNativeToolPassthrough": false,
@@ -67,14 +74,17 @@ export const codexResponsesPresets: Record<string, CodexResponsesPreset> = {
   },
   "compshare": {
     "modelMapping": {
-      "codex": "deepseek-v4-flash",
-      "gpt": "glm-5.2",
-      "mini": "deepseek-v4-flash"
+      "astra": "glm-5.2",
+      "codex-auto-review": "glm-5.2",
+      "luna": "deepseek-v4-flash",
+      "sol": "deepseek-v4-flash",
+      "terra": "deepseek-v4-flash"
     },
     "reasoningMapping": {
       "MiniMax-M2.7": "xhigh",
-      "gpt": "max",
-      "mini": "high"
+      "astra": "max",
+      "codex-auto-review": "max",
+      "luna": "high"
     },
     "reasoningParamStyle": "reasoning",
     "codexNativeToolPassthrough": true,
@@ -117,9 +127,11 @@ export const codexResponsesPresets: Record<string, CodexResponsesPreset> = {
   },
   "minimax": {
     "modelMapping": {
-      "codex": "MiniMax-M2.7",
-      "gpt": "MiniMax-M3",
-      "mini": "MiniMax-M2.7"
+      "astra": "MiniMax-M3",
+      "codex-auto-review": "MiniMax-M3",
+      "luna": "MiniMax-M2.7",
+      "sol": "MiniMax-M2.7",
+      "terra": "MiniMax-M2.7"
     },
     "reasoningMapping": {},
     "reasoningParamStyle": "",
@@ -134,12 +146,15 @@ export const codexResponsesPresets: Record<string, CodexResponsesPreset> = {
   },
   "dashscope": {
     "modelMapping": {
-      "codex": "deepseek-v4-flash",
-      "gpt": "deepseek-v4-pro",
-      "mini": "deepseek-v4-flash"
+      "astra": "deepseek-v4-pro",
+      "codex-auto-review": "deepseek-v4-pro",
+      "luna": "deepseek-v4-flash",
+      "sol": "deepseek-v4-flash",
+      "terra": "deepseek-v4-flash"
     },
     "reasoningMapping": {
-      "gpt": "max"
+      "astra": "max",
+      "codex-auto-review": "max"
     },
     "reasoningParamStyle": "",
     "codexNativeToolPassthrough": false,
@@ -153,14 +168,18 @@ export const codexResponsesPresets: Record<string, CodexResponsesPreset> = {
   },
   "opencode-zen": {
     "modelMapping": {
-      "codex": "deepseek-v4-flash",
-      "gpt": "glm-5.2",
-      "mini": "deepseek-v4-flash"
+      "astra": "glm-5.2",
+      "codex-auto-review": "glm-5.2",
+      "luna": "deepseek-v4-flash",
+      "sol": "deepseek-v4-flash",
+      "terra": "deepseek-v4-flash"
     },
     "reasoningMapping": {
-      "codex": "high",
-      "gpt": "max",
-      "mini": "high"
+      "astra": "max",
+      "codex-auto-review": "max",
+      "luna": "high",
+      "sol": "high",
+      "terra": "high"
     },
     "reasoningParamStyle": "reasoning",
     "codexNativeToolPassthrough": false,
@@ -177,14 +196,18 @@ export const codexResponsesPresets: Record<string, CodexResponsesPreset> = {
   },
   "opencode-go": {
     "modelMapping": {
-      "codex": "deepseek-v4-flash",
-      "gpt": "glm-5.2",
-      "mini": "deepseek-v4-flash"
+      "astra": "glm-5.2",
+      "codex-auto-review": "glm-5.2",
+      "luna": "deepseek-v4-flash",
+      "sol": "deepseek-v4-flash",
+      "terra": "deepseek-v4-flash"
     },
     "reasoningMapping": {
-      "codex": "high",
-      "gpt": "max",
-      "mini": "high"
+      "astra": "max",
+      "codex-auto-review": "max",
+      "luna": "high",
+      "sol": "high",
+      "terra": "high"
     },
     "reasoningParamStyle": "reasoning",
     "codexNativeToolPassthrough": false,
@@ -201,8 +224,11 @@ export const codexResponsesPresets: Record<string, CodexResponsesPreset> = {
   },
   "kimi": {
     "modelMapping": {
-      "codex": "kimi-k2.7",
-      "gpt": "kimi-k2.7"
+      "astra": "kimi-k2.7",
+      "codex-auto-review": "kimi-k2.7",
+      "luna": "kimi-k2.7",
+      "sol": "kimi-k2.7",
+      "terra": "kimi-k2.7"
     },
     "reasoningMapping": {},
     "reasoningParamStyle": "",
@@ -217,8 +243,11 @@ export const codexResponsesPresets: Record<string, CodexResponsesPreset> = {
   },
   "glm": {
     "modelMapping": {
-      "codex": "glm-5.2",
-      "gpt": "glm-5.2"
+      "astra": "glm-5.2",
+      "codex-auto-review": "glm-5.2",
+      "luna": "glm-5.2",
+      "sol": "glm-5.2",
+      "terra": "glm-5.2"
     },
     "reasoningMapping": {},
     "reasoningParamStyle": "",
@@ -233,9 +262,11 @@ export const codexResponsesPresets: Record<string, CodexResponsesPreset> = {
   },
   "sensenova": {
     "modelMapping": {
-      "codex": "deepseek-v4-flash",
-      "gpt": "glm-5.2",
-      "mini": "deepseek-v4-flash"
+      "astra": "glm-5.2",
+      "codex-auto-review": "glm-5.2",
+      "luna": "deepseek-v4-flash",
+      "sol": "deepseek-v4-flash",
+      "terra": "deepseek-v4-flash"
     },
     "reasoningMapping": {},
     "reasoningParamStyle": "",
@@ -266,9 +297,11 @@ export const codexResponsesPresets: Record<string, CodexResponsesPreset> = {
   },
   "modelscope": {
     "modelMapping": {
-      "codex": "deepseek-ai/DeepSeek-V4-Flash",
-      "gpt": "ZhipuAI/GLM-5.2",
-      "mini": "deepseek-ai/DeepSeek-V4-Flash"
+      "astra": "ZhipuAI/GLM-5.2",
+      "codex-auto-review": "ZhipuAI/GLM-5.2",
+      "luna": "deepseek-ai/DeepSeek-V4-Flash",
+      "sol": "deepseek-ai/DeepSeek-V4-Flash",
+      "terra": "deepseek-ai/DeepSeek-V4-Flash"
     },
     "reasoningMapping": {},
     "reasoningParamStyle": "",
@@ -283,15 +316,19 @@ export const codexResponsesPresets: Record<string, CodexResponsesPreset> = {
   },
   "volc-ark": {
     "modelMapping": {
-      "codex": "deepseek-v4-flash",
-      "gpt": "glm-5.2",
-      "mini": "deepseek-v4-flash"
+      "astra": "glm-5.2",
+      "codex-auto-review": "glm-5.2",
+      "luna": "deepseek-v4-flash",
+      "sol": "deepseek-v4-flash",
+      "terra": "deepseek-v4-flash"
     },
     "reasoningMapping": {
-      "codex": "high",
-      "gpt": "max",
-      "mini": "high",
-      "minimax-m3": "xhigh"
+      "astra": "max",
+      "codex-auto-review": "max",
+      "luna": "high",
+      "minimax-m3": "xhigh",
+      "sol": "high",
+      "terra": "high"
     },
     "reasoningParamStyle": "reasoning",
     "codexNativeToolPassthrough": true,
@@ -308,9 +345,11 @@ export const codexResponsesPresets: Record<string, CodexResponsesPreset> = {
   },
   "qianfan": {
     "modelMapping": {
-      "codex": "qianfan-code-latest",
-      "gpt": "qianfan-code-latest",
-      "mini": "qianfan-code-latest"
+      "astra": "qianfan-code-latest",
+      "codex-auto-review": "qianfan-code-latest",
+      "luna": "qianfan-code-latest",
+      "sol": "qianfan-code-latest",
+      "terra": "qianfan-code-latest"
     },
     "reasoningMapping": {},
     "reasoningParamStyle": "",
@@ -325,9 +364,11 @@ export const codexResponsesPresets: Record<string, CodexResponsesPreset> = {
   },
   "xfyun": {
     "modelMapping": {
-      "codex": "astron-code-latest",
-      "gpt": "astron-code-latest",
-      "mini": "astron-code-latest"
+      "astra": "astron-code-latest",
+      "codex-auto-review": "astron-code-latest",
+      "luna": "astron-code-latest",
+      "sol": "astron-code-latest",
+      "terra": "astron-code-latest"
     },
     "reasoningMapping": {},
     "reasoningParamStyle": "",

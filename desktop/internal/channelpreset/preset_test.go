@@ -65,9 +65,9 @@ func TestBuildPayload(t *testing.T) {
 			wantNativeTool: true,
 			wantNormalize:  true,
 			wantModelMap: map[string]string{
-				"codex": "deepseek-v4-flash",
-				"gpt":   "deepseek-v4-pro",
-				"mini":  "deepseek-v4-flash",
+				"sol":   "deepseek-v4-flash",
+				"astra": "deepseek-v4-pro",
+				"luna":  "deepseek-v4-flash",
 			},
 		},
 		{
@@ -129,15 +129,15 @@ func TestBuildPayload(t *testing.T) {
 			wantCodex:      true,
 			wantStripCodex: true,
 			wantModelMap: map[string]string{
-				"codex": "mimo-v2.5-pro",
-				"gpt":   "mimo-v2.5-pro",
-				"mini":  "mimo-v2.5-pro",
+				"sol":   "mimo-v2.5-pro",
+				"astra": "mimo-v2.5-pro",
+				"luna":  "mimo-v2.5-pro",
 			},
 			wantReasoning: map[string]string{
-				"codex":     "high",
-				"gpt":       "high",
+				"sol":       "high",
+				"astra":     "high",
 				"mimo-v2.5": "high",
-				"mini":      "high",
+				"luna":      "high",
 			},
 			wantReasoningStyle: "reasoning",
 			wantNoVisionModels: []string{"mimo-v2.5-pro"},
@@ -179,9 +179,9 @@ func TestBuildPayload(t *testing.T) {
 			wantNativeTool: true,
 			wantNormalize:  true,
 			wantModelMap: map[string]string{
-				"codex": "deepseek-v4-flash",
-				"gpt":   "glm-5.2",
-				"mini":  "deepseek-v4-flash",
+				"sol":   "deepseek-v4-flash",
+				"astra": "glm-5.2",
+				"luna":  "deepseek-v4-flash",
 			},
 			wantNoVisionModels: []string{"glm-5.2", "deepseek-v4-flash"},
 			wantFallback:       "MiniMax-M2.7",
@@ -234,7 +234,7 @@ func TestBuildPayload(t *testing.T) {
 			wantService:    "openai",
 			wantCodex:      true,
 			wantStripCodex: true,
-			wantModelMap:   map[string]string{"codex": "kimi-for-coding", "gpt": "kimi-for-coding"},
+			wantModelMap:   map[string]string{"sol": "kimi-for-coding", "astra": "kimi-for-coding"},
 		},
 		{
 			name:                "kimi coding plan messages",
@@ -279,7 +279,7 @@ func TestBuildPayload(t *testing.T) {
 			wantCodex:      false,
 			wantStripCodex: false,
 			wantNativeTool: true,
-			wantModelMap:   map[string]string{"codex": "MiniMax-M2.7", "gpt": "MiniMax-M3", "mini": "MiniMax-M2.7"},
+			wantModelMap:   map[string]string{"sol": "MiniMax-M2.7", "astra": "MiniMax-M3", "luna": "MiniMax-M2.7"},
 			wantNormalize:  true,
 		},
 		{
@@ -297,12 +297,12 @@ func TestBuildPayload(t *testing.T) {
 			wantCodex:      true,
 			wantStripCodex: true,
 			wantModelMap: map[string]string{
-				"codex": "deepseek-v4-flash",
-				"gpt":   "deepseek-v4-pro",
-				"mini":  "deepseek-v4-flash",
+				"sol":   "deepseek-v4-flash",
+				"astra": "deepseek-v4-pro",
+				"luna":  "deepseek-v4-flash",
 			},
 			wantReasoning: map[string]string{
-				"gpt": "max",
+				"astra": "max",
 			},
 		},
 		{
@@ -313,12 +313,12 @@ func TestBuildPayload(t *testing.T) {
 			wantCodex:      true,
 			wantStripCodex: true,
 			wantModelMap: map[string]string{
-				"codex": "deepseek-v4-flash",
-				"gpt":   "deepseek-v4-pro",
-				"mini":  "deepseek-v4-flash",
+				"sol":   "deepseek-v4-flash",
+				"astra": "deepseek-v4-pro",
+				"luna":  "deepseek-v4-flash",
 			},
 			wantReasoning: map[string]string{
-				"gpt": "max",
+				"astra": "max",
 			},
 		},
 		{
@@ -357,12 +357,12 @@ func TestBuildPayload(t *testing.T) {
 			wantCodex:      true,
 			wantStripCodex: true,
 			wantModelMap: map[string]string{
-				"codex": "deepseek-v4-flash",
-				"gpt":   "deepseek-v4-pro",
-				"mini":  "deepseek-v4-flash",
+				"sol":   "deepseek-v4-flash",
+				"astra": "deepseek-v4-pro",
+				"luna":  "deepseek-v4-flash",
 			},
 			wantReasoning: map[string]string{
-				"gpt": "max",
+				"astra": "max",
 			},
 		},
 		{
@@ -443,8 +443,8 @@ func TestBuildPayload(t *testing.T) {
 			wantBaseURL:   "https://opencode.ai/zen/v1",
 			wantService:   "openai",
 			wantNormalize: true,
-			wantModelMap:  map[string]string{"codex": "deepseek-v4-flash", "gpt": "glm-5.2", "mini": "deepseek-v4-flash"},
-			wantReasoning: map[string]string{"codex": "high", "gpt": "max", "mini": "high"},
+			wantModelMap:  map[string]string{"sol": "deepseek-v4-flash", "astra": "glm-5.2", "luna": "deepseek-v4-flash"},
+			wantReasoning: map[string]string{"sol": "high", "astra": "max", "luna": "high"},
 			wantNoVisionModels: []string{
 				"glm-5.2",
 				"deepseek-v4-flash",
@@ -459,8 +459,8 @@ func TestBuildPayload(t *testing.T) {
 			wantBaseURL:   "https://opencode.ai/zen/go/v1",
 			wantService:   "openai",
 			wantNormalize: true,
-			wantModelMap:  map[string]string{"codex": "deepseek-v4-flash", "gpt": "glm-5.2", "mini": "deepseek-v4-flash"},
-			wantReasoning: map[string]string{"codex": "high", "gpt": "max", "mini": "high"},
+			wantModelMap:  map[string]string{"sol": "deepseek-v4-flash", "astra": "glm-5.2", "luna": "deepseek-v4-flash"},
+			wantReasoning: map[string]string{"sol": "high", "astra": "max", "luna": "high"},
 			wantNoVisionModels: []string{
 				"glm-5.2",
 				"deepseek-v4-flash",
@@ -476,8 +476,8 @@ func TestBuildPayload(t *testing.T) {
 			wantService:    "openai",
 			wantCodex:      true,
 			wantStripCodex: true,
-			wantModelMap:   map[string]string{"codex": "deepseek-v4-flash", "gpt": "glm-5.2", "mini": "deepseek-v4-flash"},
-			wantReasoning:  map[string]string{"codex": "high", "gpt": "max", "mini": "high"},
+			wantModelMap:   map[string]string{"sol": "deepseek-v4-flash", "astra": "glm-5.2", "luna": "deepseek-v4-flash"},
+			wantReasoning:  map[string]string{"sol": "high", "astra": "max", "luna": "high"},
 			wantNoVisionModels: []string{
 				"glm-5.2",
 				"deepseek-v4-flash",
@@ -492,8 +492,8 @@ func TestBuildPayload(t *testing.T) {
 			wantService:    "openai",
 			wantCodex:      true,
 			wantStripCodex: true,
-			wantModelMap:   map[string]string{"codex": "deepseek-v4-flash", "gpt": "glm-5.2", "mini": "deepseek-v4-flash"},
-			wantReasoning:  map[string]string{"codex": "high", "gpt": "max", "mini": "high"},
+			wantModelMap:   map[string]string{"sol": "deepseek-v4-flash", "astra": "glm-5.2", "luna": "deepseek-v4-flash"},
+			wantReasoning:  map[string]string{"sol": "high", "astra": "max", "luna": "high"},
 			wantNoVisionModels: []string{
 				"glm-5.2",
 				"deepseek-v4-flash",
@@ -508,7 +508,7 @@ func TestBuildPayload(t *testing.T) {
 			wantService:    "openai",
 			wantCodex:      true,
 			wantStripCodex: true,
-			wantModelMap:   map[string]string{"codex": "kimi-k2.7", "gpt": "kimi-k2.7"},
+			wantModelMap:   map[string]string{"sol": "kimi-k2.7", "astra": "kimi-k2.7"},
 		},
 		{
 			name:           "glm responses auto-review redirect",
@@ -517,7 +517,7 @@ func TestBuildPayload(t *testing.T) {
 			wantService:    "openai",
 			wantCodex:      true,
 			wantStripCodex: true,
-			wantModelMap:   map[string]string{"codex": "glm-5.2", "gpt": "glm-5.2"},
+			wantModelMap:   map[string]string{"sol": "glm-5.2", "astra": "glm-5.2"},
 		},
 		{
 			name:                "sensenova messages",
@@ -552,9 +552,9 @@ func TestBuildPayload(t *testing.T) {
 			wantStripCodex: true,
 			wantNormalize:  true,
 			wantModelMap: map[string]string{
-				"codex": "deepseek-v4-flash",
-				"gpt":   "glm-5.2",
-				"mini":  "deepseek-v4-flash",
+				"sol":   "deepseek-v4-flash",
+				"astra": "glm-5.2",
+				"luna":  "deepseek-v4-flash",
 			},
 			wantNoVisionModels: []string{"glm-5.2", "deepseek-v4-flash"},
 			wantFallback:       "sensenova-6.7-flash-lite",
@@ -595,14 +595,14 @@ func TestBuildPayload(t *testing.T) {
 			wantBaseURL: "https://ark.cn-beijing.volces.com/api/coding/v3",
 			wantService: "openai",
 			wantModelMap: map[string]string{
-				"codex": "deepseek-v4-flash",
-				"gpt":   "glm-5.2",
-				"mini":  "deepseek-v4-flash",
+				"sol":   "deepseek-v4-flash",
+				"astra": "glm-5.2",
+				"luna":  "deepseek-v4-flash",
 			},
 			wantReasoning: map[string]string{
-				"codex":      "high",
-				"gpt":        "max",
-				"mini":       "high",
+				"sol":        "high",
+				"astra":      "max",
+				"luna":       "high",
 				"minimax-m3": "xhigh",
 			},
 			wantNormalize:      true,
@@ -636,9 +636,9 @@ func TestBuildPayload(t *testing.T) {
 			wantBaseURL: "https://qianfan.baidubce.com/v2/coding#",
 			wantService: "openai",
 			wantModelMap: map[string]string{
-				"codex": "qianfan-code-latest",
-				"gpt":   "qianfan-code-latest",
-				"mini":  "qianfan-code-latest",
+				"sol":   "qianfan-code-latest",
+				"astra": "qianfan-code-latest",
+				"luna":  "qianfan-code-latest",
 			},
 			wantNormalize:  true,
 			wantCodex:      true,
@@ -663,7 +663,7 @@ func TestBuildPayload(t *testing.T) {
 			wantBaseURL:   "https://maas-coding-api.cn-huabei-1.xf-yun.com/v2",
 			wantService:   "openai",
 			wantNormalize: true,
-			wantModelMap:  map[string]string{"codex": "astron-code-latest", "gpt": "astron-code-latest", "mini": "astron-code-latest"},
+			wantModelMap:  map[string]string{"sol": "astron-code-latest", "astra": "astron-code-latest", "luna": "astron-code-latest"},
 		},
 		{
 			name:           "xfyun responses",
@@ -673,7 +673,7 @@ func TestBuildPayload(t *testing.T) {
 			wantNormalize:  true,
 			wantCodex:      true,
 			wantStripCodex: true,
-			wantModelMap:   map[string]string{"codex": "astron-code-latest", "gpt": "astron-code-latest", "mini": "astron-code-latest"},
+			wantModelMap:   map[string]string{"sol": "astron-code-latest", "astra": "astron-code-latest", "luna": "astron-code-latest"},
 		},
 	}
 	for _, tt := range tests {
@@ -799,8 +799,8 @@ func TestResponsesTargetMustIncludeCodexMapping(t *testing.T) {
 		if len(config.ModelMapping) == 0 {
 			continue
 		}
-		if _, found := config.ModelMapping["codex"]; !found {
-			t.Fatalf("provider %q responses config missing codex mapping", provider)
+		if _, found := config.ModelMapping["sol"]; !found {
+			t.Fatalf("provider %q responses config missing sol mapping", provider)
 		}
 	}
 }

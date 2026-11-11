@@ -79,8 +79,9 @@ Example:
 
 | Request model match | Example upstream model |
 |---------------------|------------------------|
-| `gpt` | upstream primary model |
-| `mini` | upstream lightweight model |
+| `astra` | upstream flagship model |
+| `sol` | upstream primary model |
+| `luna` | upstream lightweight model |
 | `deepseek` | DeepSeek model |
 
 If you prefer OpenCode to request upstream model names directly, skip mapping and enter the actual model name in OpenCode.

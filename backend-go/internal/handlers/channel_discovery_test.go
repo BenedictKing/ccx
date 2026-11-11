@@ -67,16 +67,16 @@ func TestBuildDiscoveryMappingRecommendationUsesOnlySuccessfulModels(t *testing.
 	if rec.ChannelKind != "responses" {
 		t.Fatalf("channelKind=%q", rec.ChannelKind)
 	}
-	if rec.ModelMapping["gpt"] != "actual-main" || rec.ModelMapping["mini"] != "actual-mini" {
+	if rec.ModelMapping["sol"] != "actual-main" || rec.ModelMapping["luna"] != "actual-mini" {
 		t.Fatalf("unexpected mapping: %#v", rec.ModelMapping)
 	}
-	if rec.ModelMapping["codex"] == "actual-pro" {
-		t.Fatalf("codex should not map to failed actual-pro: %#v", rec.ModelMapping)
+	if rec.ModelMapping["codex-auto-review"] == "actual-pro" {
+		t.Fatalf("codex-auto-review should not map to failed actual-pro: %#v", rec.ModelMapping)
 	}
 	if _, ok := rec.ModelMapping["gpt-5"]; ok {
 		t.Fatalf("codex recommendation should keep stable source aliases only: %#v", rec.ModelMapping)
 	}
-	if rec.ReasoningMapping["gpt"] != "max" || rec.ReasoningMapping["mini"] != "high" || rec.ReasoningMapping["codex"] != "high" {
+	if rec.ReasoningMapping["sol"] != "max" || rec.ReasoningMapping["luna"] != "high" || rec.ReasoningMapping["codex-auto-review"] != "high" {
 		t.Fatalf("unexpected reasoning mapping: %#v", rec.ReasoningMapping)
 	}
 	if len(rec.SupportedModels) != 0 {
@@ -275,7 +275,7 @@ func TestChannelDiscoveryHandlerDiscoversTransientResponsesChannel(t *testing.T)
 	if resp.Recommendation.ChannelKind != "responses" {
 		t.Fatalf("recommended channelKind=%q", resp.Recommendation.ChannelKind)
 	}
-	if resp.Recommendation.ModelMapping["gpt"] != "actual-main" {
+	if resp.Recommendation.ModelMapping["sol"] != "actual-main" {
 		t.Fatalf("modelMapping=%#v", resp.Recommendation.ModelMapping)
 	}
 	var responsesOK bool

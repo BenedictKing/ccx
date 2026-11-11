@@ -77,11 +77,14 @@ Codex may request GPT-style model names. If your upstream uses different model n
 
 | Request model match | Example upstream model |
 |---------------------|------------------------|
-| `gpt` | upstream primary model |
-| `mini` | upstream lightweight model |
+| `astra` | upstream flagship model |
+| `sol` | upstream primary model |
+| `terra` | upstream mid-tier model |
+| `luna` | upstream lightweight model |
+| `codex-auto-review` | upstream flagship model (auto review) |
 
 ::: tip
-Do not only map `gpt-5` and forget `gpt-5-mini`. CCX prefers longer matching keys first; `gpt` and `mini` usually cover common Codex model names.
+Built-in channel presets use `astra`, `sol`, `terra`, `luna` and `codex-auto-review` as source model aliases; you can configure these aliases directly as model names in Codex. CCX prefers longer matching keys first, so you can also map exact model names like `gpt-6.1-sol` for more precise redirects.
 :::
 
 ## Troubleshooting

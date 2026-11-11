@@ -14,10 +14,10 @@ func generatedOpenAIChatTargetConfigs() map[string]channelTargetConfig {
 		"modelscope":   channelTargetConfig{NormalizeNonstandardChatRoles: true},
 		"minimax":      channelTargetConfig{},
 		"dashscope":    channelTargetConfig{},
-		"opencode-zen": channelTargetConfig{ModelMapping: map[string]string{"codex": "deepseek-v4-flash", "gpt": "glm-5.2", "mini": "deepseek-v4-flash"}, ReasoningMapping: map[string]string{"codex": "high", "gpt": "max", "mini": "high"}, ReasoningParamStyle: "reasoning", AuthHeader: "bearer", NoVisionModels: []string{"glm-5.2", "deepseek-v4-flash"}, VisionFallbackModel: "minimax-m3", NormalizeNonstandardChatRoles: true},
-		"opencode-go":  channelTargetConfig{ModelMapping: map[string]string{"codex": "deepseek-v4-flash", "gpt": "glm-5.2", "mini": "deepseek-v4-flash"}, ReasoningMapping: map[string]string{"codex": "high", "gpt": "max", "mini": "high"}, ReasoningParamStyle: "reasoning", AuthHeader: "bearer", NoVisionModels: []string{"glm-5.2", "deepseek-v4-flash"}, VisionFallbackModel: "minimax-m3", NormalizeNonstandardChatRoles: true},
+		"opencode-zen": channelTargetConfig{ModelMapping: map[string]string{"astra": "glm-5.2", "codex-auto-review": "glm-5.2", "luna": "deepseek-v4-flash", "sol": "deepseek-v4-flash", "terra": "deepseek-v4-flash"}, ReasoningMapping: map[string]string{"astra": "max", "codex-auto-review": "max", "luna": "high", "sol": "high", "terra": "high"}, ReasoningParamStyle: "reasoning", AuthHeader: "bearer", NoVisionModels: []string{"glm-5.2", "deepseek-v4-flash"}, VisionFallbackModel: "minimax-m3", NormalizeNonstandardChatRoles: true},
+		"opencode-go":  channelTargetConfig{ModelMapping: map[string]string{"astra": "glm-5.2", "codex-auto-review": "glm-5.2", "luna": "deepseek-v4-flash", "sol": "deepseek-v4-flash", "terra": "deepseek-v4-flash"}, ReasoningMapping: map[string]string{"astra": "max", "codex-auto-review": "max", "luna": "high", "sol": "high", "terra": "high"}, ReasoningParamStyle: "reasoning", AuthHeader: "bearer", NoVisionModels: []string{"glm-5.2", "deepseek-v4-flash"}, VisionFallbackModel: "minimax-m3", NormalizeNonstandardChatRoles: true},
 		"volc-ark":     channelTargetConfig{NormalizeNonstandardChatRoles: true},
 		"qianfan":      channelTargetConfig{NormalizeNonstandardChatRoles: true},
-		"xfyun":        channelTargetConfig{ModelMapping: map[string]string{"codex": "astron-code-latest", "gpt": "astron-code-latest", "mini": "astron-code-latest"}, NormalizeNonstandardChatRoles: true},
+		"xfyun":        channelTargetConfig{ModelMapping: map[string]string{"astra": "astron-code-latest", "codex-auto-review": "astron-code-latest", "luna": "astron-code-latest", "sol": "astron-code-latest", "terra": "astron-code-latest"}, NormalizeNonstandardChatRoles: true},
 	}
 }
