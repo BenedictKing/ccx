@@ -55,6 +55,8 @@ const modelPriorityPatterns: RegExp[] = [
   /grok-4/i,
 
   // 智谱 GLM
+  /glm-?5\.3-flash/i,
+  /glm-?5\.3/i,
   /glm-?5\.2/i,
   /glm-?5\.1/i,
   /glm-?5/i,
@@ -63,6 +65,7 @@ const modelPriorityPatterns: RegExp[] = [
   /glm-?4\.6/i,
 
   // 阿里 Qwen
+  /qwen-?3\.8-max/i,
   /qwen-?3\.7-max/i,
   /qwen-?3\.7-plus/i,
   /qwen-?3\.6-plus/i,
@@ -73,8 +76,10 @@ const modelPriorityPatterns: RegExp[] = [
   /qwen-?3/i,
 
   // DeepSeek
+  /deepseek-v4\.1-flash/i,
   /deepseek-v4-pro/i,
   /deepseek-v4-flash/i,
+  /deepseek-flash/i,
   /deepseek-v4/i,
   /deepseek-v3\.2/i,
   /deepseek-reasoner/i,
@@ -82,6 +87,8 @@ const modelPriorityPatterns: RegExp[] = [
   /deepseek-v3/i,
 
   // Moonshot Kimi / MiniMax
+  /kimi-?k3\.1/i,
+  /kimi-?k3/i,
   /kimi-?k2\.7/i,
   /kimi-?k2\.6/i,
   /kimi-?k2\.5/i,
@@ -89,6 +96,7 @@ const modelPriorityPatterns: RegExp[] = [
   /minimax-?m3/i,
   /minimax-?m2\.7/i,
   /minimax-?m2\.5/i,
+  /hy4/i,
   /mimo-v2\.5/i,
   /doubao-seed-2-0/i,
   /ernie-4\.5/i,

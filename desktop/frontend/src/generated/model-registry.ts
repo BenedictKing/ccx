@@ -337,6 +337,83 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
       "xhigh"
     ]
   },
+  "(?:^|[-/])glm-5\\.3(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?:\\[1m\\])?(?=$|@)": {
+    "provider": "zai",
+    "displayName": "GLM-5.3",
+    "description": "Text-only flagship. Same base model as GLM-5.2 with post-training gains. Thinking is always on with three effort levels: low, high, max. Append [1m] to the model name to enable the 1M context window.",
+    "contextWindowTokens": 1048576,
+    "maxOutputTokens": 131072,
+    "thinkingMode": "thinking",
+    "reasoningEfforts": [
+      "low",
+      "high",
+      "max"
+    ],
+    "capabilities": {
+      "toolCalls": true,
+      "jsonMode": true,
+      "contextCaching": true
+    },
+    "pricing": {
+      "unit": "per_1m_tokens_cny",
+      "currency": "CNY",
+      "inputCacheMissPrice": 8,
+      "outputPrice": 28
+    },
+    "sources": [
+      "https://docs.bigmodel.cn/cn/guide/models/text/glm-5.3"
+    ]
+  },
+  "(?:^|[-/])glm-5p3(?=$|@)": {
+    "provider": "zai",
+    "displayName": "GLM-5.3",
+    "description": "Text-only flagship. Same base model as GLM-5.2 with post-training gains. Thinking is always on with three effort levels: low, high, max. Append [1m] to the model name to enable the 1M context window.",
+    "contextWindowTokens": 1048576,
+    "maxOutputTokens": 131072,
+    "thinkingMode": "thinking",
+    "reasoningEfforts": [
+      "low",
+      "high",
+      "max"
+    ],
+    "capabilities": {
+      "toolCalls": true,
+      "jsonMode": true,
+      "contextCaching": true
+    },
+    "pricing": {
+      "unit": "per_1m_tokens_cny",
+      "currency": "CNY",
+      "inputCacheMissPrice": 8,
+      "outputPrice": 28
+    },
+    "sources": [
+      "https://docs.bigmodel.cn/cn/guide/models/text/glm-5.3"
+    ]
+  },
+  "(?:^|[-/])glm-5\\.3-flash(?:x)?(?:-legal)?(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?:\\[1m\\])?(?=$|@)": {
+    "provider": "zai",
+    "displayName": "GLM-5.3 Flash",
+    "description": "Multimodal MoE variant (320B total / 18B active) with vision input. Model codes: glm-5.3-flash / glm-5.3-flashx / glm-5.3-flashx-legal. Append [1m] to enable the 1M context window.",
+    "contextWindowTokens": 1048576,
+    "maxOutputTokens": 131072,
+    "thinkingMode": "thinking",
+    "reasoningEfforts": [
+      "low",
+      "high",
+      "max"
+    ],
+    "capabilities": {
+      "vision": true,
+      "toolCalls": true,
+      "jsonMode": true,
+      "contextCaching": true
+    },
+    "sources": [
+      "https://docs.z.ai/guides/vlm/glm-5.3-flash",
+      "https://docs.bigmodel.cn/cn/update/new-releases"
+    ]
+  },
   "(?:^|[-/])glm-5\\.2(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)": {
     "provider": "zai",
     "displayName": "GLM-5.2",
@@ -498,6 +575,39 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
       "https://platform.stepfun.ai/docs/en/api-reference/chat/chat-completion-create"
     ]
   },
+  "(?:^|[-/])qwen3\\.8-max(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{4,8})?(?=$|@)": {
+    "provider": "dashscope",
+    "displayName": "Qwen3.8 Max",
+    "description": "Qwen3.8 Max multimodal flagship (2.4T total / 95B active). 1M context with max input 991,808 tokens, 131,072 max output tokens and 262,144 max reasoning tokens. Snapshot qwen3.8-max-0902 is available.",
+    "contextWindowTokens": 991808,
+    "maxOutputTokens": 131072,
+    "thinkingMode": "thinking",
+    "reasoningEfforts": [
+      "none",
+      "low",
+      "medium",
+      "xhigh"
+    ],
+    "capabilities": {
+      "vision": true,
+      "videoInput": true,
+      "toolCalls": true,
+      "jsonOutput": true,
+      "webSearch": true,
+      "contextCaching": true
+    },
+    "pricing": {
+      "unit": "per_1m_tokens_cny",
+      "currency": "CNY",
+      "inputCacheHitPrice": 1.5,
+      "inputCacheMissPrice": 12,
+      "outputPrice": 36
+    },
+    "sources": [
+      "https://developer.aliyun.com/article/1754244",
+      "https://www.deeplearning.ai/the-batch/qwen3-8-max-lands-with-a-bang"
+    ]
+  },
   "(?:^|[-/])qwen3\\.7-max(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)": {
     "provider": "dashscope",
     "displayName": "Qwen3.7 Max",
@@ -619,6 +729,52 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
     ],
     "sources": [
       "https://www.alibabacloud.com/help/en/model-studio/models"
+    ]
+  },
+  "(?:^|[-/])deepseek-v4\\.1-flash(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{4,8})?(?=$|@)": {
+    "provider": "deepseek",
+    "displayName": "DeepSeek V4.1 Flash",
+    "description": "New asymmetric architecture with native visual understanding. deepseek-flash is the current API model name, served by DeepSeek-V4.1-Flash-1017; legacy deepseek-v4-flash and deepseek-v4-flash-vision-exp route to the same model.",
+    "contextWindowTokens": 1000000,
+    "maxOutputTokens": 384000,
+    "thinkingMode": "thinking",
+    "reasoningEfforts": [
+      "high",
+      "max"
+    ],
+    "capabilities": {
+      "vision": true,
+      "jsonOutput": true,
+      "toolCalls": true,
+      "contextCaching": true,
+      "webSearch": true
+    },
+    "sources": [
+      "https://api-docs.deepseek.com/news/news260910",
+      "https://api-docs.deepseek.com"
+    ]
+  },
+  "(?:^|[-/])deepseek-flash(?=$|@)": {
+    "provider": "deepseek",
+    "displayName": "DeepSeek V4.1 Flash",
+    "description": "New asymmetric architecture with native visual understanding. deepseek-flash is the current API model name, served by DeepSeek-V4.1-Flash-1017; legacy deepseek-v4-flash and deepseek-v4-flash-vision-exp route to the same model.",
+    "contextWindowTokens": 1000000,
+    "maxOutputTokens": 384000,
+    "thinkingMode": "thinking",
+    "reasoningEfforts": [
+      "high",
+      "max"
+    ],
+    "capabilities": {
+      "vision": true,
+      "jsonOutput": true,
+      "toolCalls": true,
+      "contextCaching": true,
+      "webSearch": true
+    },
+    "sources": [
+      "https://api-docs.deepseek.com/news/news260910",
+      "https://api-docs.deepseek.com"
     ]
   },
   "(?:^|[-/])deepseek-v4-flash(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)": {
@@ -760,6 +916,68 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
     },
     "sources": [
       "https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json"
+    ]
+  },
+  "(?:^|[-/])kimi-k3\\.1-pro(?:-highspeed)?(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)": {
+    "provider": "moonshot",
+    "displayName": "Kimi K3.1 Pro",
+    "description": "Moonshot flagship open-weight multimodal reasoning model (3T-class), post-trained successor to Kimi K3. Highspeed variant doubles pricing with 2-3x faster output.",
+    "contextWindowTokens": 1048576,
+    "maxOutputTokens": 262144,
+    "thinkingMode": "thinking",
+    "reasoningEfforts": [
+      "low",
+      "medium",
+      "high",
+      "max"
+    ],
+    "capabilities": {
+      "vision": true,
+      "videoInput": true,
+      "toolCalls": true,
+      "jsonMode": true,
+      "contextCaching": true
+    },
+    "pricing": {
+      "unit": "per_1m_tokens_usd",
+      "currency": "USD",
+      "inputCacheMissPrice": 2,
+      "outputPrice": 10
+    },
+    "sources": [
+      "https://www.requesty.ai/blog/kimi-k3-1-pro-pricing-api",
+      "https://m.economictimes.com/tech/artificial-intelligence/chinas-moonshot-ai-launches-kimi-k3-1-pro-plans-full-model-weights-release-by-nov/articleshow/135162538.cms"
+    ]
+  },
+  "(?:^|[-/])kimi-k3(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)": {
+    "provider": "moonshot",
+    "displayName": "Kimi K3",
+    "description": "Kimi K3 (released 2026-07-16), 2.8T MoE with native vision and 1M context. OpenRouter model id moonshotai/kimi-k3.",
+    "contextWindowTokens": 1048576,
+    "maxOutputTokens": 262144,
+    "thinkingMode": "thinking",
+    "reasoningEfforts": [
+      "low",
+      "medium",
+      "high",
+      "max"
+    ],
+    "capabilities": {
+      "vision": true,
+      "toolCalls": true,
+      "jsonMode": true,
+      "contextCaching": true
+    },
+    "pricing": {
+      "unit": "per_1m_tokens_usd",
+      "currency": "USD",
+      "inputCacheHitPrice": 0.3,
+      "inputCacheMissPrice": 3,
+      "outputPrice": 15
+    },
+    "sources": [
+      "https://openrouter.ai/moonshotai/kimi-k3",
+      "https://trilogyai.substack.com/p/kimi-k3-is-live-pricing-benchmarks"
     ]
   },
   "(?:^|[-/])kimi-k2\\.7(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)": {
@@ -1027,6 +1245,53 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
     },
     "sources": [
       "https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json"
+    ]
+  },
+  "(?:^|[-/])hy4(?=$|@)": {
+    "provider": "tencent",
+    "displayName": "Tencent Hy4",
+    "description": "Tencent Hunyuan Hy4 official release (2026-11-04), 770B total / 49B active MoE with visual understanding. OpenRouter model id tencent/hy4.",
+    "contextWindowTokens": 1048576,
+    "maxOutputTokens": 65536,
+    "thinkingMode": "thinking",
+    "capabilities": {
+      "vision": true,
+      "toolCalls": true,
+      "jsonMode": true
+    },
+    "pricing": {
+      "unit": "per_1m_tokens_usd",
+      "currency": "USD",
+      "inputCacheHitPrice": 0.042,
+      "inputCacheMissPrice": 0.834,
+      "outputPrice": 2.502
+    },
+    "sources": [
+      "https://openrouter.ai/tencent/hy4",
+      "https://hunyuan.tencent.com/research/hy4"
+    ]
+  },
+  "(?:^|[-/])hy4-preview(?=$|@)": {
+    "provider": "tencent",
+    "displayName": "Tencent Hy4 Preview",
+    "description": "Tencent Hunyuan Hy4 preview (2026-08-28), text-only. OpenRouter model id tencent/hy4-preview.",
+    "contextWindowTokens": 1048576,
+    "maxOutputTokens": 64000,
+    "thinkingMode": "thinking",
+    "capabilities": {
+      "toolCalls": true,
+      "jsonMode": true
+    },
+    "pricing": {
+      "unit": "per_1m_tokens_usd",
+      "currency": "USD",
+      "inputCacheHitPrice": 0.042,
+      "inputCacheMissPrice": 0.834,
+      "outputPrice": 2.5
+    },
+    "sources": [
+      "https://openrouter.ai/tencent/hy4-preview",
+      "https://github.com/Tencent-Hunyuan/Hy4-preview/blob/main/README_CN.md"
     ]
   },
   "(?:^|[-/])mimo-v2\\.5(?=$|@)": {
