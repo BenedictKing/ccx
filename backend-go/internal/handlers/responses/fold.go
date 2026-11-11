@@ -145,9 +145,12 @@ func runResponsesFold(
 	currentBody := baseBody
 	eofRetries := 0
 	retryingRound := false
+	lifecycleEmitted := false
 	for roundNo := 1; ; roundNo++ {
 	roundStart:
-		suppressLifecycle := roundNo > 1 || retryingRound
+		// 重试轮仅在下游尚未收到任何生命周期事件时放行，避免丢失 response.created，
+		// 也避免混入另一个上游响应的生命周期事件。
+		suppressLifecycle := roundNo > 1 || (retryingRound && lifecycleEmitted)
 		retryingRound = false
 		roundCanRetry := true
 		iterator := newResponsesSSEIterator(currentResp.Body)
@@ -180,6 +183,7 @@ func runResponsesFold(
 					if eventType == "response.created" {
 						baseResponse = mapFromInterface(frame.event["response"])
 					}
+					lifecycleEmitted = true
 					if err := emit(stamp(frame.event)); err != nil {
 						_ = currentResp.Body.Close()
 						return responsesFoldResult{BilledUsage: summedUsage, EOFRetries: eofRetries}, err

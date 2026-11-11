@@ -173,3 +173,63 @@ func responsesFoldReasoningThenEOF() string {
 		"type": "response.output_item.done", "output_index": 0, "item": item,
 	})
 }
+
+func TestRunResponsesFoldEOFRetryLifecycle(t *testing.T) {
+	createdOnly := formatResponsesFoldSSE(map[string]interface{}{
+		"type":     "response.created",
+		"response": map[string]interface{}{"id": "resp_1", "status": "in_progress"},
+	})
+	tests := []struct {
+		name           string
+		first          string
+		wantInProgress int
+	}{
+		{name: "首次响应完全为空时补发生命周期", first: "", wantInProgress: 1},
+		{name: "首次响应已发出生命周期时不重复", first: responsesFoldLifecycleOnly(), wantInProgress: 1},
+		// 首次只给出 created：重试轮的生命周期事件属于另一个上游响应，整体抑制以保持 response.id 一致。
+		{name: "首次响应仅有 created 时不混入重试轮事件", first: createdOnly, wantInProgress: 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var emitted []string
+			result, err := runResponsesFold(
+				map[string]interface{}{"model": "gpt-5.5", "stream": true, "input": "hello"},
+				responsesFoldTestResp(tt.first),
+				func(body map[string]interface{}) (*http.Response, []byte, error) {
+					return responsesFoldTestResp(responsesFoldReasoningRound("rs_retry", 20, "OK", true)), nil, nil
+				},
+				func(event map[string]interface{}) error {
+					emitted = append(emitted, stringFromInterface(event["type"]))
+					return nil
+				},
+			)
+			if err != nil {
+				t.Fatalf("runResponsesFold() err = %v", err)
+			}
+			if result.EOFRetries != 1 || result.IncompleteReason != "" {
+				t.Fatalf("result = %#v, want one successful EOF retry", result)
+			}
+			created, inProgress := 0, 0
+			for _, eventType := range emitted {
+				switch eventType {
+				case "response.created":
+					created++
+				case "response.in_progress":
+					inProgress++
+				}
+			}
+			if len(emitted) == 0 || emitted[0] != "response.created" {
+				t.Fatalf("first emitted event = %v, want response.created", emitted)
+			}
+			if created != 1 {
+				t.Fatalf("response.created count = %d, want 1 (emitted: %v)", created, emitted)
+			}
+			if inProgress != tt.wantInProgress {
+				t.Fatalf("response.in_progress count = %d, want %d (emitted: %v)", inProgress, tt.wantInProgress, emitted)
+			}
+			if emitted[len(emitted)-1] != "response.completed" {
+				t.Fatalf("last emitted event = %s, want response.completed", emitted[len(emitted)-1])
+			}
+		})
+	}
+}
