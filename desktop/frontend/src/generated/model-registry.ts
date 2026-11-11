@@ -217,6 +217,18 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
       "max"
     ]
   },
+  "(?:^|[-/])gpt-6(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)": {
+    "provider": "openai",
+    "displayName": "gpt-6",
+    "contextWindowTokens": 1000000,
+    "maxOutputTokens": 128000,
+    "reasoningEfforts": [
+      "low",
+      "medium",
+      "high",
+      "xhigh"
+    ]
+  },
   "(?:^|[-/])gpt-5\\.2(?=$|@)": {
     "provider": "openai",
     "displayName": "Codex 272K models",

@@ -142,6 +142,17 @@ func (c ContextRoutingConfig) EffectiveUnknownSafeWindowTokens() int {
 // BuiltinAgentModelProfiles 返回 CCX 内置的下游 agent 模型知识库。
 func BuiltinAgentModelProfiles() map[string]AgentModelProfile {
 	return map[string]AgentModelProfile{
+		"gpt-6*": {
+			DisplayName:            "gpt-6",
+			ContextWindowTokens:    272000,
+			MaxContextWindowTokens: 1000000,
+			EffectiveContextRatio:  0.95,
+			AutoCompactRatio:       0.90,
+			TruncationMode:         "tokens",
+			TruncationLimit:        10000,
+			ReasoningEfforts:       []string{"low", "medium", "high", "xhigh"},
+			SupportsPriorityTier:   true,
+		},
 		"gpt-5.2": {
 			DisplayName:            "GPT-5.5 / gpt-5.2",
 			ContextWindowTokens:    272000,
