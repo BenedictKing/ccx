@@ -466,10 +466,7 @@ func injectResponsesUsageToCompletedEventWithLogTag(event string, requestBody []
 	if !injected {
 		if envCfg.EnableResponseLogs && envCfg.ShouldLog("debug") {
 			// 打印 event 的前500个字符帮助调试
-			eventPreview := event
-			if len(eventPreview) > 500 {
-				eventPreview = eventPreview[:500] + "..."
-			}
+			eventPreview := utils.TruncateStringForLog(event, 500)
 			common.LogWithTag(logTag, "[Responses-Stream-Token] 警告: 未找到 response.completed 事件进行注入, event内容: %s", eventPreview)
 		}
 		return event, inputTokens, outputTokens

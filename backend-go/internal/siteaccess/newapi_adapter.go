@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/BenedictKing/ccx/internal/httpclient"
+	"github.com/BenedictKing/ccx/internal/utils"
 	"io"
 	"math/big"
 	"net/http"
@@ -208,11 +209,7 @@ func (a *NewApiAdapter) doRequest(ctx context.Context, method, baseURL, path, ac
 // truncateForError 截断响应体用于错误信息展示，避免日志/错误里出现超长内容。
 func truncateForError(body []byte) string {
 	const maxLen = 512
-	s := strings.TrimSpace(string(body))
-	if len(s) > maxLen {
-		return s[:maxLen] + "..."
-	}
-	return s
+	return utils.TruncateStringForLog(strings.TrimSpace(string(body)), maxLen)
 }
 
 // summarizeErrorBody 生成 HTTP 错误响应体的可读摘要。
@@ -239,11 +236,7 @@ func htmlTitleOf(s string) string {
 		return ""
 	}
 	const maxTitleLen = 120
-	title := strings.TrimSpace(m[1])
-	if len(title) > maxTitleLen {
-		return title[:maxTitleLen] + "..."
-	}
-	return title
+	return utils.TruncateStringForLog(strings.TrimSpace(m[1]), maxTitleLen)
 }
 
 // Verify 校验令牌有效性并查询用户信息/余额。对应 GET /api/user/self。

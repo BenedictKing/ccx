@@ -149,11 +149,7 @@ func mergeBalanceFailure(a, b BalanceProbeResult) BalanceProbeResult {
 }
 
 func truncateBalanceErr(err error) error {
-	msg := err.Error()
-	if len(msg) > 120 {
-		msg = msg[:120] + "..."
-	}
-	return fmt.Errorf("%s", msg)
+	return fmt.Errorf("%s", utils.TruncateStringForLog(err.Error(), 120))
 }
 
 func probeBalanceWith(req BalanceProbeRequest, provider string) BalanceProbeResult {
