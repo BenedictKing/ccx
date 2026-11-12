@@ -443,6 +443,23 @@ func TestShouldRetryWithNextKey_FuzzyMode_InvalidRequestShouldNotFailover(t *tes
 	}
 }
 
+func TestShouldRetryWithNextKey_RequestValidationDoesNotFailover(t *testing.T) {
+	bodies := map[string][]byte{
+		"generic upstream wrapper":  []byte(`{"error":{"message":"The request contains invalid fields, tool settings, or input data. Correct the request to match the model and endpoint requirements before retrying.","type":"upstream_error","param":"","code":"upstream_error"}}`),
+		"localized invalid item id": []byte(`{"ok":false,"service":"gateway","errorCode":"invalid_request_error","message":"请求未被接受：参数 input[16].id 的取值或格式不符合该模型的要求，请修改后重试。","error":{"message":"请求未被接受：参数 input[16].id 的取值或格式不符合该模型的要求，请修改后重试。","type":"invalid_request_error","param":"input[16].id","code":"invalid_request_error"}}`),
+	}
+	for name, body := range bodies {
+		for _, fuzzyMode := range []bool{false, true} {
+			t.Run(name, func(t *testing.T) {
+				gotFailover, gotQuota := ShouldRetryWithNextKey(400, body, fuzzyMode, "Responses")
+				if gotFailover || gotQuota {
+					t.Fatalf("fuzzy=%v: failover=%v quota=%v, want false false", fuzzyMode, gotFailover, gotQuota)
+				}
+			})
+		}
+	}
+}
+
 func TestShouldRetryWithNextKey_UpstreamJSONParseErrorShouldFailover(t *testing.T) {
 	tests := []struct {
 		name string

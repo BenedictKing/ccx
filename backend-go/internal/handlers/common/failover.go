@@ -277,6 +277,12 @@ func classifyByErrorMessageWithLogTag(bodyBytes []byte, apiType string, logTag s
 		return true, quota
 	}
 
+	// schema 错误优先于 upstream_error 等泛化包装码，避免请求侧 400 被误判为渠道故障。
+	if isSchemaValidationError(errObj) {
+		LogWithTag(logTag, "[%s-Failover-Debug] 检测到 schema/invalid_request 错误，不进行 failover", apiType)
+		return false, false
+	}
+
 	// 检查 error.code 字段，参数校验类错误码不应重试
 	if errCode, ok := errObj["code"].(string); ok {
 		if isNonRetryableErrorCode(errCode) {
@@ -297,11 +303,6 @@ func classifyByErrorMessageWithLogTag(bodyBytes []byte, apiType string, logTag s
 	if failover, quota := classifyDetailsFromMap(errObj); failover {
 		LogWithTag(logTag, "[%s-Failover-Debug] 提取到 error.details 错误码", apiType)
 		return true, quota
-	}
-
-	if isSchemaValidationError(errObj) {
-		LogWithTag(logTag, "[%s-Failover-Debug] 检测到 schema/invalid_request 错误，不进行 failover", apiType)
-		return false, false
 	}
 
 	// 如果 upstream_error 是嵌套对象，尝试提取其中的消息
@@ -519,7 +520,7 @@ func classifyMessage(msg string) (bool, bool) {
 
 	// 认证/授权相关关键词 (failover + 非 quota)
 	authKeywords := []string{
-		"invalid", "unauthorized", "authentication",
+		"unauthorized", "authentication",
 		"api key", "apikey", "token", "expired",
 		"permission", "forbidden", "denied",
 		"密钥无效", "认证失败", "权限不足",
@@ -848,6 +849,9 @@ func isSchemaValidationMessage(msgLower string) bool {
 		"validation failed",
 		"invalid_request",
 		"invalid request",
+		"invalid fields",
+		"tool settings, or input data",
+		"取值或格式不符合",
 		"unsupported content type",
 		// 结构字段校验（Anthropic 常见）
 		"field required",

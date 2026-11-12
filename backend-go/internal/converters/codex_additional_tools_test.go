@@ -53,3 +53,24 @@ func TestAdditionalToolsExtendExistingNamespace(t *testing.T) {
 		t.Fatalf("namespace extension lost: %#v", request)
 	}
 }
+
+func TestHoistCodexAdditionalToolsRewritesFunctionItemIDPrefixes(t *testing.T) {
+	var request map[string]interface{}
+	_ = json.Unmarshal([]byte(`{"input":[{"type":"additional_tools","tools":[{"type":"namespace","name":"functions","tools":[{"type":"custom","name":"exec"}]}]},{"type":"custom_tool_call","id":"ctc_call_suffix","call_id":"call_1","name":"exec","input":"print(1)"},{"type":"custom_tool_call_output","id":"ctco_output_suffix","call_id":"call_1","output":"1"}]}`), &request)
+	_, _, ok := HoistCodexAdditionalTools(request)
+	if !ok {
+		t.Fatal("expected additional tools to be hoisted")
+	}
+	items := request["input"].([]interface{})
+	call := items[0].(map[string]interface{})
+	output := items[1].(map[string]interface{})
+	if call["type"] != "function_call" || call["id"] != "fc_call_suffix" {
+		t.Errorf("function call identity = type %v, id %v", call["type"], call["id"])
+	}
+	if output["type"] != "function_call_output" || output["id"] != "fco_output_suffix" {
+		t.Errorf("function output identity = type %v, id %v", output["type"], output["id"])
+	}
+	if call["call_id"] != "call_1" || output["call_id"] != "call_1" {
+		t.Error("call_id must remain unchanged")
+	}
+}

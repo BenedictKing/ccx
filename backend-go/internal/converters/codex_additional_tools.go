@@ -1,5 +1,7 @@
 package converters
 
+import "strings"
+
 // HoistCodexAdditionalTools 将 input 中的增量工具提升到顶层，并归一化调用历史。
 // 返回原始工具定义供响应还原；无增量声明时保持请求不变。
 func HoistCodexAdditionalTools(reqMap map[string]interface{}) ([]interface{}, CodexToolContext, bool) {
@@ -65,12 +67,14 @@ func HoistCodexAdditionalTools(reqMap map[string]interface{}) ([]interface{}, Co
 		case "custom_tool_call":
 			upstreamName, argsJSON := BuildCustomToolCallHistoryArguments(ctx, stringFromInterface(item["name"]), stringFromInterface(item["input"]))
 			item["type"] = "function_call"
+			rewriteResponsesItemIDPrefix(item, "ctc_", "fc_")
 			item["name"] = upstreamName
 			delete(item, "input")
 			item["arguments"] = argsJSON
 			kept[i] = item
 		case "custom_tool_call_output":
 			item["type"] = "function_call_output"
+			rewriteResponsesItemIDPrefix(item, "ctco_", "fco_")
 			kept[i] = item
 		case "function_call":
 			namespace := stringFromInterface(item["namespace"])
@@ -90,6 +94,13 @@ func HoistCodexAdditionalTools(reqMap map[string]interface{}) ([]interface{}, Co
 	reqMap["tool_choice"] = ConvertToolChoiceForCodex(reqMap["tool_choice"], ctx)
 
 	return harvested, ctx, true
+}
+
+func rewriteResponsesItemIDPrefix(item map[string]interface{}, oldPrefix, newPrefix string) {
+	id, ok := item["id"].(string)
+	if ok && strings.HasPrefix(id, oldPrefix) {
+		item["id"] = newPrefix + strings.TrimPrefix(id, oldPrefix)
+	}
 }
 
 // 增量声明可向已有 namespace 添加子工具，不能按 namespace 名丢弃整组。
