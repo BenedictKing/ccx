@@ -238,7 +238,7 @@
             <v-combobox
               v-model="newMapping.source"
               :label="t('channelEditor.mapping.source.label')"
-              :items="sourceModelOptions"
+              :items="availableSourceModelOptions"
               variant="outlined"
               density="compact"
               hide-details
@@ -314,7 +314,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useI18n } from '../../i18n'
 import { normalizeSelectableString } from '../../utils/channelPayload'
 
@@ -372,6 +372,11 @@ const isMappingInputValid = computed(() => {
   return !!(normalizeSelectableString(newMapping.value.source).trim() && normalizeSelectableString(newMapping.value.target).trim())
 })
 
+const availableSourceModelOptions = computed(() => {
+  const configuredSources = new Set(props.mappingRows.map(row => normalizeSelectableString(row.source).trim()))
+  return props.sourceModelOptions.filter(option => !configuredSources.has(option.value))
+})
+
 const handleSourceChange = () => {
   // 源模型变化时的处理逻辑
 }
@@ -380,17 +385,21 @@ const handleAddMapping = () => {
   if (!isMappingInputValid.value) return
   const source = normalizeSelectableString(newMapping.value.source).trim()
   const target = normalizeSelectableString(newMapping.value.target).trim()
-  const existingNoVision = findNoVisionForTarget(normalizeMappingRows(props.mappingRows), target)
+  const rows = dedupeMappingRows(normalizeMappingRows(props.mappingRows))
+  const existingIndex = rows.findIndex(row => row.source.trim() === source)
+  const existingNoVision = findNoVisionForTarget(rows, target)
 
   const row: MappingRow = {
-    id: Date.now(),
+    id: existingIndex >= 0 ? rows[existingIndex].id : Date.now(),
     source,
     target,
     reasoning: (newMapping.value.reasoningEffort || '') as '' | 'none' | 'low' | 'medium' | 'high' | 'xhigh' | 'max',
-    noVision: existingNoVision ?? false,
+    noVision: existingNoVision ?? rows[existingIndex]?.noVision ?? false,
   }
 
-  emit('update:mappingRows', [...normalizeMappingRows(props.mappingRows), row])
+  const updatedRows = rows.filter(row => row.source.trim() !== source)
+  updatedRows.splice(existingIndex >= 0 ? existingIndex : updatedRows.length, 0, row)
+  emit('update:mappingRows', updatedRows)
   emit('target-edit-end')
 
   // 重置输入
@@ -431,6 +440,12 @@ const normalizeMappingRows = (rows: MappingRow[]): MappingRow[] => rows.map(row 
   target: normalizeSelectableString(row.target),
 }))
 
+const dedupeMappingRows = (rows: MappingRow[]): MappingRow[] => {
+  const rowsBySource = new Map<string, MappingRow>()
+  rows.forEach(row => rowsBySource.set(row.source.trim(), row))
+  return [...rowsBySource.values()]
+}
+
 const normalizeTargetKey = (target: SelectableString) => normalizeSelectableString(target).trim()
 
 const findNoVisionForTarget = (rows: MappingRow[], target: SelectableString): boolean | undefined => {
@@ -450,6 +465,13 @@ const setNoVisionForTarget = (rows: MappingRow[], target: SelectableString, noVi
 const formatModelName = (value: MappingRow['source']) => normalizeSelectableString(value)
 
 const props = defineProps<Props>()
+
+watch(() => props.mappingRows, rows => {
+  const dedupedRows = dedupeMappingRows(normalizeMappingRows(rows))
+  if (dedupedRows.length !== rows.length) {
+    emit('update:mappingRows', dedupedRows)
+  }
+}, { immediate: true })
 </script>
 
 <style scoped>

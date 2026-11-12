@@ -195,13 +195,14 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
   const channelTypeRef = computed(() => props.channelType)
   const {
     serviceTypeOptions,
-    sourceModelOptions,
+    allSourceModelOptions: sourceModelOptions,
     modelMappingHint,
     targetModelPlaceholder,
     reasoningEffortOptions,
     reasoningParamStyleOptions,
     textVerbosityOptions,
   } = useEditChannelOptions(channelTypeRef, form, t)
+  // 源模型候选由 ModelMappingSection 按实时映射行过滤，避免新增/删除后使用旧表单状态。
 
   // 多 BaseURL 文本输入（独立变量，保留用户输入的换行）
   const baseUrlsText = ref('')
