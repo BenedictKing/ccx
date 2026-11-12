@@ -165,8 +165,14 @@ type CapabilityTestJob struct {
 
 type capabilityTestJobStore struct {
 	sync.RWMutex
-	jobs      map[string]*CapabilityTestJob
-	lookupKey map[string]string
+	jobs          map[string]*CapabilityTestJob
+	lookupKey     map[string]string
+	workers       sync.WaitGroup
+	activeWorkers map[*capabilityTestWorker]struct{}
+}
+
+type capabilityTestWorker struct {
+	cancel context.CancelFunc
 }
 
 var capabilityJobs = newCapabilityTestJobStore()
@@ -371,6 +377,41 @@ func (s *capabilityTestJobStore) update(jobID string, updater func(job *Capabili
 		capabilitySnapshots.replaceFromJob(cloned.IdentityKey, cloned)
 	}
 	return cloned, true
+}
+
+// start 在启动 goroutine 前登记取消函数与任务，关闭 queued 阶段的取消窗口。
+func (s *capabilityTestJobStore) start(jobID string, retry bool, run func(context.Context)) {
+	ctx, cancel := context.WithCancel(context.Background())
+	s.Lock()
+	job, ok := s.jobs[jobID]
+	if !ok {
+		s.Unlock()
+		cancel()
+		return
+	}
+	if !retry {
+		job.CancelFunc = cancel
+		if job.Lifecycle == CapabilityLifecycleCancelled {
+			cancel()
+		}
+	}
+	worker := &capabilityTestWorker{cancel: cancel}
+	if s.activeWorkers == nil {
+		s.activeWorkers = make(map[*capabilityTestWorker]struct{})
+	}
+	s.activeWorkers[worker] = struct{}{}
+	s.workers.Add(1)
+	s.Unlock()
+	go func() {
+		defer s.workers.Done()
+		defer cancel()
+		defer func() {
+			s.Lock()
+			delete(s.activeWorkers, worker)
+			s.Unlock()
+		}()
+		run(ctx)
+	}()
 }
 
 // setCancelFunc 直接设置内部 job 的 CancelFunc（不走 clone，因为 CancelFunc 不可复制）

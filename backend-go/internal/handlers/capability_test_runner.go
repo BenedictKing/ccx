@@ -64,11 +64,7 @@ func buildRoundRobinQueue(protocolModels map[string][]string, protocols []string
 	return queue
 }
 
-func runCapabilityTestJob(jobID, channelKind string, channelID int, channel config.UpstreamConfig, protocols []string, timeout time.Duration, effectiveRPM int, cacheKey, lookupKey, identityKey, executionKey, dispatcherKey string, previousResults map[string]map[string]ModelTestResult, userModels []string, sourceTab string, cfgManager *config.ConfigManager, channelLogStore *metrics.ChannelLogStore) {
-	// 创建可取消的 context，用于支持前端取消操作
-	ctx, cancel := context.WithCancel(context.Background())
-	capabilityJobs.setCancelFunc(jobID, cancel)
-
+func runCapabilityTestJob(ctx context.Context, jobID, channelKind string, channelID int, channel config.UpstreamConfig, protocols []string, timeout time.Duration, effectiveRPM int, cacheKey, lookupKey, identityKey, executionKey, dispatcherKey string, previousResults map[string]map[string]ModelTestResult, userModels []string, sourceTab string, cfgManager *config.ConfigManager, channelLogStore *metrics.ChannelLogStore) {
 	// 检查是否在 queued 期间已被取消
 	if ctx.Err() != nil {
 		if lookupKey != "" {
@@ -120,7 +116,11 @@ func runCapabilityTestJob(jobID, channelKind string, channelID int, channel conf
 	var redirectCh chan []RedirectModelResult
 	if shouldRunRedirectVerification(protocols, sourceTab, channelServiceType) {
 		redirectCh = make(chan []RedirectModelResult, 1)
+		// 取消后主任务可先返回，但重定向子任务也必须参与退出等待。
+		store := capabilityJobs
+		store.workers.Add(1)
 		go func() {
+			defer store.workers.Done()
 			redirectCh <- runRedirectVerification(ctx, &channel, channelKind, sourceTab, timeout, effectiveRPM, jobID, cfgManager, channelID, apiKey, dispatcherKey, channelLogStore, userModels)
 		}()
 	}

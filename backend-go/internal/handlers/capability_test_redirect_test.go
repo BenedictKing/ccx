@@ -92,7 +92,7 @@ func TestServiceTypeToChannelKind_TreatsCopilotAsResponses(t *testing.T) {
 }
 
 func TestRunRedirectVerification_UsesChannelServiceTypeForVirtualProtocol(t *testing.T) {
-	resetCapabilityTestState()
+	resetCapabilityTestState(t)
 
 	var requestCount atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -721,7 +721,7 @@ func TestUpdateCapabilityJobModelResult_VirtualProtocol(t *testing.T) {
 
 // TestRunRedirectVerification_CodexAutoReview 验证 GPT 类渠道的 codex-auto-review 模型重定向测试覆盖
 func TestRunRedirectVerification_CodexAutoReview(t *testing.T) {
-	resetCapabilityTestState()
+	resetCapabilityTestState(t)
 
 	var receivedModel atomic.Value
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -786,7 +786,7 @@ func TestRunRedirectVerification_CodexAutoReview(t *testing.T) {
 
 // TestRunRedirectVerification_CodexAutoReviewDedup 验证 codex-auto-review 和其他模型映射到同一实际模型时只测试一次
 func TestRunRedirectVerification_CodexAutoReviewDedup(t *testing.T) {
-	resetCapabilityTestState()
+	resetCapabilityTestState(t)
 
 	var requestCount atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

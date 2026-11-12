@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -18,18 +19,59 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func resetCapabilityTestState() {
+func resetCapabilityTestState(t *testing.T) {
+	t.Helper()
+	cancelAndWaitCapabilityWorkers(t, capabilityJobs)
 	capabilityJobs = &capabilityTestJobStore{jobs: make(map[string]*CapabilityTestJob), lookupKey: make(map[string]string)}
+	store := capabilityJobs
+	t.Cleanup(func() { cancelAndWaitCapabilityWorkers(t, store) })
 	capabilitySnapshots = newCapabilitySnapshotStore()
-	capabilityTestDispatcherPool = newCapabilityTestDispatcherPool()
+	// 测试无需后台 GC，避免每次重置都遗留一个永久运行的 GC 协程。
+	capabilityTestDispatcherPool = &CapabilityTestDispatcherPool{dispatchers: make(map[string]*capabilityDispatcherEntry), idleTTL: capabilityDispatcherIdleTTL}
 	capabilityCache.Lock()
 	capabilityCache.entries = make(map[string]*capabilityCacheEntry)
 	capabilityCache.Unlock()
 }
 
-func captureCapabilityLogs(t *testing.T) *bytes.Buffer {
+func cancelAndWaitCapabilityWorkers(t *testing.T, store *capabilityTestJobStore) {
 	t.Helper()
-	var buf bytes.Buffer
+	store.RLock()
+	for worker := range store.activeWorkers {
+		worker.cancel()
+	}
+	store.RUnlock()
+	done := make(chan struct{})
+	go func() {
+		store.workers.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("能力测试后台任务取消后未退出，拒绝重置共享状态")
+	}
+}
+
+type capabilityLogBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *capabilityLogBuffer) Write(data []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(data)
+}
+
+func (b *capabilityLogBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
+func captureCapabilityLogs(t *testing.T) *capabilityLogBuffer {
+	t.Helper()
+	var buf capabilityLogBuffer
 	oldWriter := log.Writer()
 	log.SetOutput(&buf)
 	t.Cleanup(func() {
@@ -39,7 +81,7 @@ func captureCapabilityLogs(t *testing.T) *bytes.Buffer {
 }
 
 func TestCancelCapabilityTestJob_HTTP(t *testing.T) {
-	resetCapabilityTestState()
+	resetCapabilityTestState(t)
 	gin.SetMode(gin.TestMode)
 
 	job := newCapabilityTestJob(0, "channel", "messages", "claude", []string{"messages"}, 10*time.Second, 10)
@@ -90,7 +132,7 @@ func TestCancelCapabilityTestJob_HTTP(t *testing.T) {
 }
 
 func TestStartCapabilityTest_DefaultRPM(t *testing.T) {
-	resetCapabilityTestState()
+	resetCapabilityTestState(t)
 	gin.SetMode(gin.TestMode)
 
 	tmpDir := t.TempDir()
@@ -129,7 +171,7 @@ func TestStartCapabilityTest_DefaultRPM(t *testing.T) {
 }
 
 func TestStartCapabilityTest_DefaultsToConfiguredPrivateModel(t *testing.T) {
-	resetCapabilityTestState()
+	resetCapabilityTestState(t)
 	gin.SetMode(gin.TestMode)
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var body map[string]interface{}
@@ -189,7 +231,7 @@ func TestStartCapabilityTest_DefaultsToConfiguredPrivateModel(t *testing.T) {
 }
 
 func TestGetCapabilityTestJobStatus_HTTP(t *testing.T) {
-	resetCapabilityTestState()
+	resetCapabilityTestState(t)
 	gin.SetMode(gin.TestMode)
 
 	job := newCapabilityTestJob(0, "channel", "messages", "claude", []string{"messages"}, 10*time.Second, 10)
@@ -230,7 +272,7 @@ func TestGetCapabilityTestJobStatus_HTTP(t *testing.T) {
 }
 
 func TestCapabilityCacheHit_DoesNotBindExecutionLookupKey(t *testing.T) {
-	resetCapabilityTestState()
+	resetCapabilityTestState(t)
 	gin.SetMode(gin.TestMode)
 
 	tmpDir := t.TempDir()
@@ -464,7 +506,7 @@ func TestExecuteModelTest_RecordsCapabilityLogOnSuccess(t *testing.T) {
 }
 
 func TestExecuteModelTest_SuccessfulStreamDoesNotLogRawResponseBody(t *testing.T) {
-	resetCapabilityTestState()
+	resetCapabilityTestState(t)
 	t.Setenv("ENV", "development")
 	t.Setenv("ENABLE_RESPONSE_LOGS", "true")
 	gin.SetMode(gin.TestMode)
@@ -520,7 +562,7 @@ func TestExecuteModelTest_SuccessfulStreamDoesNotLogRawResponseBody(t *testing.T
 }
 
 func TestExecuteModelTest_NativeProtocolDoesNotExposeActualModel(t *testing.T) {
-	resetCapabilityTestState()
+	resetCapabilityTestState(t)
 	gin.SetMode(gin.TestMode)
 
 	job := newCapabilityTestJob(0, "channel", "messages", "claude", []string{"messages"}, 10*time.Second, 10)
@@ -750,7 +792,7 @@ func TestExecuteModelTest_RespectsAutoBlacklistBalance(t *testing.T) {
 }
 
 func TestResumedCancelledJob_ReturnsUpdatedState(t *testing.T) {
-	resetCapabilityTestState()
+	resetCapabilityTestState(t)
 	gin.SetMode(gin.TestMode)
 
 	// 创建一个已取消的 job
@@ -844,7 +886,7 @@ func TestResumedCancelledJob_ReturnsUpdatedState(t *testing.T) {
 }
 
 func TestCapabilityPreviousJobReuse_ByIdentityAcrossChannels(t *testing.T) {
-	resetCapabilityTestState()
+	resetCapabilityTestState(t)
 	gin.SetMode(gin.TestMode)
 
 	tmpDir := t.TempDir()
@@ -913,7 +955,7 @@ func TestCapabilityPreviousJobReuse_ByIdentityAcrossChannels(t *testing.T) {
 }
 
 func TestCapabilityPreviousJobReuse_IsolatedByModelMapping(t *testing.T) {
-	resetCapabilityTestState()
+	resetCapabilityTestState(t)
 	gin.SetMode(gin.TestMode)
 
 	tmpDir := t.TempDir()
@@ -978,7 +1020,7 @@ func TestCapabilityPreviousJobReuse_IsolatedByModelMapping(t *testing.T) {
 }
 
 func TestCapabilityRunningJobReuse_ByIdentityAcrossChannels(t *testing.T) {
-	resetCapabilityTestState()
+	resetCapabilityTestState(t)
 	gin.SetMode(gin.TestMode)
 
 	runningJob := newCapabilityTestJob(0, "channel-a", "messages", "claude", []string{"messages"}, 10*time.Second, 10)

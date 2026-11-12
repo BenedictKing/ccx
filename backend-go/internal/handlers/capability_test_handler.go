@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"strconv"
@@ -251,7 +252,9 @@ func TestChannelCapability(cfgManager *config.ConfigManager, channelLogStore *me
 				return
 			}
 
-			go runCapabilityTestJob(job.JobID, channelKind, id, *channel, protocols, timeout, effectiveRPM, cacheKey, lookupKey, identityKey, executionLookupKey, dispatcherKey, previousResults, normalizedModels, req.SourceTab, cfgManager, channelLogStore)
+			capabilityJobs.start(job.JobID, false, func(ctx context.Context) {
+				runCapabilityTestJob(ctx, job.JobID, channelKind, id, *channel, protocols, timeout, effectiveRPM, cacheKey, lookupKey, identityKey, executionLookupKey, dispatcherKey, previousResults, normalizedModels, req.SourceTab, cfgManager, channelLogStore)
+			})
 
 			c.JSON(http.StatusOK, gin.H{"jobId": updatedJob.JobID, "resumed": true, "job": updatedJob})
 			return
@@ -305,7 +308,9 @@ func TestChannelCapability(cfgManager *config.ConfigManager, channelLogStore *me
 			}
 		}
 
-		go runCapabilityTestJob(job.JobID, channelKind, id, *channel, protocols, timeout, effectiveRPM, cacheKey, lookupKey, identityKey, executionLookupKey, dispatcherKey, previousResults, normalizedModels, req.SourceTab, cfgManager, channelLogStore)
+		capabilityJobs.start(job.JobID, false, func(ctx context.Context) {
+			runCapabilityTestJob(ctx, job.JobID, channelKind, id, *channel, protocols, timeout, effectiveRPM, cacheKey, lookupKey, identityKey, executionLookupKey, dispatcherKey, previousResults, normalizedModels, req.SourceTab, cfgManager, channelLogStore)
+		})
 
 		c.JSON(http.StatusOK, gin.H{"jobId": job.JobID, "resumed": false, "job": job})
 		return

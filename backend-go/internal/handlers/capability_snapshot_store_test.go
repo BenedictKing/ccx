@@ -181,7 +181,7 @@ func TestCapabilitySnapshotStore_MergesMultipleJobsSameIdentity(t *testing.T) {
 }
 
 func TestGetCapabilitySnapshot_PreservesSameSourceRedirectProtocol(t *testing.T) {
-	resetCapabilityTestState()
+	resetCapabilityTestState(t)
 	gin.SetMode(gin.TestMode)
 
 	cfg := config.Config{
@@ -248,7 +248,7 @@ func TestGetCapabilitySnapshot_PreservesSameSourceRedirectProtocol(t *testing.T)
 }
 
 func TestGetCapabilitySnapshot_IsolatedByModelMapping(t *testing.T) {
-	resetCapabilityTestState()
+	resetCapabilityTestState(t)
 	gin.SetMode(gin.TestMode)
 
 	oldChannel := config.UpstreamConfig{
@@ -348,7 +348,7 @@ func TestGetCapabilitySnapshot_IsolatedByModelMapping(t *testing.T) {
 }
 
 func TestGetCapabilitySnapshot_IncludesCrossProtocolWithoutModelMapping(t *testing.T) {
-	resetCapabilityTestState()
+	resetCapabilityTestState(t)
 	gin.SetMode(gin.TestMode)
 
 	cfg := config.Config{
@@ -407,7 +407,7 @@ func TestGetCapabilitySnapshot_IncludesCrossProtocolWithoutModelMapping(t *testi
 }
 
 func TestGetCapabilitySnapshot_SkipsSameProtocolWithoutModelMapping(t *testing.T) {
-	resetCapabilityTestState()
+	resetCapabilityTestState(t)
 	gin.SetMode(gin.TestMode)
 
 	cfg := config.Config{

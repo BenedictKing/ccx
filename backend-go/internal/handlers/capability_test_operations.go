@@ -222,10 +222,7 @@ func RetryCapabilityTestModel(cfgManager *config.ConfigManager, channelLogStore 
 
 		// 异步执行单模型测试（使用独立可取消 context）
 		// 不覆盖 job 的 CancelFunc，避免影响主任务的取消能力
-		retryCtx, retryCancel := context.WithCancel(context.Background())
-
-		go func() {
-			defer retryCancel()
+		capabilityJobs.start(jobID, true, func(retryCtx context.Context) {
 			apiKey := ""
 			if len(channel.APIKeys) > 0 {
 				apiKey = channel.APIKeys[0]
@@ -276,7 +273,7 @@ func RetryCapabilityTestModel(cfgManager *config.ConfigManager, channelLogStore 
 
 			log.Printf("[CapabilityTest-Retry] 单模型重测完成: job=%s, protocol=%s, model=%s, success=%v",
 				jobID, req.Protocol, req.Model, modelResult.Success)
-		}()
+		})
 
 		c.JSON(http.StatusOK, gin.H{"status": "accepted"})
 	}
