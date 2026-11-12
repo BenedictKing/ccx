@@ -159,10 +159,14 @@ cd "backend-go" && make lint
 
 ## 本地访问入口
 
-- Web 管理界面：`http://localhost:3688`
-- 代理 API：`http://localhost:3688/v1`
-- 健康检查：`http://localhost:3688/health`
+- 先确认目标实例的工作目录与实际监听端口。文档中的 `3688` 是示例，不代表当前 worktree 或已运行实例一定使用该端口。
+- 后端 `PORT` 的优先级为：进程环境变量 → 启动工作目录的 `.env` → 程序默认值 `3000`。从 `backend-go/` 启动时读取 `backend-go/.env`；修改文件后，已运行进程的端口不会自动改变。
+- Web 管理界面：`http://localhost:<实际端口>`
+- 代理 API：`http://localhost:<实际端口>/v1`
+- 健康检查：`http://localhost:<实际端口>/health`，同时核对 `version.gitCommit`，确认运行代码版本。
 - 前端开发服务器：默认 `http://localhost:5173`
+
+macOS / Linux 可先查看 `lsof -nP -iTCP -sTCP:LISTEN`，再核对目标 PID 的工作目录；不要通过打印完整进程环境或整个 `.env` 暴露密钥。前端开发模式还需确认 `VITE_PROXY_TARGET` 指向实际后端端口。
 
 ### Windows / WSL / Docker 访问建议
 
