@@ -1,5 +1,7 @@
 package types
 
+import "encoding/json"
+
 // ClaudeRequest Claude 请求结构
 // AgentContext 请求的代理上下文信息，用于 subagent 观测与角色路由
 type AgentContext struct {
@@ -62,9 +64,56 @@ type ClaudeResponse struct {
 	ID         string          `json:"id"`
 	Type       string          `json:"type"`
 	Role       string          `json:"role"`
+	Model      string          `json:"model,omitempty"`
 	Content    []ClaudeContent `json:"content"`
 	StopReason string          `json:"stop_reason,omitempty"`
 	Usage      *Usage          `json:"usage,omitempty"`
+	// 未建模的上游顶层字段保留原始 JSON，避免数值精度损失。
+	ExtraFields map[string]json.RawMessage `json:"-"`
+}
+
+type claudeResponseAlias ClaudeResponse
+
+var claudeResponseKnownFields = map[string]struct{}{
+	"id": {}, "type": {}, "role": {}, "model": {},
+	"content": {}, "stop_reason": {}, "usage": {},
+}
+
+func (r *ClaudeResponse) UnmarshalJSON(data []byte) error {
+	var response claudeResponseAlias
+	if err := json.Unmarshal(data, &response); err != nil {
+		return err
+	}
+	var extra map[string]json.RawMessage
+	if err := json.Unmarshal(data, &extra); err != nil {
+		return err
+	}
+	for key := range claudeResponseKnownFields {
+		delete(extra, key)
+	}
+	if len(extra) > 0 {
+		response.ExtraFields = extra
+	}
+	*r = ClaudeResponse(response)
+	return nil
+}
+
+func (r ClaudeResponse) MarshalJSON() ([]byte, error) {
+	base, err := json.Marshal(claudeResponseAlias(r))
+	if err != nil || len(r.ExtraFields) == 0 {
+		return base, err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(base, &fields); err != nil {
+		return nil, err
+	}
+	for key, value := range r.ExtraFields {
+		// 已声明字段即使因 omitempty 省略，也不能被扩展字段覆盖。
+		if _, known := claudeResponseKnownFields[key]; !known {
+			fields[key] = value
+		}
+	}
+	return json.Marshal(fields)
 }
 
 // OpenAIRequest OpenAI 请求结构
