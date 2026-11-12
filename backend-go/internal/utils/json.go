@@ -502,6 +502,11 @@ func formatMapAsOneLine(m map[string]interface{}) string {
 		}
 
 		// 对于长字符串字段（如 encrypted_content, arguments, output），进行截断
+		if k == "encrypted_function_args" {
+			valueJSON, _ := json.Marshal(TruncateJSONIntelligently(v, 100))
+			pairs = append(pairs, string(keyJSON)+": "+string(valueJSON))
+			continue
+		}
 		if k == "encrypted_content" || k == "arguments" || k == "output" || k == "text" {
 			if strVal, ok := v.(string); ok {
 				maxLen := 100

@@ -48,6 +48,8 @@ type ResponsesItem struct {
 	Tools     []interface{} `json:"tools,omitempty"`
 	// Codex RemoteCompactionV2 使用 compaction.encrypted_content 承载压缩摘要。
 	EncryptedContent string `json:"encrypted_content,omitempty"`
+	// 部分 Codex 端点返回分段加密工具参数，仅可由支持该字段的上游解密。
+	EncryptedFunctionArgs []string `json:"encrypted_function_args,omitempty"`
 }
 
 // ContentBlock 内容块（用于嵌套 content 数组）

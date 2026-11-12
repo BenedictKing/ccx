@@ -3,8 +3,6 @@ package utils
 import (
 	"encoding/json"
 	"unicode"
-
-	"github.com/BenedictKing/ccx/internal/types"
 )
 
 // EstimateTokens 估算文本的 token 数量
@@ -56,7 +54,7 @@ func EstimateMessagesTokens(messages interface{}) int {
 	}
 
 	// 用 gjson 提取图片 token 并把 base64 字段替换成占位符，避免按字符数高估
-	cleaned, imageTokens := extractImageTokensAndStripBytes(data)
+	cleaned, imageTokens := extractMediaTokensAndStripBytes(data)
 
 	// 每条消息额外开销约 4 tokens
 	msgCount := 0
@@ -79,7 +77,7 @@ func EstimateRequestTokens(bodyBytes []byte) int {
 	// 提取图片 token 并把 base64 字段替换成占位符，后续按 cleaned 估算文本，
 	// 图片 token 在此处一次性计入；下方 messages 复用 EstimateMessagesTokens，
 	// 其对已剥离的 cleaned 会短路、返回 0 图片 token，不会重复计图。
-	cleaned, imageTokens := extractImageTokensAndStripBytes(bodyBytes)
+	cleaned, imageTokens := extractMediaTokensAndStripBytes(bodyBytes)
 
 	var req map[string]interface{}
 	if err := json.Unmarshal(cleaned, &req); err != nil {
@@ -110,7 +108,7 @@ func EstimateRequestTokens(bodyBytes []byte) int {
 
 	// tools (每个工具约 100-200 tokens)
 	if tools, ok := req["tools"].([]interface{}); ok {
-		total += len(tools) * 150
+		total += estimateToolsTokens(tools)
 	}
 
 	return total
@@ -130,7 +128,7 @@ func EstimateGeminiRequestTokens(bodyBytes []byte) int {
 	if len(bodyBytes) == 0 {
 		return 0
 	}
-	cleaned, imageTokens := extractImageTokensAndStripBytes(bodyBytes)
+	cleaned, imageTokens := extractMediaTokensAndStripBytes(bodyBytes)
 	return EstimateTokens(string(cleaned)) + imageTokens
 }
 
@@ -192,7 +190,7 @@ func EstimateResponsesRequestTokens(bodyBytes []byte) int {
 	}
 
 	// 先用 gjson 提取图片 token 并把 base64 字段清空
-	cleaned, imageTokens := extractImageTokensAndStripBytes(bodyBytes)
+	cleaned, imageTokens := extractMediaTokensAndStripBytes(bodyBytes)
 
 	var req map[string]interface{}
 	if err := json.Unmarshal(cleaned, &req); err != nil {
@@ -213,7 +211,7 @@ func EstimateResponsesRequestTokens(bodyBytes []byte) int {
 
 	// tools (每个工具约 100-200 tokens)
 	if tools, ok := req["tools"].([]interface{}); ok {
-		total += len(tools) * 150
+		total += estimateToolsTokens(tools)
 	}
 
 	return total
@@ -221,63 +219,71 @@ func EstimateResponsesRequestTokens(bodyBytes []byte) int {
 
 // estimateResponsesInputTokens 估算 Responses input 字段的 token
 func estimateResponsesInputTokens(input interface{}) int {
-	switch v := input.(type) {
-	case string:
-		// 简单字符串输入
-		return EstimateTokens(v)
-	case []interface{}:
-		// 消息数组格式
-		total := 0
-		for _, item := range v {
-			if m, ok := item.(map[string]interface{}); ok {
-				// 每条消息额外开销约 4 tokens
-				total += 4
-
-				// 处理 content 字段
-				if content := m["content"]; content != nil {
-					total += estimateContentTokens(content)
-				}
-
-				// 处理 tool_use
-				if toolUse, ok := m["tool_use"].(map[string]interface{}); ok {
-					data, _ := json.Marshal(toolUse)
-					total += EstimateTokens(string(data))
-				}
-			}
-		}
-		return total
-	default:
-		// 其他情况序列化后估算
-		data, err := json.Marshal(input)
-		if err != nil {
-			return 0
-		}
+	if text, ok := input.(string); ok {
+		return EstimateTokens(text)
+	}
+	data, err := json.Marshal(input)
+	if err != nil {
+		return 0
+	}
+	var items []map[string]interface{}
+	if json.Unmarshal(data, &items) != nil {
 		return EstimateTokens(string(data))
 	}
+	total := 0
+	for _, item := range items {
+		// 保留未知 item 的所有字段，避免先转窄类型而丢掉新协议负载。
+		total += 4 + estimateResponseItemMapTokens(item)
+	}
+	return total
 }
 
-// estimateContentTokens 估算 content 字段的 token
-func estimateContentTokens(content interface{}) int {
-	switch v := content.(type) {
-	case string:
-		return EstimateTokens(v)
-	case []interface{}:
-		total := 0
-		for _, block := range v {
-			if b, ok := block.(map[string]interface{}); ok {
-				if text, ok := b["text"].(string); ok {
-					total += EstimateTokens(text)
+// estimateResponseItemMapTokens 对密文单独估算，其他字段按实际负载计数。
+func estimateResponseItemMapTokens(item map[string]interface{}) int {
+	total := 0
+	plain := make(map[string]interface{}, len(item))
+	for key, value := range item {
+		switch key {
+		case "encrypted_content":
+			if text, ok := value.(string); ok {
+				total += estimateOpaqueStringTokens(text)
+				continue
+			}
+		case "encrypted_function_args":
+			if segments, ok := value.([]interface{}); ok {
+				for _, segment := range segments {
+					if text, ok := segment.(string); ok {
+						total += estimateOpaqueStringTokens(text)
+					}
 				}
+				continue
 			}
 		}
-		return total
-	default:
-		data, err := json.Marshal(content)
-		if err != nil {
-			return 0
-		}
-		return EstimateTokens(string(data))
+		plain[key] = value
 	}
+	data, _ := json.Marshal(plain)
+	return total + EstimateTokens(string(data))
+}
+
+func estimateToolsTokens(tools []interface{}) int {
+	total := 0
+	for _, tool := range tools {
+		data, err := json.Marshal(tool)
+		if err == nil {
+			total += 8 + EstimateTokens(string(data))
+		}
+	}
+	return total
+}
+
+func estimateOpaqueStringTokens(text string) int {
+	count := 0
+	for _, r := range text {
+		if !unicode.IsSpace(r) {
+			count++
+		}
+	}
+	return (count*2 + 2) / 3
 }
 
 // EstimateResponsesOutputTokens 从 Responses API 响应估算输出 token
@@ -286,88 +292,17 @@ func EstimateResponsesOutputTokens(output interface{}) int {
 	if output == nil {
 		return 0
 	}
-
-	// 处理 []types.ResponsesItem 类型
-	if items, ok := output.([]types.ResponsesItem); ok {
-		total := 0
-		for _, item := range items {
-			total += estimateResponsesItemTokens(item)
-		}
-		return total
-	}
-
-	// 处理 []interface{} 类型
-	if arr, ok := output.([]interface{}); ok {
-		total := 0
-		for _, item := range arr {
-			if m, ok := item.(map[string]interface{}); ok {
-				// 处理 content 字段
-				if content := m["content"]; content != nil {
-					total += estimateContentTokens(content)
-				}
-
-				// 处理 tool_use
-				if toolUse, ok := m["tool_use"].(map[string]interface{}); ok {
-					data, _ := json.Marshal(toolUse)
-					total += EstimateTokens(string(data))
-				}
-
-				// 处理 function_call 类型
-				if m["type"] == "function_call" {
-					if args, ok := m["arguments"].(string); ok {
-						total += EstimateTokens(args)
-					}
-					if name, ok := m["name"].(string); ok {
-						total += EstimateTokens(name) + 2 // 函数名 + 开销
-					}
-				}
-
-				// 处理 reasoning 类型
-				if m["type"] == "reasoning" {
-					if summary, ok := m["summary"].([]interface{}); ok {
-						for _, s := range summary {
-							if sm, ok := s.(map[string]interface{}); ok {
-								if text, ok := sm["text"].(string); ok {
-									total += EstimateTokens(text)
-								}
-							}
-						}
-					}
-				}
-			}
-		}
-		return total
-	}
-
-	// 其他情况序列化后估算
 	data, err := json.Marshal(output)
 	if err != nil {
 		return 0
 	}
-	return EstimateTokens(string(data))
-}
-
-// estimateResponsesItemTokens 估算单个 ResponsesItem 的 token 数
-func estimateResponsesItemTokens(item types.ResponsesItem) int {
+	var items []map[string]interface{}
+	if json.Unmarshal(data, &items) != nil {
+		return EstimateTokens(string(data))
+	}
 	total := 0
-
-	// 处理 content 字段
-	if item.Content != nil {
-		total += estimateContentTokens(item.Content)
+	for _, item := range items {
+		total += estimateResponseItemMapTokens(item)
 	}
-
-	// 处理 tool_use
-	if item.ToolUse != nil {
-		data, _ := json.Marshal(item.ToolUse)
-		total += EstimateTokens(string(data))
-	}
-
-	// 如果是特殊类型且 content/tool_use 都为空，序列化整个结构估算
-	// 这处理 function_call、reasoning 等类型，其数据可能在其他字段中
-	if total == 0 && item.Type != "" && item.Type != "message" && item.Type != "text" {
-		data, _ := json.Marshal(item)
-		total = EstimateTokens(string(data))
-	}
-
 	return total
 }

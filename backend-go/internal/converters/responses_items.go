@@ -45,6 +45,10 @@ func resolveFunctionCallItem(item types.ResponsesItem) (string, string, string, 
 	if callID == "" {
 		callID = name
 	}
+	// Chat/Claude/Gemini 无法解密参数；空 JSON 占位避免上游拒收空参数串。
+	if arguments == "" && len(item.EncryptedFunctionArgs) > 0 {
+		arguments = "{}"
+	}
 
 	return callID, name, arguments, nil
 }

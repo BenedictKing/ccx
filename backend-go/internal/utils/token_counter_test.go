@@ -77,7 +77,7 @@ func TestEstimateResponsesRequestTokens(t *testing.T) {
 					map[string]interface{}{"name": "compute"},
 				},
 			},
-			minExpected: 300, // 2 tools * 150 = 300
+			minExpected: 20, // 按实际 schema 与工具结构开销计数
 		},
 	}
 

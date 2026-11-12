@@ -49,26 +49,7 @@ func (c *ResponsesPassthroughConverter) FromProviderResponse(resp map[string]int
 	if outputArr, ok := resp["output"].([]interface{}); ok {
 		for _, item := range outputArr {
 			if itemMap, ok := item.(map[string]interface{}); ok {
-				itemType, _ := itemMap["type"].(string)
-				role, _ := itemMap["role"].(string)
-				content := itemMap["content"]
-
-				output = append(output, types.ResponsesItem{
-					ID:               stringFromInterface(itemMap["id"]),
-					Type:             itemType,
-					Role:             role,
-					Status:           stringFromInterface(itemMap["status"]),
-					Execution:        stringFromInterface(itemMap["execution"]),
-					Content:          content,
-					Summary:          itemMap["summary"],
-					CallID:           stringFromInterface(itemMap["call_id"]),
-					Name:             stringFromInterface(itemMap["name"]),
-					Namespace:        stringFromInterface(itemMap["namespace"]),
-					Input:            stringFromInterface(itemMap["input"]),
-					Arguments:        stringFromInterface(itemMap["arguments"]),
-					Output:           itemMap["output"],
-					EncryptedContent: stringFromInterface(itemMap["encrypted_content"]),
-				})
+				output = append(output, types.ResponsesItemFromMap(itemMap))
 			}
 		}
 	}

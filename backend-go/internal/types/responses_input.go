@@ -57,21 +57,22 @@ func ResponsesItemFromMap(itemMap map[string]interface{}) ResponsesItem {
 
 func responsesItemFromMap(itemMap map[string]interface{}) ResponsesItem {
 	item := ResponsesItem{
-		ID:               stringFromMap(itemMap, "id"),
-		Type:             stringFromMap(itemMap, "type"),
-		Role:             stringFromMap(itemMap, "role"),
-		Status:           stringFromMap(itemMap, "status"),
-		Execution:        stringFromMap(itemMap, "execution"),
-		Content:          itemMap["content"],
-		Summary:          itemMap["summary"],
-		CallID:           stringFromMap(itemMap, "call_id"),
-		Name:             stringFromMap(itemMap, "name"),
-		Namespace:        stringFromMap(itemMap, "namespace"),
-		Input:            stringFromMap(itemMap, "input"),
-		Arguments:        stringFromMap(itemMap, "arguments"),
-		Output:           itemMap["output"],
-		Tools:            interfaceSliceFromMap(itemMap, "tools"),
-		EncryptedContent: stringFromMap(itemMap, "encrypted_content"),
+		ID:                    stringFromMap(itemMap, "id"),
+		Type:                  stringFromMap(itemMap, "type"),
+		Role:                  stringFromMap(itemMap, "role"),
+		Status:                stringFromMap(itemMap, "status"),
+		Execution:             stringFromMap(itemMap, "execution"),
+		Content:               itemMap["content"],
+		Summary:               itemMap["summary"],
+		CallID:                stringFromMap(itemMap, "call_id"),
+		Name:                  stringFromMap(itemMap, "name"),
+		Namespace:             stringFromMap(itemMap, "namespace"),
+		Input:                 stringFromMap(itemMap, "input"),
+		Arguments:             stringFromMap(itemMap, "arguments"),
+		Output:                itemMap["output"],
+		Tools:                 interfaceSliceFromMap(itemMap, "tools"),
+		EncryptedContent:      stringFromMap(itemMap, "encrypted_content"),
+		EncryptedFunctionArgs: encryptedArgsFromMap(itemMap),
 	}
 
 	if item.Type == "" && item.Role != "" {
@@ -87,6 +88,25 @@ func responsesItemFromMap(itemMap map[string]interface{}) ResponsesItem {
 	}
 
 	return item
+}
+
+func encryptedArgsFromMap(item map[string]interface{}) []string {
+	if values, ok := item["encrypted_function_args"].([]string); ok {
+		return append([]string(nil), values...)
+	}
+	values, ok := item["encrypted_function_args"].([]interface{})
+	if !ok {
+		return nil
+	}
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		text, ok := value.(string)
+		if !ok {
+			return nil
+		}
+		result = append(result, text)
+	}
+	return result
 }
 
 func normalizeToolCallItem(item ResponsesItem) ResponsesItem {
