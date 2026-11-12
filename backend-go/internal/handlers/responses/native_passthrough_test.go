@@ -31,6 +31,30 @@ func TestNativeResponsesHTTPPreservesRequestAndResponse(t *testing.T) {
 	}
 }
 
+func TestNativeResponsesHTTPRepairsFunctionCallOutputWithoutCallID(t *testing.T) {
+	const request = `{"model":"native","store":false,"input":[{"type":"additional_tools","tools":[{"type":"namespace","name":"agent","tools":[{"type":"function","name":"codex_apps_open_page","parameters":{"type":"object"}}]}]},{"type":"function_call_output","id":"fco_1","name":"codex_apps_open_page","namespace":"agent","output":"page opened"}]}`
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		if strings.Contains(string(body), `"type":"function_call_output"`) {
+			t.Errorf("invalid tool result reached upstream: %s", body)
+		}
+		for _, want := range []string{`"type":"message"`, `"role":"user"`, `"type":"input_text"`, `Function call output: page opened`} {
+			if !strings.Contains(string(body), want) {
+				t.Errorf("converted request missing %s: %s", want, body)
+			}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"id":"resp_native","status":"completed","output":[]}`)
+	}))
+	defer server.Close()
+
+	router := newResponsesTestRouter(t, config.UpstreamConfig{BaseURL: server.URL, APIKeys: []string{"key"}, ServiceType: "responses"}, nil)
+	w := performResponsesHandlerRequest(t, router, request)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+	}
+}
+
 func TestResponsesReasoningFoldRequiresExplicitOptIn(t *testing.T) {
 	for _, enabled := range []bool{false, true} {
 		var calls atomic.Int32

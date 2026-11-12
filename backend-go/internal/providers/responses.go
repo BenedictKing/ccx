@@ -61,7 +61,7 @@ func (p *ResponsesProvider) ConvertBodyToProviderRequest(
 		p.SessionManager = newDefaultSessionManager()
 	}
 
-	// 默认原生请求不进入转换器，也不重编码正文。
+	// 合法原生请求保留原始字节，仅修复协议无效的工具历史。
 	reqBody, reqBodyForURL := bodyBytes, bodyBytes
 	native := upstream.ServiceType == "responses" || upstream.ServiceType == "copilot"
 	rewrite := len(upstream.ModelMapping) > 0 || len(upstream.ReasoningMapping) > 0 ||
@@ -70,6 +70,11 @@ func (p *ResponsesProvider) ConvertBodyToProviderRequest(
 		upstream.TextVerbosity != "" || upstream.FastMode
 	if native && !rewrite && !strings.HasSuffix(requestPath, "/v1/messages") && json.Valid(bodyBytes) {
 		resetCodexToolContext(c)
+		normalizedBody, err := repairNativeResponsesToolHistory(bodyBytes)
+		if err != nil {
+			return nil, bodyBytes, fmt.Errorf("修复 Responses 工具历史失败: %w", err)
+		}
+		reqBody, reqBodyForURL = normalizedBody, normalizedBody
 	} else {
 		providerReq, urlBody, err := p.buildProviderRequestBody(c, requestPath, bodyBytes, upstream)
 		if err != nil {
@@ -1427,6 +1432,35 @@ func shouldDropResponsesToolObject(tool map[string]interface{}) bool {
 		return true
 	}
 	return false
+}
+
+// 原生 HTTP Responses 不接受缺少 call_id 的工具结果；其他请求保持原始字节。
+func repairNativeResponsesToolHistory(bodyBytes []byte) ([]byte, error) {
+	decoder := json.NewDecoder(bytes.NewReader(bodyBytes))
+	decoder.UseNumber()
+	var reqMap map[string]interface{}
+	if err := decoder.Decode(&reqMap); err != nil {
+		return nil, err
+	}
+	input, ok := reqMap["input"].([]interface{})
+	if !ok {
+		return bodyBytes, nil
+	}
+
+	changed := false
+	for i, rawItem := range input {
+		item, ok := rawItem.(map[string]interface{})
+		if !ok || toString(item["type"]) != "function_call_output" || toString(item["call_id"]) != "" {
+			continue
+		}
+		input[i] = responsesToolHistoryMessage("user", formatFunctionCallOutputHistory(item))
+		changed = true
+	}
+	if !changed {
+		return bodyBytes, nil
+	}
+	reqMap["input"] = input
+	return utils.MarshalJSONNoEscape(reqMap)
 }
 
 func normalizeResponsesInputForPassthrough(reqMap map[string]interface{}) {
