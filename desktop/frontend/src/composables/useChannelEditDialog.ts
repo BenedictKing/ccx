@@ -63,7 +63,7 @@ const { t } = useLanguage()
   const quickInput = ref('')
   const quickServiceTypeTouched = ref(false)
   const copilotDefaultBaseUrl = 'https://api.githubcopilot.com'
-  const defaultNormalizeMetadataUserId = () => props.channelType === 'messages'
+  const defaultNormalizeMetadataUserId = () => false
   const disabledApiKeys = computed<DisabledKeyInfo[]>(() => props.channel?.disabledApiKeys ?? [])
   const disabledGroupModels = computed(() => props.channel?.disabledGroupModels ?? [])
   const historicalApiKeys = computed(() => props.channel?.historicalApiKeys ?? [])
@@ -466,7 +466,7 @@ const { t } = useLanguage()
     form.stripThoughtSignature = ch.stripThoughtSignature ?? false
     form.stripEmptyTextBlocks = ch.stripEmptyTextBlocks ?? false
     form.normalizeSystemRoleToTopLevel = ch.normalizeSystemRoleToTopLevel ?? false
-    form.normalizeMetadataUserId = ch.normalizeMetadataUserId ?? true
+    form.normalizeMetadataUserId = ch.normalizeMetadataUserId ?? false
     form.stripBillingHeader = ch.stripBillingHeader ?? false
     form.normalizeNonstandardChatRoles = ch.normalizeNonstandardChatRoles ?? false
     form.autoBlacklistBalance = ch.autoBlacklistBalance ?? true

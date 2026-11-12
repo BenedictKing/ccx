@@ -20,6 +20,7 @@ const (
 // CodexCustomToolSpec describes a single Codex custom tool and its upstream proxy.
 type CodexCustomToolSpec struct {
 	OpenAIName        string
+	Namespace         string
 	GrammarDefinition string
 	Kind              CodexCustomToolKind
 	ProxyAction       string // "", add_file, delete_file, update_file, replace_file, batch
@@ -188,6 +189,7 @@ func addNamespaceToolsToContext(ctx *CodexToolContext, namespaceTool map[string]
 			}
 			ctx.CustomTools[flat] = CodexCustomToolSpec{
 				OpenAIName:        name,
+				Namespace:         namespace,
 				GrammarDefinition: grammarDef,
 				Kind:              kind,
 			}
@@ -328,6 +330,7 @@ func responsesRawToolsToOpenAIWithContext(tools []interface{}, ctx CodexToolCont
 			if description != "" {
 				ot["function"].(map[string]interface{})["description"] = description
 			}
+			copyResponsesToolStrict(ot["function"].(map[string]interface{}), tool)
 			openaiTools = append(openaiTools, ot)
 		case "namespace":
 			openaiTools = append(openaiTools, namespaceToolsToOpenAI(tool, ctx)...)
@@ -399,6 +402,9 @@ func namespaceToolsToOpenAI(namespaceTool map[string]interface{}, ctx CodexToolC
 		function := map[string]interface{}{"name": tool["name"], "parameters": tool["parameters"]}
 		if description, ok := tool["description"]; ok {
 			function["description"] = description
+		}
+		if strict, ok := tool["strict"]; ok {
+			function["strict"] = strict
 		}
 		out = append(out, map[string]interface{}{"type": "function", "function": function})
 	}
@@ -484,6 +490,11 @@ func NamespaceToolsToResponsesFlat(namespaceTool map[string]interface{}, ctx Cod
 				"type":       "function",
 				"name":       flat,
 				"parameters": parameters,
+			}
+			for _, key := range []string{"strict", "defer_loading", "allowed_callers", "async", "output_schema"} {
+				if value, ok := child[key]; ok {
+					function[key] = value
+				}
 			}
 			if combinedDescription != "" {
 				function["description"] = combinedDescription
@@ -1016,22 +1027,31 @@ func proxyActionFromUpstreamName(name string) string {
 
 // BuildCustomToolCallHistoryArguments converts a Codex custom_tool_call input
 // into upstream Chat Completions function call arguments for history replay.
-func BuildCustomToolCallHistoryArguments(ctx CodexToolContext, originalName, input string) (string, string) {
-	spec, ok := ctx.CustomTools[originalName]
-	upstreamName := originalName
-	if !ok {
+func BuildCustomToolCallHistoryArguments(ctx CodexToolContext, originalName, input string, namespaces ...string) (string, string) {
+	namespace := ""
+	if len(namespaces) > 0 {
+		namespace = namespaces[0]
+	}
+	upstreamName := flattenNamespaceToolName(namespace, originalName)
+	spec, ok := ctx.CustomTools[upstreamName]
+	if !ok && namespace == "" {
 		// additional_tools 提升场景：CustomTools 的 key 是扁平上游名
 		// （functions__exec），按客户端原始名（exec）反查。
+		matches := 0
 		for name, candidate := range ctx.CustomTools {
 			if candidate.OpenAIName == originalName {
 				spec, ok, upstreamName = candidate, true, name
-				break
+				matches++
 			}
+		}
+		// 旧客户端未提供 namespace 时，仅允许唯一身份，避免随机路由同名工具。
+		if matches > 1 {
+			ok = false
 		}
 	}
 	if !ok {
 		argsJSON, _ := json.Marshal(map[string]interface{}{"input": input})
-		return originalName, string(argsJSON)
+		return flattenNamespaceToolName(namespace, originalName), string(argsJSON)
 	}
 
 	switch spec.Kind {
@@ -1189,7 +1209,9 @@ func ConvertToolChoiceForCodex(toolChoice interface{}, ctx CodexToolContext) int
 		if name == "" {
 			return toolChoice
 		}
-		spec, ok := ctx.CustomTools[name]
+		namespace, _ := tcMap["namespace"].(string)
+		upstreamName := flattenNamespaceToolName(namespace, name)
+		spec, ok := ctx.CustomTools[upstreamName]
 		if !ok {
 			return nil
 		}
@@ -1198,14 +1220,14 @@ func ConvertToolChoiceForCodex(toolChoice interface{}, ctx CodexToolContext) int
 			return map[string]interface{}{
 				"type": "function",
 				"function": map[string]interface{}{
-					"name": spec.OpenAIName + "_batch",
+					"name": upstreamName + "_batch",
 				},
 			}
 		default:
 			return map[string]interface{}{
 				"type": "function",
 				"function": map[string]interface{}{
-					"name": spec.OpenAIName,
+					"name": upstreamName,
 				},
 			}
 		}
@@ -1258,26 +1280,31 @@ func (ctx *CodexToolContext) RemapCustomToolCallsInResponse(resp *types.Response
 			continue
 		}
 		customInput := ReconstructCustomToolCallInput(*ctx, item.Name, item.Arguments)
-		if customInput != "" {
-			if ctx.IsToolSearchProxy(item.Name) {
-				resp.Output[i] = types.ResponsesItem{
-					Type:      "tool_search_call",
-					CallID:    item.CallID,
-					Status:    "completed",
-					Execution: "client",
-					Arguments: toolSearchArgumentsRaw(customInput),
-				}
-				continue
-			}
+		if ctx.IsToolSearchProxy(item.Name) {
 			resp.Output[i] = types.ResponsesItem{
-				Type:   "custom_tool_call",
-				CallID: item.CallID,
-				Name:   spec.OpenAIName,
-				Status: "completed",
-				Input:  customInput,
+				Type:      "tool_search_call",
+				CallID:    item.CallID,
+				Status:    "completed",
+				Execution: "client",
+				Arguments: toolSearchArgumentsRaw(customInput),
 			}
+			continue
+		}
+		resp.Output[i] = types.ResponsesItem{
+			ID:        item.ID,
+			Type:      "custom_tool_call",
+			CallID:    item.CallID,
+			Name:      spec.OpenAIName,
+			Namespace: spec.Namespace,
+			Status:    "completed",
+			Input:     customInput,
 		}
 	}
+}
+
+// CustomToolNamespace 返回扁平代理工具对应的原始命名空间。
+func (ctx CodexToolContext) CustomToolNamespace(name string) string {
+	return ctx.CustomTools[name].Namespace
 }
 
 // RemapNamespaceFunctionCallsInResponse unflattens namespace function calls in a ResponsesResponse.

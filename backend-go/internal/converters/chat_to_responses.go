@@ -92,6 +92,9 @@ func (st *chatToResponsesState) addToolCallItemIfNeeded(idx int, nextSeq func() 
 		item = `{"type":"response.output_item.added","sequence_number":0,"output_index":0,"item":{"id":"","type":"custom_tool_call","status":"in_progress","call_id":"","name":"","input":""}}`
 		item, _ = sjson.Set(item, "item.id", itemID)
 		item, _ = sjson.Set(item, "item.name", originalName)
+		if namespace := st.CodexCtx.CustomToolNamespace(name); namespace != "" {
+			item, _ = sjson.Set(item, "item.namespace", namespace)
+		}
 	} else {
 		itemID := fmt.Sprintf("fc_%s", callID)
 		item = `{"type":"response.output_item.added","sequence_number":0,"output_index":0,"item":{"id":"","type":"function_call","status":"in_progress","arguments":"","call_id":"","name":""}}`
@@ -701,6 +704,9 @@ func (st *chatToResponsesState) closeFuncBlocks(nextSeq func() int) []string {
 			itemDone, _ = sjson.Set(itemDone, "item.id", itemID)
 			itemDone, _ = sjson.Set(itemDone, "item.call_id", callID)
 			itemDone, _ = sjson.Set(itemDone, "item.name", originalName)
+			if namespace := st.CodexCtx.CustomToolNamespace(name); namespace != "" {
+				itemDone, _ = sjson.Set(itemDone, "item.namespace", namespace)
+			}
 			itemDone, _ = sjson.Set(itemDone, "item.input", customInput)
 			out = append(out, emitResponsesEvent("response.output_item.done", itemDone))
 			continue
@@ -875,6 +881,9 @@ func (st *chatToResponsesState) generateCompletedEvents(originalRequestRawJSON [
 					"call_id": callID,
 					"name":    originalName,
 					"input":   customInput,
+				}
+				if namespace := st.CodexCtx.CustomToolNamespace(name); namespace != "" {
+					item["namespace"] = namespace
 				}
 				outputs = append(outputs, item)
 				continue
@@ -1154,6 +1163,9 @@ func ConvertOpenAIChatToResponsesNonStream(_ context.Context, _ string, original
 						"call_id": callID,
 						"name":    originalName,
 						"input":   customInput,
+					}
+					if namespace := codexCtx.CustomToolNamespace(funcName); namespace != "" {
+						item["namespace"] = namespace
 					}
 					outputs = append(outputs, item)
 					continue

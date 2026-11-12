@@ -782,15 +782,19 @@ func (p *ClaudeProvider) ConvertToProviderRequest(c *gin.Context, upstream *conf
 	if upstream.PassbackThinkingBlocks {
 		bodyBytes = convertReasoningContentToThinkingBlocks(bodyBytes, upstream.PassbackReasoningContent)
 	}
-	bodyBytes = stripUnsupportedDeepSeekContextManagement(bodyBytes, upstream)
+	if upstream.PassbackThinkingBlocks {
+		bodyBytes = stripUnsupportedDeepSeekContextManagement(bodyBytes, upstream)
+	}
 	if upstream.StripEmptyTextBlocks {
 		bodyBytes = stripEmptyTextBlocksFromBody(bodyBytes)
 		if !upstream.PassbackReasoningContent && !upstream.PassbackThinkingBlocks && !thinkingcache.ShouldTrackClaudeThinking(upstream, bodyBytes) {
 			bodyBytes = stripThinkingBlocksFromBody(bodyBytes)
 		}
 	}
-	if sessionID := utils.ExtractUnifiedSessionID(c, bodyBytes); sessionID != "" {
-		bodyBytes, _ = thinkingcache.InjectCachedClaudeThinking(bodyBytes, sessionID, upstream)
+	if upstream.PassbackThinkingBlocks {
+		if sessionID := utils.ExtractUnifiedSessionID(c, bodyBytes); sessionID != "" {
+			bodyBytes, _ = thinkingcache.InjectCachedClaudeThinking(bodyBytes, sessionID, upstream)
+		}
 	}
 
 	// 注意：NormalizeSystemRoleToTopLevel（抽取 system 角色到顶层）已上移到
@@ -826,10 +830,6 @@ func (p *ClaudeProvider) ConvertToProviderRequest(c *gin.Context, upstream *conf
 		targetURL = baseURL + "/v1" + endpoint
 	}
 
-	if c.Request.URL.RawQuery != "" {
-		targetURL += "?" + c.Request.URL.RawQuery
-	}
-
 	// 创建请求
 	var req *http.Request
 	if len(bodyBytes) > 0 {
@@ -843,9 +843,12 @@ func (p *ClaudeProvider) ConvertToProviderRequest(c *gin.Context, upstream *conf
 	}
 
 	// 使用统一的头部处理逻辑
+	utils.ForwardRequestQuery(req.URL, c.Request.URL)
 	req.Header = utils.PrepareUpstreamHeaders(c, req.URL.Host)
 	utils.ApplyCustomHeaders(req.Header, upstream.CustomHeaders) // 先应用自定义头，后覆盖认证（不可被自定义头覆盖）
-	stripUnsupportedDeepSeekBetaHeaders(req.Header, upstream, bodyBytes)
+	if upstream.PassbackThinkingBlocks {
+		stripUnsupportedDeepSeekBetaHeaders(req.Header, upstream, bodyBytes)
+	}
 	utils.SetAuthenticationHeaderWithOverride(req.Header, apiKey, upstream.AuthHeader)
 	utils.EnsureCompatibleUserAgent(req.Header, "claude")
 

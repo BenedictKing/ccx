@@ -42,13 +42,16 @@ func buildChatCompletionRequestBody(
 	upstream *config.UpstreamConfig,
 	includeAdvancedOptions bool,
 ) ([]byte, error) {
-	needsRewrite := includeAdvancedOptions || mappedModel != model || upstream.NormalizeNonstandardChatRoles || upstream.StripImageGenerationTool
+	needsAdvancedOptions := includeAdvancedOptions && (config.ResolveReasoningEffort(model, upstream) != "" || upstream.TextVerbosity != "" || upstream.FastMode)
+	needsRewrite := needsAdvancedOptions || mappedModel != model || upstream.NormalizeNonstandardChatRoles || upstream.StripImageGenerationTool
 	if !needsRewrite {
 		return bodyBytes, nil
 	}
 
 	var reqMap map[string]interface{}
-	if err := json.Unmarshal(bodyBytes, &reqMap); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(bodyBytes))
+	decoder.UseNumber()
+	if err := decoder.Decode(&reqMap); err != nil {
 		return nil, err
 	}
 
@@ -203,7 +206,7 @@ func buildProviderRequest(
 			return nil, err
 		}
 		// Gemini 兼容端点配置为 openai serviceType 时，也需要注入 thought_signature
-		if strings.Contains(baseURL, "generativelanguage.googleapis.com") && !upstream.StripThoughtSignature {
+		if strings.Contains(baseURL, "generativelanguage.googleapis.com") && upstream.InjectDummyThoughtSignature && !upstream.StripThoughtSignature {
 			requestBody = injectGeminiThoughtSignatures(requestBody)
 		}
 		if skipVersionPrefix {
@@ -273,7 +276,7 @@ func buildProviderRequest(
 		}
 		// Gemini 3 要求 tool_calls 中包含 thought_signature，注入 dummy 值跳过验证
 		// 尊重 stripThoughtSignature 配置：如果渠道明确要求移除 signature 则跳过注入
-		if !upstream.StripThoughtSignature {
+		if upstream.InjectDummyThoughtSignature && !upstream.StripThoughtSignature {
 			requestBody = injectGeminiThoughtSignatures(requestBody)
 		}
 		if skipVersionPrefix {
@@ -302,6 +305,9 @@ func buildProviderRequest(
 	}
 
 	// 使用统一的头部处理逻辑（透明代理）
+	if upstream.ServiceType == "openai" || upstream.ServiceType == "gemini" || upstream.ServiceType == "" {
+		utils.ForwardRequestQuery(req.URL, c.Request.URL)
+	}
 	req.Header = utils.PrepareUpstreamHeaders(c, req.URL.Host)
 
 	// 设置 Content-Type

@@ -265,6 +265,9 @@ func (cm *ConfigManager) UpdateResponsesUpstream(index int, updates UpstreamUpda
 	if updates.CodexNativeToolPassthrough != nil {
 		upstream.CodexNativeToolPassthrough = *updates.CodexNativeToolPassthrough
 	}
+	if updates.ResponsesReasoningFold != nil {
+		upstream.ResponsesReasoningFold = *updates.ResponsesReasoningFold
+	}
 	if updates.CodexToolCompat != nil {
 		v := *updates.CodexToolCompat
 		upstream.CodexToolCompat = &v

@@ -51,7 +51,7 @@ func TestAdditionalToolsHTTPRoundTrip(t *testing.T) {
 					}
 				}))
 				defer server.Close()
-				router := newResponsesTestRouter(t, config.UpstreamConfig{Name: "tools", BaseURL: server.URL, APIKeys: []string{"key"}, ServiceType: protocol}, nil)
+				router := newResponsesTestRouter(t, config.UpstreamConfig{Name: "tools", BaseURL: server.URL, APIKeys: []string{"key"}, ServiceType: protocol, CodexNativeToolPassthrough: protocol == "responses"}, nil)
 				body := fmt.Sprintf(`{"model":"test","store":false,"stream":%t,"input":[{"type":"message","role":"user","content":"hello"},{"type":"additional_tools","tools":[{"type":"namespace","name":"functions","tools":[{"type":"custom","name":"exec"}]}]}]}`, stream)
 				w := performResponsesHandlerRequest(t, router, body)
 				if w.Code != http.StatusOK {
@@ -66,6 +66,9 @@ func TestAdditionalToolsHTTPRoundTrip(t *testing.T) {
 				}
 				if strings.Contains(output, `"name":"functions__exec"`) {
 					t.Fatalf("flat upstream name leaked: %s", output)
+				}
+				if !strings.Contains(output, `"namespace":"functions"`) {
+					t.Fatalf("custom namespace missing: %s", output)
 				}
 			})
 		}

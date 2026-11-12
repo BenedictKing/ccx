@@ -108,7 +108,7 @@ func handleFoldedResponsesStreamSuccess(
 		return roundResp, bodyBytes, nil
 	}
 
-	result, err := runResponsesFold(baseBody, resp, openRound, emitter.emit, codexCtx)
+	result, err := runResponsesFoldWithOptions(baseBody, resp, openRound, emitter.emit, codexCtx, upstream.ResponsesReasoningFold)
 	if result.EOFRetries > 0 {
 		common.RequestLogf(c, "[Responses-UpstreamEOF-Retry] 上游未发送终止事件，已自动重试: retries=%d committed=%t", result.EOFRetries, emitter.committed)
 	}
@@ -140,6 +140,10 @@ func runResponsesFold(
 	if len(codexContexts) > 0 {
 		codexCtx = codexContexts[0]
 	}
+	return runResponsesFoldWithOptions(baseBody, firstResp, openRound, emit, codexCtx, true)
+}
+
+func runResponsesFoldWithOptions(baseBody map[string]interface{}, firstResp *http.Response, openRound responsesFoldRoundOpener, emit responsesFoldEmitter, codexCtx *converters.CodexToolContext, continueEnabled bool) (responsesFoldResult, error) {
 	origInput := responsesFoldInputItems(baseBody["input"])
 	seq := 0
 	dsOutputIndex := 0
@@ -269,7 +273,7 @@ func runResponsesFold(
 
 	roundDone:
 		_ = currentResp.Body.Close()
-		if terminal == nil && roundCanRetry && eofRetries < 1 {
+		if continueEnabled && terminal == nil && roundCanRetry && eofRetries < 1 {
 			nextResp, _, err := openRound(currentBody)
 			if err != nil {
 				incomplete := responsesFoldTerminalEvent(nil, baseResponse, finalOutput, responsesFoldAgentUsage(firstUsage, summedUsage, usage, false), roundsInfo, summedUsage, "upstream_error", "upstream_error")
@@ -305,7 +309,7 @@ func runResponsesFold(
 			lastReasoning := mapFromInterface(roundReasoning[len(roundReasoning)-1])
 			hasEncrypted = strings.TrimSpace(stringFromInterface(lastReasoning["encrypted_content"])) != ""
 		}
-		doContinue := terminal != nil && hasTier && responsesFoldInContinueWindow(n) && hasEncrypted && roundNo <= responsesFoldMaxContinue
+		doContinue := continueEnabled && terminal != nil && hasTier && responsesFoldInContinueWindow(n) && hasEncrypted && roundNo <= responsesFoldMaxContinue
 
 		stoppedReason := ""
 		if !doContinue && hasTier {
@@ -393,6 +397,9 @@ func remapFoldCodexEntry(ctx *converters.CodexToolContext, entry *responsesFoldB
 			"name":    originalName,
 			"input":   customInput,
 		}
+		if namespace := ctx.CustomToolNamespace(name); namespace != "" {
+			remappedItem["namespace"] = namespace
+		}
 		inputEvents := func(outputIndex interface{}) []map[string]interface{} {
 			return []map[string]interface{}{
 				{
@@ -420,6 +427,9 @@ func remapFoldCodexEntry(ctx *converters.CodexToolContext, entry *responsesFoldB
 				if added := mapFromInterface(event["item"]); added != nil {
 					added["type"] = "custom_tool_call"
 					added["name"] = originalName
+					if namespace := ctx.CustomToolNamespace(name); namespace != "" {
+						added["namespace"] = namespace
+					}
 					delete(added, "arguments")
 					added["input"] = ""
 					event["item"] = added

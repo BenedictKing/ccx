@@ -86,8 +86,9 @@ func TestClaudeProvider_ConvertToProviderRequest_InjectsCachedThinkingForDeepSee
 	c := newGinContext(http.MethodPost, "/v1/messages", body, context.Background())
 	c.Request.Header.Set("X-Claude-Code-Session-Id", "session-1")
 	upstream := &config.UpstreamConfig{
-		BaseURL:     "https://api.deepseek.com",
-		ServiceType: "claude",
+		BaseURL:                "https://api.deepseek.com",
+		ServiceType:            "claude",
+		PassbackThinkingBlocks: true,
 	}
 
 	p := &ClaudeProvider{}
@@ -104,7 +105,8 @@ func TestClaudeProvider_ConvertToProviderRequest_PreservesEmptyDeepSeekThinking(
 	body := []byte(`{"model":"deepseek-v4-pro","thinking":{"type":"adaptive"},"messages":[{"role":"assistant","content":[{"type":"thinking","thinking":""},{"type":"tool_use","id":"toolu_empty","name":"Bash","input":{}}]}]}`)
 	c := newGinContext(http.MethodPost, "/v1/messages", body, context.Background())
 	upstream := &config.UpstreamConfig{
-		BaseURL: "https://api.deepseek.com", ServiceType: "claude", StripEmptyTextBlocks: true,
+		BaseURL: "https://api.deepseek.com", ServiceType: "claude",
+		StripEmptyTextBlocks: true,
 	}
 	_, reqBody, err := (&ClaudeProvider{}).ConvertToProviderRequest(c, upstream, "sk-ant-test")
 	if err != nil {
@@ -127,8 +129,9 @@ func TestClaudeProvider_ConvertToProviderRequest_StripsDeepSeekClearThinkingCont
 	c := newGinContext(http.MethodPost, "/v1/messages", body, context.Background())
 	c.Request.Header.Set("Anthropic-Beta", "claude-code-20250219,context-management-2025-06-27,effort-2025-11-24")
 	upstream := &config.UpstreamConfig{
-		BaseURL:     "https://api.deepseek.com/anthropic",
-		ServiceType: "claude",
+		BaseURL:                "https://api.deepseek.com/anthropic",
+		ServiceType:            "claude",
+		PassbackThinkingBlocks: true,
 	}
 
 	p := &ClaudeProvider{}

@@ -260,6 +260,9 @@ func (cm *ConfigManager) UpdateGeminiUpstream(index int, updates UpstreamUpdate)
 	if updates.CodexNativeToolPassthrough != nil {
 		upstream.CodexNativeToolPassthrough = *updates.CodexNativeToolPassthrough
 	}
+	if updates.ResponsesReasoningFold != nil {
+		upstream.ResponsesReasoningFold = *updates.ResponsesReasoningFold
+	}
 	if updates.CodexToolCompat != nil {
 		v := *updates.CodexToolCompat
 		upstream.CodexToolCompat = &v

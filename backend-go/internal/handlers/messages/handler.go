@@ -46,15 +46,6 @@ func Handler(envCfg *config.EnvConfig, cfgManager *config.ConfigManager, channel
 		}
 		common.SetRequestLogContext(c, earlyUserID, countUserMessages(earlyReq.Messages))
 
-		// 预处理：移除空 signature 字段，预防 400 错误
-		// modified 表示请求体是否被修改，详细日志由 RemoveEmptySignatures 内部记录
-		bodyBytes, modified := common.RemoveEmptySignaturesWithContext(c, bodyBytes, envCfg.EnableRequestLogs, "Messages")
-		_ = modified // 保留以便未来扩展（如需在 handler 层面做额外处理）
-
-		// 预处理：清理历史 thinking 内容块/字段，预防上游参数校验 400
-		bodyBytes, thinkingModified := common.SanitizeMalformedThinkingBlocksWithContext(c, bodyBytes, envCfg.EnableRequestLogs, "Messages")
-		_ = thinkingModified // 保留以便未来扩展（如需在 handler 层面做额外处理）
-
 		// 入口保留原始请求体；按渠道在发往上游前决定是否做渠道级预处理（如规范化 metadata.user_id）
 		c.Set("requestBodyBytes", bodyBytes)
 
@@ -489,7 +480,13 @@ func handleNormalResponse(
 		common.RequestLogf(c, "[Messages-Protocol-Debug] 写回前响应头: client_content_type=%q", c.Writer.Header().Get("Content-Type"))
 	}
 
-	c.JSON(200, claudeResp)
+	if upstream != nil && upstream.ServiceType == "claude" && !upstream.PassbackReasoningContent && !upstream.PassbackThinkingBlocks && !upstream.LowQuality && !envCfg.RewriteResponseModel {
+		// 解析结果仅供统计和会话使用；原生响应保留上游完整字段与 usage。
+		utils.ForwardContentType(resp.Header, c.Writer)
+		c.Data(resp.StatusCode, c.Writer.Header().Get("Content-Type"), bodyBytes)
+	} else {
+		c.JSON(200, claudeResp)
+	}
 	if normalProtocolDebugEnabled(envCfg) {
 		common.RequestLogf(c, "[Messages-Protocol-Debug] 写回后响应头: client_content_type=%q, written=%t", c.Writer.Header().Get("Content-Type"), c.Writer.Written())
 	}

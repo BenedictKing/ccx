@@ -136,8 +136,9 @@ func TestResponsesEntry_RequestMatrix_PreservesKeyParams(t *testing.T) {
 	t.Run("responses_passthrough_strips_internal_metadata", func(t *testing.T) {
 		c := newGinContext(http.MethodPost, "/v1/responses", []byte(`{"model":"gpt-5","input":[{"type":"message","role":"user","content":[{"type":"input_text","text":"hi"}],"internal_chat_message_metadata_passthrough":{"conversation_id":"local"},"status":"completed"}],"internal_chat_message_metadata_passthrough":{"conversation_id":"local"},"transformer_metadata":{"codex_tool_compat_enabled":false}}`), context.Background())
 		upstream := &config.UpstreamConfig{
-			BaseURL:     "https://api.example.com",
-			ServiceType: "responses",
+			BaseURL:                    "https://api.example.com",
+			ServiceType:                "responses",
+			CodexNativeToolPassthrough: true,
 		}
 
 		provider := &ResponsesProvider{}

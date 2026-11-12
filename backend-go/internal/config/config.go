@@ -48,6 +48,7 @@ type UpstreamConfig struct {
 	// Codex 工具兼容开关（默认 false）。
 	// 透传分支中将 Codex 原生工具转换为 OpenAI function 格式（默认 false）。
 	CodexNativeToolPassthrough bool  `json:"codexNativeToolPassthrough,omitempty"`
+	ResponsesReasoningFold     bool  `json:"responsesReasoningFold,omitempty"` // 显式启用 Responses 推理续轮折叠（默认 false）
 	CodexToolCompat            *bool `json:"codexToolCompat,omitempty"`
 	// Deprecated: 使用 codexToolCompat；保留旧字段仅用于配置读取和旧前端写入兼容。
 	StripCodexClientTools bool `json:"stripCodexClientTools,omitempty"`
@@ -64,7 +65,7 @@ type UpstreamConfig struct {
 	AutoBlacklistBalance   *bool `json:"autoBlacklistBalance,omitempty"`   // 余额不足时自动拉黑 Key（默认 true）
 	CircuitBreakerDisabled bool  `json:"circuitBreakerDisabled,omitempty"` // 禁用此渠道的自动熔断；不影响鉴权/余额拉黑与限速 cooldown
 	// Claude Messages metadata.user_id 规范化开关
-	NormalizeMetadataUserID *bool `json:"normalizeMetadataUserId,omitempty"` // 规范化 metadata.user_id（默认 true）
+	NormalizeMetadataUserID *bool `json:"normalizeMetadataUserId,omitempty"` // 规范化 metadata.user_id（默认 false）
 	// Messages 渠道级移除计费头：转发前从 system 数组移除 cch=xxx; 计费参数（默认关闭）
 	StripBillingHeader *bool `json:"stripBillingHeader,omitempty"`
 	// Claude 协议空文本兼容
@@ -399,10 +400,10 @@ func (u *UpstreamConfig) IsKeyModelDisabledNow(apiKey, model string, now time.Ti
 	return false
 }
 
-// IsNormalizeMetadataUserIDEnabled 检查 metadata.user_id 规范化是否启用（默认 true）
+// IsNormalizeMetadataUserIDEnabled 检查 metadata.user_id 规范化是否启用（默认 false）
 func (u *UpstreamConfig) IsNormalizeMetadataUserIDEnabled() bool {
 	if u.NormalizeMetadataUserID == nil {
-		return true
+		return false
 	}
 	return *u.NormalizeMetadataUserID
 }
@@ -485,6 +486,7 @@ type UpstreamUpdate struct {
 	FastMode                      *bool                              `json:"fastMode"`
 	NormalizeNonstandardChatRoles *bool                              `json:"normalizeNonstandardChatRoles"`
 	CodexNativeToolPassthrough    *bool                              `json:"codexNativeToolPassthrough"`
+	ResponsesReasoningFold        *bool                              `json:"responsesReasoningFold"`
 	CodexToolCompat               *bool                              `json:"codexToolCompat"`
 	StripCodexClientTools         *bool                              `json:"stripCodexClientTools"`
 	StripImageGenerationTool      *bool                              `json:"stripImageGenerationTool"`

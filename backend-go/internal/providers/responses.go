@@ -61,14 +61,25 @@ func (p *ResponsesProvider) ConvertBodyToProviderRequest(
 		p.SessionManager = newDefaultSessionManager()
 	}
 
-	providerReq, reqBodyForURL, err := p.buildProviderRequestBody(c, requestPath, bodyBytes, upstream)
-	if err != nil {
-		return nil, bodyBytes, err
-	}
-
-	reqBody, err := utils.MarshalJSONNoEscape(providerReq)
-	if err != nil {
-		return nil, bodyBytes, fmt.Errorf("序列化请求失败: %w", err)
+	// 默认原生请求不进入转换器，也不重编码正文。
+	reqBody, reqBodyForURL := bodyBytes, bodyBytes
+	native := upstream.ServiceType == "responses" || upstream.ServiceType == "copilot"
+	rewrite := len(upstream.ModelMapping) > 0 || len(upstream.ReasoningMapping) > 0 ||
+		upstream.ReasoningParamStyle == "thinking" || upstream.ReasoningParamStyle == "reasoning_effort" ||
+		upstream.CodexNativeToolPassthrough || upstream.IsCodexToolCompatEnabled() || upstream.StripImageGenerationTool ||
+		upstream.TextVerbosity != "" || upstream.FastMode
+	if native && !rewrite && !strings.HasSuffix(requestPath, "/v1/messages") && json.Valid(bodyBytes) {
+		resetCodexToolContext(c)
+	} else {
+		providerReq, urlBody, err := p.buildProviderRequestBody(c, requestPath, bodyBytes, upstream)
+		if err != nil {
+			return nil, bodyBytes, err
+		}
+		reqBodyForURL = urlBody
+		reqBody, err = utils.MarshalJSONNoEscape(providerReq)
+		if err != nil {
+			return nil, bodyBytes, fmt.Errorf("序列化请求失败: %w", err)
+		}
 	}
 
 	targetURL, err := p.buildRequestURL(upstream, reqBodyForURL)
@@ -94,6 +105,9 @@ func (p *ResponsesProvider) ConvertBodyToProviderRequest(
 	}
 
 	req.Header = utils.PrepareUpstreamHeaders(c, req.URL.Host)
+	if upstream.ServiceType == "responses" && !strings.HasSuffix(requestPath, "/v1/messages") {
+		utils.ForwardRequestQuery(req.URL, c.Request.URL)
+	}
 	req.Header.Del("authorization")
 	req.Header.Del("x-api-key")
 	req.Header.Del("x-goog-api-key")
@@ -129,6 +143,7 @@ func (p *ResponsesProvider) ConvertBodyToProviderRequest(
 }
 
 func (p *ResponsesProvider) buildProviderRequestBody(c *gin.Context, requestPath string, bodyBytes []byte, upstream *config.UpstreamConfig) (interface{}, []byte, error) {
+	resetCodexToolContext(c)
 	if strings.HasSuffix(requestPath, "/v1/messages") {
 		responsesReq, err := p.buildResponsesRequestFromClaude(c, bodyBytes, upstream)
 		if err != nil {
@@ -137,14 +152,63 @@ func (p *ResponsesProvider) buildProviderRequestBody(c *gin.Context, requestPath
 		return responsesReq, bodyBytes, nil
 	}
 
+	return p.buildResponsesProviderRequestBody(c, bodyBytes, upstream)
+}
+
+func resetCodexToolContext(c *gin.Context) {
+	if c != nil {
+		c.Set("codex_tool_context", nil)
+		c.Set("codex_additional_tools_hoisted", false)
+		c.Set("codex_merged_raw_tools", nil)
+	}
+}
+
+func (p *ResponsesProvider) buildResponsesProviderRequestBody(c *gin.Context, bodyBytes []byte, upstream *config.UpstreamConfig) (interface{}, []byte, error) {
 	var hoistedTools []interface{}
 	var hoisted bool
 	var rawRequest map[string]interface{}
-	if err := json.Unmarshal(bodyBytes, &rawRequest); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(bodyBytes))
+	decoder.UseNumber()
+	if err := decoder.Decode(&rawRequest); err != nil {
 		return nil, nil, fmt.Errorf("解析 Responses 请求失败: %w", err)
 	}
-	hoistedTools, hoisted = hoistCodexAdditionalTools(c, rawRequest)
-	if hoisted {
+	// 原生透传保留工具声明的历史位置；兼容提升只由协议转换或显式开关触发。
+	converter := converters.NewConverter(upstream.ServiceType)
+	_, passthrough := converter.(*converters.ResponsesPassthroughConverter)
+	sess := &session.Session{}
+	if previous := toString(rawRequest["previous_response_id"]); !passthrough && previous != "" {
+		if p.SessionManager == nil {
+			return nil, nil, fmt.Errorf("session manager unavailable")
+		}
+		saved, err := p.SessionManager.GetSessionByResponseID(previous)
+		if err != nil {
+			return nil, nil, fmt.Errorf("get session failed: %w", err)
+		}
+		// 拼接快照后再归一化，避免续轮漏掉此前的增量声明；不改写持久历史。
+		data, err := json.Marshal(saved.Messages)
+		if err != nil {
+			return nil, nil, err
+		}
+		var history []interface{}
+		if err = json.Unmarshal(data, &history); err != nil {
+			return nil, nil, err
+		}
+		switch input := rawRequest["input"].(type) {
+		case string:
+			history = append(history, map[string]interface{}{"type": "message", "role": "user", "content": input})
+		case []interface{}:
+			history = append(history, input...)
+		default:
+			return nil, nil, fmt.Errorf("不支持的 input 类型: %T", input)
+		}
+		rawRequest["input"] = history
+		sess = &session.Session{}
+	}
+	if !passthrough || upstream.IsCodexToolCompatEnabled() || upstream.CodexNativeToolPassthrough {
+		hoistedTools, hoisted = hoistCodexAdditionalTools(c, rawRequest)
+	}
+
+	if hoisted || !passthrough {
 		normalized, err := utils.MarshalJSONNoEscape(rawRequest)
 		if err != nil {
 			return nil, nil, err
@@ -152,17 +216,14 @@ func (p *ResponsesProvider) buildProviderRequestBody(c *gin.Context, requestPath
 		bodyBytes = normalized
 	}
 	var providerReq interface{}
-	converter := converters.NewConverter(upstream.ServiceType)
 
 	if _, ok := converter.(*converters.ResponsesPassthroughConverter); ok {
-		var reqMap map[string]interface{}
-		if err := json.Unmarshal(bodyBytes, &reqMap); err != nil {
-			return nil, nil, fmt.Errorf("透传模式下解析请求失败: %w", err)
-		}
-		normalizeResponsesInputForPassthrough(reqMap)
+		reqMap := rawRequest
 		if upstream.CodexNativeToolPassthrough {
+			normalizeResponsesInputForPassthrough(reqMap)
 			convertCodexToolsForPassthrough(reqMap)
 		} else if upstream.IsCodexToolCompatEnabled() {
+			normalizeResponsesInputForPassthrough(reqMap)
 			stripCodexClientOnlyTools(reqMap)
 		}
 		if upstream.StripImageGenerationTool {
@@ -182,7 +243,6 @@ func (p *ResponsesProvider) buildProviderRequestBody(c *gin.Context, requestPath
 				// 默认样式保持原样透传（原始 reasoning 对象直接转发）
 			}
 		}
-		config.NormalizeReasoningObjectForUpstream(reqMap, upstream)
 		if upstream.TextVerbosity != "" {
 			reqMap["text"] = map[string]interface{}{"verbosity": upstream.TextVerbosity}
 		}
@@ -194,19 +254,6 @@ func (p *ResponsesProvider) buildProviderRequestBody(c *gin.Context, requestPath
 		var responsesReq types.ResponsesRequest
 		if err := json.Unmarshal(bodyBytes, &responsesReq); err != nil {
 			return nil, nil, fmt.Errorf("解析 Responses 请求失败: %w", err)
-		}
-
-		var (
-			sess *session.Session
-			err  error
-		)
-		if responsesReq.PreviousResponseID != "" {
-			sess, err = p.SessionManager.GetOrCreateSession(responsesReq.PreviousResponseID)
-			if err != nil {
-				return nil, nil, fmt.Errorf("get session failed: %w", err)
-			}
-		} else {
-			sess = &session.Session{}
 		}
 
 		originalModel := responsesReq.Model

@@ -47,14 +47,14 @@ func handleSuccess(
 			}
 		}
 	}
-	if rawTools, ok := c.Get("codex_merged_raw_tools"); ok && upstreamType != "responses" {
+	if rawTools, ok := c.Get("codex_merged_raw_tools"); ok && rawTools != nil && upstreamType != "responses" {
 		if injected, err := sjson.SetBytes(originalRequestJSON, "tools", rawTools); err == nil {
 			originalRequestJSON = injected
 		}
 	}
 
 	if isStream {
-		if upstreamType == "responses" {
+		if upstreamType == "responses" && upstream != nil && (upstream.ResponsesReasoningFold || upstream.CodexNativeToolPassthrough || upstream.IsCodexToolCompatEnabled()) {
 			return handleFoldedResponsesStreamSuccess(c, resp, provider, upstream, apiKey, envCfg, sessionManager, originalReq, originalRequestJSON, lowQuality)
 		}
 		return handleStreamSuccess(c, resp, upstreamType, envCfg, sessionManager, startTime, originalReq, originalRequestJSON, timeouts, lowQuality)
@@ -174,7 +174,22 @@ func handleSuccess(
 	}
 
 	utils.ForwardResponseHeaders(resp.Header, c.Writer)
-	c.JSON(200, responsesResp)
+	if upstreamType == "responses" {
+		// 原生响应只按显式选项修改对应字段，避免 typed round-trip 丢失扩展。
+		if originalReq != nil && originalReq.TransformerMetadata["codex_tool_compat_enabled"] == true {
+			bodyBytes, _ = sjson.SetBytes(bodyBytes, "output", responsesResp.Output)
+		}
+		if lowQuality {
+			bodyBytes, _ = sjson.SetBytes(bodyBytes, "usage", responsesResp.Usage)
+		}
+		if envCfg.RewriteResponseModel && originalReq != nil && originalReq.Model != "" {
+			bodyBytes, _ = sjson.SetBytes(bodyBytes, "model", originalReq.Model)
+		}
+		utils.ForwardContentType(resp.Header, c.Writer)
+		c.Data(resp.StatusCode, c.Writer.Header().Get("Content-Type"), bodyBytes)
+	} else {
+		c.JSON(200, responsesResp)
+	}
 
 	return metricsUsage, nil
 }

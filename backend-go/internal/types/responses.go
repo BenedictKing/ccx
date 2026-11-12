@@ -1,5 +1,7 @@
 package types
 
+import "encoding/json"
+
 // ============== Responses API 类型定义 ==============
 
 // ResponsesRequest Responses API 请求
@@ -50,6 +52,18 @@ type ResponsesItem struct {
 	EncryptedContent string `json:"encrypted_content,omitempty"`
 	// 部分 Codex 端点返回分段加密工具参数，仅可由支持该字段的上游解密。
 	EncryptedFunctionArgs []string `json:"encrypted_function_args,omitempty"`
+}
+
+// MarshalJSON 保留合法的空 custom 输入；其他 item 维持既有 omitempty 语义。
+func (item ResponsesItem) MarshalJSON() ([]byte, error) {
+	type alias ResponsesItem
+	if item.Type == "custom_tool_call" {
+		return json.Marshal(struct {
+			alias
+			Input string `json:"input"`
+		}{alias: alias(item), Input: item.Input})
+	}
+	return json.Marshal(alias(item))
 }
 
 // ContentBlock 内容块（用于嵌套 content 数组）

@@ -465,7 +465,7 @@ func TestNormalizeMetadataUserIDDefaultsAndUpdate(t *testing.T) {
 	defer cm.Close()
 
 	cfg := cm.GetConfig()
-	if got := cfg.Upstream[0].IsNormalizeMetadataUserIDEnabled(); got != true {
+	if got := cfg.Upstream[0].IsNormalizeMetadataUserIDEnabled(); got != false {
 		t.Fatalf("default IsNormalizeMetadataUserIDEnabled() = %v, want false", got)
 	}
 

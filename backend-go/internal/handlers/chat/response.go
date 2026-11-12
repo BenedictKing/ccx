@@ -134,7 +134,8 @@ func handleSuccess(
 		}
 		// 透传原始响应体（保留上游字段，避免 marshal 丢失）
 		utils.ForwardResponseHeaders(resp.Header, c.Writer)
-		c.Data(resp.StatusCode, "application/json", bodyBytes)
+		utils.ForwardContentType(resp.Header, c.Writer)
+		c.Data(resp.StatusCode, c.Writer.Header().Get("Content-Type"), bodyBytes)
 		if u, ok := respMap["usage"].(map[string]interface{}); ok {
 			promptTokens, _ := u["prompt_tokens"].(float64)
 			completionTokens, _ := u["completion_tokens"].(float64)

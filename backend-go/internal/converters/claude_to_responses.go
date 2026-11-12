@@ -380,6 +380,9 @@ func (st *claudeToResponsesState) startToolUse(callID, name string, nextSeq func
 		item, _ = sjson.Set(item, "item.id", st.CurrentToolItemID)
 		item, _ = sjson.Set(item, "item.call_id", st.CurrentToolCallID)
 		item, _ = sjson.Set(item, "item.name", st.CodexCtx.OriginalCustomToolName(name))
+		if namespace := st.CodexCtx.CustomToolNamespace(name); namespace != "" {
+			item, _ = sjson.Set(item, "item.namespace", namespace)
+		}
 		return []string{emitResponsesEvent("response.output_item.added", item)}
 	}
 
@@ -455,16 +458,23 @@ func (st *claudeToResponsesState) closeToolUse(nextSeq func() int) []string {
 		itemDone, _ = sjson.Set(itemDone, "item.id", st.CurrentToolItemID)
 		itemDone, _ = sjson.Set(itemDone, "item.call_id", st.CurrentToolCallID)
 		itemDone, _ = sjson.Set(itemDone, "item.name", originalName)
+		if namespace := st.CodexCtx.CustomToolNamespace(st.CurrentToolName); namespace != "" {
+			itemDone, _ = sjson.Set(itemDone, "item.namespace", namespace)
+		}
 		itemDone, _ = sjson.Set(itemDone, "item.input", customInput)
 
-		st.CompletedOutput = append(st.CompletedOutput, map[string]interface{}{
+		customItem := map[string]interface{}{
 			"id":      st.CurrentToolItemID,
 			"type":    "custom_tool_call",
 			"status":  "completed",
 			"call_id": st.CurrentToolCallID,
 			"name":    originalName,
 			"input":   customInput,
-		})
+		}
+		if namespace := st.CodexCtx.CustomToolNamespace(st.CurrentToolName); namespace != "" {
+			customItem["namespace"] = namespace
+		}
+		st.CompletedOutput = append(st.CompletedOutput, customItem)
 
 		st.ActiveItemType = ""
 		return []string{

@@ -209,12 +209,12 @@ func TestBuildJSONRequestBody_NullBodyDoesNotPanic(t *testing.T) {
 	if contentType != "application/json" {
 		t.Fatalf("unexpected content type: %s", contentType)
 	}
-	if string(body) != `{"model":"gpt-image-2"}` {
+	if string(body) != `null` {
 		t.Fatalf("unexpected request body: %s", string(body))
 	}
 }
 
-func TestBuildOperationRequest_AddsDefaultModelToMultipart(t *testing.T) {
+func TestBuildOperationRequest_PreservesMultipartWithoutModel(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
@@ -240,8 +240,8 @@ func TestBuildOperationRequest_AddsDefaultModelToMultipart(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read request body: %v", err)
 	}
-	if !strings.Contains(string(requestBody), "gpt-image-2") {
-		t.Fatalf("default model was not injected into multipart body: %s", string(requestBody))
+	if !bytes.Equal(requestBody, body.Bytes()) || req.Header.Get("Content-Type") != contentType {
+		t.Fatalf("default multipart request changed: %s", string(requestBody))
 	}
 }
 

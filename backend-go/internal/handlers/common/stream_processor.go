@@ -3,6 +3,7 @@ package common
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -542,8 +543,9 @@ type StreamContext struct {
 	LastEventAt       time.Time // 最近一次本地处理 SSE 事件的时间
 	LastEventSummary  string    // 最近一次 SSE 事件摘要，不包含正文或参数
 	// 低质量渠道处理
-	RequestModel string // 请求中的 model（用于一致性检查）
-	LowQuality   bool   // 是否为低质量渠道
+	RequestModel      string // 请求中的 model（用于一致性检查）
+	LowQuality        bool   // 是否为低质量渠道
+	NativePassthrough bool   // 原生协议只观察，不重写事件
 	// 隐式缓存推断
 	MessageStartInputTokens int // message_start 事件中的 input_tokens（用于推断隐式缓存）
 	ResponseText            string
@@ -817,6 +819,26 @@ func ProcessStreamEvent(
 	recordRawStreamEvent(ctx, event)
 	if ctx.ThinkingCollector != nil {
 		ctx.ThinkingCollector.ProcessEvent(event)
+	}
+	if ctx.NativePassthrough {
+		ExtractTextFromEvent(event, &ctx.OutputTextBuffer)
+		ctx.ResponseText = ctx.OutputTextBuffer.String()
+		if ctx.ToolCallTracker != nil {
+			ctx.ToolCallTracker.ProcessClaudeEvent(event)
+		}
+		hasUsage, _, _, usage := checkEventUsageStatusWithLogTag(event, false, ctx.LogTag)
+		if hasUsage {
+			ctx.HasUsage = true
+			updateCollectedUsage(&ctx.CollectedUsage, usage)
+		}
+		if !ctx.ClientGone {
+			if _, err := w.Write([]byte(event)); err != nil {
+				ctx.ClientGone = true
+			} else {
+				flusher.Flush()
+			}
+		}
+		return
 	}
 
 	// 如果已截断（注入了 end_turn），后续事件只消费不转发
@@ -1250,7 +1272,17 @@ func HandleStreamResponse(
 ) (*types.Usage, error) {
 	defer resp.Body.Close()
 
-	eventChan, errChan, err := provider.HandleStreamResponse(resp.Body)
+	native := upstream.ServiceType == "claude" && !upstream.PassbackReasoningContent && !upstream.PassbackThinkingBlocks && !upstream.LowQuality && !envCfg.RewriteResponseModel
+	var eventChan <-chan string
+	var errChan <-chan error
+	var err error
+	if native {
+		streamCtx, cancel := context.WithCancel(c.Request.Context())
+		defer cancel()
+		eventChan, errChan = nativeSSEEvents(streamCtx, resp.Body)
+	} else {
+		eventChan, errChan, err = provider.HandleStreamResponse(resp.Body)
+	}
 	if err != nil {
 		c.JSON(500, gin.H{"error": "Failed to handle stream response"})
 		return nil, err
@@ -1309,6 +1341,7 @@ func HandleStreamResponse(
 	ctx := NewStreamContext(envCfg)
 	ctx.RequestModel = requestModel
 	ctx.LowQuality = upstream.LowQuality
+	ctx.NativePassthrough = native
 	ctx.LogTag = RequestLogTag(c)
 	if thinkingcache.ShouldTrackClaudeThinking(upstream, requestBody) {
 		if sessionID := utils.ExtractUnifiedSessionID(c, requestBody); sessionID != "" {

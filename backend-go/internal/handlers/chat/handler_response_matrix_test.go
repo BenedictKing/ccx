@@ -123,8 +123,12 @@ func TestChatHandler_NonStreamMatrix_OpenAIFormat(t *testing.T) {
 				t.Fatalf("status = %d, want %d, body=%s", w.Code, http.StatusOK, w.Body.String())
 			}
 
-			if got := w.Header().Get("Content-Type"); got != "application/json" {
-				t.Fatalf("Content-Type = %q, want JSON despite upstream text/plain", got)
+			wantContentType := "application/json"
+			if tt.serviceType == "openai" {
+				wantContentType = "text/plain; charset=utf-8"
+			}
+			if got := w.Header().Get("Content-Type"); got != wantContentType {
+				t.Fatalf("Content-Type = %q, want %q", got, wantContentType)
 			}
 
 			var resp struct {

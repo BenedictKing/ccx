@@ -65,11 +65,12 @@ func HoistCodexAdditionalTools(reqMap map[string]interface{}) ([]interface{}, Co
 		}
 		switch stringFromInterface(item["type"]) {
 		case "custom_tool_call":
-			upstreamName, argsJSON := BuildCustomToolCallHistoryArguments(ctx, stringFromInterface(item["name"]), stringFromInterface(item["input"]))
+			upstreamName, argsJSON := BuildCustomToolCallHistoryArguments(ctx, stringFromInterface(item["name"]), stringFromInterface(item["input"]), stringFromInterface(item["namespace"]))
 			item["type"] = "function_call"
 			rewriteResponsesItemIDPrefix(item, "ctc_", "fc_")
 			item["name"] = upstreamName
 			delete(item, "input")
+			delete(item, "namespace")
 			item["arguments"] = argsJSON
 			kept[i] = item
 		case "custom_tool_call_output":
@@ -91,7 +92,9 @@ func HoistCodexAdditionalTools(reqMap map[string]interface{}) ([]interface{}, Co
 
 	reqMap["input"] = kept
 	reqMap["tools"] = hoisted
-	reqMap["tool_choice"] = ConvertToolChoiceForCodex(reqMap["tool_choice"], ctx)
+	if choice, ok := reqMap["tool_choice"]; ok {
+		reqMap["tool_choice"] = ConvertToolChoiceForCodex(choice, ctx)
+	}
 
 	return harvested, ctx, true
 }

@@ -17,7 +17,7 @@ func TestResponsesAdditionalToolsAcrossProtocols(t *testing.T) {
 	for _, protocol := range []string{"responses", "openai", "claude", "gemini"} {
 		t.Run(protocol, func(t *testing.T) {
 			c := newGinContext(http.MethodPost, "/v1/responses", []byte(body), context.Background())
-			upstream := &config.UpstreamConfig{BaseURL: "https://example.com", ServiceType: protocol}
+			upstream := &config.UpstreamConfig{BaseURL: "https://example.com", ServiceType: protocol, CodexNativeToolPassthrough: protocol == "responses"}
 			req, _, err := (&ResponsesProvider{}).ConvertToProviderRequest(c, upstream, "test-key")
 			if err != nil {
 				t.Fatal(err)
@@ -57,7 +57,7 @@ func TestAdditionalToolsHistoryReplay(t *testing.T) {
 	const body = `{"model":"test","input":[{"type":"additional_tools","tools":[{"type":"namespace","name":"functions","tools":[{"type":"custom","name":"exec"},{"type":"function","name":"read","parameters":{"type":"object"}}]}]},{"type":"custom_tool_call","call_id":"call_1","name":"exec","input":"print(1)"},{"type":"custom_tool_call_output","call_id":"call_1","output":"1"},{"type":"function_call","call_id":"call_2","name":"read","namespace":"functions","arguments":"{}"},{"type":"function_call_output","call_id":"call_2","output":"file"}]}`
 	for _, protocol := range []string{"responses", "openai", "claude", "gemini"} {
 		c := newGinContext(http.MethodPost, "/v1/responses", []byte(body), context.Background())
-		req, _, err := (&ResponsesProvider{}).ConvertToProviderRequest(c, &config.UpstreamConfig{BaseURL: "https://example.com", ServiceType: protocol}, "key")
+		req, _, err := (&ResponsesProvider{}).ConvertToProviderRequest(c, &config.UpstreamConfig{BaseURL: "https://example.com", ServiceType: protocol, CodexNativeToolPassthrough: protocol == "responses"}, "key")
 		if err != nil {
 			t.Fatalf("%s: %v", protocol, err)
 		}

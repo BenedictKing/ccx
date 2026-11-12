@@ -535,6 +535,9 @@ func buildProviderRequest(
 	}
 
 	// 使用统一的头部处理逻辑（透明代理）
+	if upstream.ServiceType == "gemini" {
+		utils.ForwardRequestQuery(req.URL, c.Request.URL)
+	}
 	// 保留客户端的大部分 headers，只移除/替换必要的认证和代理相关 headers
 	req.Header = utils.PrepareUpstreamHeaders(c, req.URL.Host)
 
@@ -696,7 +699,13 @@ func handleSuccess(
 		return nil, nil
 	}
 
-	c.Data(resp.StatusCode, "application/json", respBytes)
+	if upstreamType == "gemini" {
+		utils.ForwardResponseHeaders(resp.Header, c.Writer)
+		utils.ForwardContentType(resp.Header, c.Writer)
+		c.Data(resp.StatusCode, c.Writer.Header().Get("Content-Type"), bodyBytes)
+	} else {
+		c.Data(resp.StatusCode, "application/json", respBytes)
+	}
 
 	// 提取 usage 统计
 	var usage *types.Usage

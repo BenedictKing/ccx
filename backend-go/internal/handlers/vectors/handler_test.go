@@ -1330,16 +1330,16 @@ func TestGetChannelModelsFailureLogDoesNotLeakTemporaryBaseURL(t *testing.T) {
 	}
 }
 
-func TestBuildEmbeddingsRequestBodyStripsClientStreamField(t *testing.T) {
+func TestBuildEmbeddingsRequestBodyPreservesClientFields(t *testing.T) {
 	tests := []struct {
 		name       string
 		body       string
 		wantStream bool
 	}{
-		{name: "stream true", body: `{"model":"text-embedding-3-small","input":"hello","stream":true}`, wantStream: false},
-		{name: "stream false", body: `{"model":"text-embedding-3-small","input":"hello","stream":false}`, wantStream: false},
+		{name: "stream true", body: `{"model":"text-embedding-3-small","input":"hello","stream":true}`, wantStream: true},
+		{name: "stream false", body: `{"model":"text-embedding-3-small","input":"hello","stream":false}`, wantStream: true},
 		{name: "no stream field", body: `{"model":"text-embedding-3-small","input":"hello"}`, wantStream: false},
-		{name: "stream string", body: `{"model":"text-embedding-3-small","input":"hello","stream":"true"}`, wantStream: false},
+		{name: "stream string", body: `{"model":"text-embedding-3-small","input":"hello","stream":"true"}`, wantStream: true},
 	}
 
 	for _, tt := range tests {
@@ -1365,7 +1365,7 @@ func TestBuildEmbeddingsRequestBodyStripsClientStreamField(t *testing.T) {
 	}
 }
 
-func TestHandlerStripsStreamFieldBeforeForwardingToUpstream(t *testing.T) {
+func TestHandlerPreservesStreamFieldBeforeForwardingToUpstream(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	cfgManager := newVectorsTestConfigManager(t)
 	defer cfgManager.Close()
@@ -1402,8 +1402,8 @@ func TestHandlerStripsStreamFieldBeforeForwardingToUpstream(t *testing.T) {
 	if err := json.Unmarshal(upstreamBody, &forwarded); err != nil {
 		t.Fatalf("unmarshal forwarded body: %v", err)
 	}
-	if _, exists := forwarded["stream"]; exists {
-		t.Fatalf("upstream body should not contain stream field, got: %s", string(upstreamBody))
+	if forwarded["stream"] != true {
+		t.Fatalf("upstream body should preserve stream field, got: %s", string(upstreamBody))
 	}
 	if got := forwarded["model"]; got != "text-embedding-3-small" {
 		t.Fatalf("upstream model = %v, want text-embedding-3-small", got)

@@ -562,7 +562,8 @@ func TestResponsesProvider_ConvertToClaudeResponse_StripsEmptyReadPages(t *testi
 func TestResponsesProvider_BuildProviderRequestBody_NormalizesPassthroughInputTextTypes(t *testing.T) {
 	provider := &ResponsesProvider{}
 	upstream := &config.UpstreamConfig{
-		ServiceType: "responses",
+		ServiceType:                "responses",
+		CodexNativeToolPassthrough: true,
 	}
 
 	body := []byte(`{

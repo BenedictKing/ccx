@@ -250,6 +250,11 @@ func TryUpstreamWithAllKeys(
 			if shouldNormalizeMetadataUserID(kind, upstream) {
 				attemptBody = NormalizeMetadataUserID(attemptBody)
 			}
+			// 宽松校验修复只在显式空文本兼容模式下执行，不改写默认 Messages 请求。
+			if kind == scheduler.ChannelKindMessages && upstream.StripEmptyTextBlocks {
+				attemptBody, _ = RemoveEmptySignaturesWithContext(c, attemptBody, envCfg.EnableRequestLogs, "Messages")
+				attemptBody, _ = SanitizeMalformedThinkingBlocksWithContext(c, attemptBody, envCfg.EnableRequestLogs, "Messages")
+			}
 			// Claude Messages 入口：将 messages 中的 system 角色抽回顶层 system 字段。
 			// 在 provider 分发前统一处理，使所有上游类型（claude/openai/gemini/responses）均生效，
 			// 兼容 Opus 4.8 / Fable 5 等将 system 作为消息 role 发送、而旧上游仅支持 user/assistant 的情况。

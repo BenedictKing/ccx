@@ -393,7 +393,7 @@ func buildOperationRequest(
 
 	if isMultipartContentType(contentType) {
 		originalModel, hasModelField := extractMultipartField(bodyBytes, contentType, "model")
-		if redirectedModel != "" && (!hasModelField || strings.TrimSpace(originalModel) == "" || redirectedModel != originalModel) {
+		if redirectedModel != "" && redirectedModel != model && (!hasModelField || redirectedModel != originalModel) {
 			requestBody, requestContentType, err = rewriteMultipartFormField(bodyBytes, contentType, "model", redirectedModel)
 			if err != nil {
 				stage, reason := describeMultipartDiagnostic(err)
@@ -421,9 +421,7 @@ func buildOperationRequest(
 		logImagesBuildRequestFailure(c, operation, baseURL, apiKey, redirectedModel, requestContentType, requestBody, "new_request", "request_init_failed", err)
 		return nil, err
 	}
-	if c.Request.URL != nil {
-		req.URL.RawQuery = c.Request.URL.RawQuery
-	}
+	utils.ForwardRequestQuery(req.URL, c.Request.URL)
 	req.Header = prepareImagesUpstreamHeaders(c, req.URL.Host, requestContentType)
 	utils.SetAuthenticationHeader(req.Header, apiKey)
 	utils.ApplyCustomHeaders(req.Header, upstream.CustomHeaders)
@@ -441,7 +439,7 @@ func buildOperationURL(baseURL string, operation string) string {
 }
 
 func buildJSONRequestBody(bodyBytes []byte, model string, redirectedModel string, operation string) ([]byte, string, error) {
-	var reqMap map[string]interface{}
+	var reqMap map[string]json.RawMessage
 	if err := json.Unmarshal(bodyBytes, &reqMap); err != nil {
 		if operation == operationGenerations {
 			return nil, "", err
@@ -449,11 +447,12 @@ func buildJSONRequestBody(bodyBytes []byte, model string, redirectedModel string
 		return bodyBytes, "application/json", nil
 	}
 	if reqMap == nil {
-		reqMap = make(map[string]interface{})
+		reqMap = make(map[string]json.RawMessage)
 	}
-	if model != "" && redirectedModel != "" {
-		reqMap["model"] = redirectedModel
+	if model == redirectedModel || model == "" || redirectedModel == "" {
+		return bodyBytes, "application/json", nil
 	}
+	reqMap["model"], _ = json.Marshal(redirectedModel)
 	requestBody, err := json.Marshal(reqMap)
 	if err != nil {
 		return nil, "", err

@@ -87,9 +87,22 @@ func responsesToolsToOpenAI(tools []map[string]interface{}) []map[string]interfa
 		if description != "" {
 			openaiTool["function"].(map[string]interface{})["description"] = description
 		}
+		copyResponsesToolStrict(openaiTool["function"].(map[string]interface{}), tool)
 		openaiTools = append(openaiTools, openaiTool)
 	}
 	return openaiTools
+}
+
+func copyResponsesToolStrict(function, tool map[string]interface{}) {
+	strict, exists := tool["strict"]
+	if !exists {
+		if nested, ok := tool["function"].(map[string]interface{}); ok {
+			strict, exists = nested["strict"]
+		}
+	}
+	if exists {
+		function["strict"] = strict
+	}
 }
 
 func responsesToolsToClaude(tools []map[string]interface{}) []map[string]interface{} {

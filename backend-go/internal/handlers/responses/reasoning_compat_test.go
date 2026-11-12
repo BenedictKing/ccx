@@ -23,7 +23,7 @@ func TestReasoningDeltasAreSemanticContentAndFilteredFromCompact(t *testing.T) {
 	}
 }
 
-func TestReasoningHTTPNormalization(t *testing.T) {
+func TestNativeReasoningHTTPPreservesUpstreamForm(t *testing.T) {
 	for _, stream := range []bool{false, true} {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if stream {
@@ -41,11 +41,11 @@ func TestReasoningHTTPNormalization(t *testing.T) {
 		}
 		w := performResponsesHandlerRequest(t, router, body)
 		server.Close()
-		if w.Code != 200 || !strings.Contains(w.Body.String(), "summary_text") || strings.Contains(w.Body.String(), `"type":"reasoning_text"`) {
+		if w.Code != 200 || strings.Contains(w.Body.String(), "summary_text") || !strings.Contains(w.Body.String(), `"type":"reasoning_text"`) {
 			t.Fatalf("stream=%t response=%d %s", stream, w.Code, w.Body.String())
 		}
-		if stream && !strings.Contains(w.Body.String(), "event: response.reasoning_summary_text.delta") {
-			t.Fatalf("event name not normalized: %s", w.Body.String())
+		if stream && !strings.Contains(w.Body.String(), "event: response.reasoning_text.delta") {
+			t.Fatalf("upstream event name changed: %s", w.Body.String())
 		}
 	}
 }

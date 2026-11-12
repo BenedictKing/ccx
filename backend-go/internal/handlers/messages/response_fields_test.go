@@ -29,7 +29,7 @@ func TestMessagesHandlerPreservesClaudeResponseFields(t *testing.T) {
 			t.Errorf("%s = %s, want %s", key, got, want)
 		}
 	}
-	if got := w.Header().Get("Content-Type"); got != "application/json; charset=utf-8" {
+	if got := w.Header().Get("Content-Type"); got != "text/plain" {
 		t.Errorf("Content-Type = %q", got)
 	}
 }

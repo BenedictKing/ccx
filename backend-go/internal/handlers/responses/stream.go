@@ -61,15 +61,17 @@ func handleStreamSuccess(
 	// 使用 goroutine + channel 实现真正的超时控制（scanner.Scan 是阻塞调用）
 	type scanLine struct {
 		text string
+		raw  string
 		ok   bool
 	}
 	lineChan := make(chan scanLine, 1)
+	scanner.Split(utils.SplitSSELines)
 	scanDone := make(chan struct{})
 	go func() {
 		defer close(lineChan)
 		for scanner.Scan() {
 			select {
-			case lineChan <- scanLine{text: normalizeResponsesSSEFieldLine(scanner.Text()), ok: true}:
+			case lineChan <- scanLine{text: normalizeResponsesSSEFieldLine(strings.TrimRight(scanner.Text(), "\r\n")), raw: scanner.Text(), ok: true}:
 			case <-scanDone:
 				return
 			}
@@ -80,7 +82,7 @@ func handleStreamSuccess(
 		}
 	}()
 
-	var bufferedLines []string
+	var bufferedLines []scanLine
 	var preflightTextBuf bytes.Buffer
 	preflightToolTracker := common.NewStreamToolCallTracker()
 	streamObserver := common.GetStreamTimeoutObserver(c)
@@ -153,10 +155,7 @@ func handleStreamSuccess(
 				break
 			}
 			line := sl.text
-			if !needConvert {
-				line = converters.NormalizeOpenRouterReasoningSSELine(line)
-			}
-			bufferedLines = append(bufferedLines, line)
+			bufferedLines = append(bufferedLines, sl)
 			if strings.TrimSpace(line) == "" {
 				currentSSEEventName = ""
 			} else if strings.HasPrefix(line, "event:") {
@@ -332,7 +331,11 @@ func handleStreamSuccess(
 	// 空响应：Header 未发送，可安全重试
 	if preflightEmpty {
 		common.RequestLogf(c, "[Responses-EmptyResponse] 上游返回空响应 (缓冲行数: %d, 诊断: %s)，触发重试", len(bufferedLines), preflightDiagnostic)
-		if rawLog := buildResponsesPreflightRawLog(bufferedLines); rawLog != "" {
+		logLines := make([]string, 0, len(bufferedLines))
+		for _, line := range bufferedLines {
+			logLines = append(logLines, line.text)
+		}
+		if rawLog := buildResponsesPreflightRawLog(logLines); rawLog != "" {
 			common.RequestLogf(c, "[Responses-EmptyResponse-Raw] 上游流式响应原始内容:\n%s", rawLog)
 		}
 		close(scanDone) // 通知 scanner goroutine 退出
@@ -379,10 +382,8 @@ func handleStreamSuccess(
 	reasoningCollector := thinkingcache.NewResponsesStreamCollector()
 
 	// processLine 处理单行数据（复用于缓冲行回放和后续读取），并返回转换后的 Responses 事件用于 watchdog 状态判断。
-	processLine := func(line string) []string {
-		if !needConvert {
-			line = converters.NormalizeOpenRouterReasoningSSELine(line)
-		}
+	processLine := func(sl scanLine) []string {
+		line := sl.text
 
 		if streamLoggingEnabled {
 			logBuffer.WriteString(line + "\n")
@@ -470,9 +471,12 @@ func handleStreamSuccess(
 
 			// 在 response.completed 事件前注入/修补 usage
 			eventToSend := event
+			if !needConvert && !lowQuality && !envCfg.RewriteResponseModel {
+				eventToSend = sl.raw
+			}
 			if isResponsesCompletedEvent(event) {
 				completedEventSent = true
-				if !hasUsage {
+				if !hasUsage && (needConvert || lowQuality) {
 					// 上游完全没有 usage，注入本地估算
 					var injectedInput, injectedOutput int
 					eventToSend, injectedInput, injectedOutput = injectResponsesUsageToCompletedEventWithLogTag(event, originalRequestJSON, outputTextBuffer.String(), envCfg, common.RequestLogTag(c))
@@ -490,7 +494,7 @@ func handleStreamSuccess(
 					if envCfg.EnableResponseLogs && envCfg.ShouldLog("debug") {
 						common.RequestLogf(c, "[Responses-Stream-Token] 上游无usage, 注入本地估算: input=%d, output=%d", injectedInput, injectedOutput)
 					}
-				} else if needTokenPatch || lowQuality {
+				} else if (needTokenPatch && needConvert) || lowQuality {
 					// 需要修补虚假值
 					eventToSend = patchResponsesCompletedEventUsageWithLogTag(event, originalRequestJSON, outputTextBuffer.String(), &collectedUsage, envCfg, lowQuality, common.RequestLogTag(c))
 				}
@@ -602,7 +606,7 @@ func handleStreamSuccess(
 			if !ok || !sl.ok {
 				goto streamEnd
 			}
-			events := processLine(sl.text)
+			events := processLine(sl)
 			keepaliveTicker.Reset(15 * time.Second)
 			wasToolCallPending := postCommitToolTracker.HasPendingToolCall()
 			toolCallStateChanged := observePostCommitEvents(events)
@@ -661,7 +665,7 @@ streamEnd:
 	progress.Finish("completed")
 
 	// 兜底：如果上游未发送终止符（如 MiniMax 不发 [DONE]），补发 response.completed
-	if !completedEventSent && !clientGone {
+	if !completedEventSent && !clientGone && needConvert {
 		common.RequestLogf(c, "[Responses-Stream] 上游未发送终止符，补发 response.completed (upstreamType=%s)", upstreamType)
 
 		var fallbackEvents []string

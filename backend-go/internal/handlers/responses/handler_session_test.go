@@ -44,6 +44,7 @@ func TestHandleSuccess_PreservesPreviousResponseID(t *testing.T) {
 			"id":"resp_new",
 			"model":"gpt-5",
 			"status":"completed",
+			"previous_response_id":"resp_prev",
 			"output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"hi"}]}],
 			"usage":{"input_tokens":12,"output_tokens":8,"total_tokens":20}
 		}`)),
@@ -59,10 +60,10 @@ func TestHandleSuccess_PreservesPreviousResponseID(t *testing.T) {
 	}
 
 	body := w.Body.String()
-	if !strings.Contains(body, `"previous_id":"resp_prev"`) {
+	if !strings.Contains(body, `"previous_response_id":"resp_prev"`) {
 		t.Fatalf("response body should preserve previous response id, got %s", body)
 	}
-	if strings.Contains(body, `"previous_id":"resp_new"`) {
+	if strings.Contains(body, `"previous_id":`) {
 		t.Fatalf("response body should not rewrite previous_id to current response id, got %s", body)
 	}
 }

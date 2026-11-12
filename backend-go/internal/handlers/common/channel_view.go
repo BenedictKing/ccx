@@ -54,6 +54,7 @@ func BuildChannelView(up config.UpstreamConfig, index int) gin.H {
 		"normalizeMetadataUserId":       up.IsNormalizeMetadataUserIDEnabled(),
 		"stripBillingHeader":            up.IsStripBillingHeaderEnabled(),
 		"codexNativeToolPassthrough":    up.CodexNativeToolPassthrough,
+		"responsesReasoningFold":        up.ResponsesReasoningFold,
 		"codexToolCompat":               up.IsCodexToolCompatEnabled(),
 		"stripImageGenerationTool":      up.IsStripImageGenerationToolEnabled(),
 		"convertImageUrlToB64Json":      up.ConvertImageURLToB64JSON,

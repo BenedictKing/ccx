@@ -34,10 +34,10 @@ func TestShouldNormalizeMetadataUserIDOnlyMessages(t *testing.T) {
 		want     bool
 	}{
 		{
-			name:     "messages inherits default enabled",
+			name:     "messages preserves metadata by default",
 			kind:     scheduler.ChannelKindMessages,
 			upstream: &config.UpstreamConfig{},
-			want:     true,
+			want:     false,
 		},
 		{
 			name:     "messages honors disabled switch",

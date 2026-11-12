@@ -99,7 +99,7 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     return 'claude'
   }
 
-  const defaultNormalizeMetadataUserId = () => props.channelType === 'messages'
+  const defaultNormalizeMetadataUserId = () => false
 
   // 详细表单预期请求 URL 预览（防止输入时抖动）
   const formBaseUrlPreview = ref('')
@@ -897,7 +897,7 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     supportedModelsError.value = hasInvalidPatterns ? t('addChannel.supportedModelsInvalidPattern') : ''
     form.autoBlacklistBalance = channel.autoBlacklistBalance ?? true
     form.circuitBreakerDisabled = !!channel.circuitBreakerDisabled
-    form.normalizeMetadataUserId = channel.normalizeMetadataUserId ?? true
+    form.normalizeMetadataUserId = channel.normalizeMetadataUserId ?? false
     form.stripBillingHeader = channel.stripBillingHeader ?? false
     form.codexNativeToolPassthrough = !!channel.codexNativeToolPassthrough
     form.codexToolCompat = channel.codexToolCompat ?? channel.stripCodexClientTools ?? false
