@@ -8,6 +8,8 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -1130,8 +1132,12 @@ func contextWindowFromSharedRegistry(t *testing.T, modelID string) int {
 	}
 	for _, capability := range registry.UpstreamCapabilities {
 		for _, pattern := range capability.Patterns {
-			if pattern == "(?:^|[-/])"+modelID+"(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)" ||
-				pattern == "(?:^|[-/])"+modelID+"(?=$|@)" {
+			// 源数据允许不同的日期后缀范围，不依赖正则文本的固定写法。
+			re, err := regexp.Compile("(?i)" + strings.ReplaceAll(pattern, "(?=$|@)", "(?:$|@)"))
+			if err != nil {
+				t.Fatalf("共享模型注册表正则无效: %s: %v", pattern, err)
+			}
+			if re.MatchString(modelID) {
 				if capability.ContextWindowTokens == 0 {
 					t.Fatalf("共享模型注册表中 %s 缺少 contextWindowTokens", modelID)
 				}
