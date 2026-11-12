@@ -53,18 +53,20 @@ func TestQueryUsageBucketsAlignsNonWholeHourTimezone(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer store.Close()
-	store.AddRecord(PersistentRecord{MetricsKey: "key", BaseURL: "https://example.com", APIType: "chat",
-		Timestamp: time.Date(2026, 10, 1, 18, 45, 0, 0, time.UTC), Success: true})
 	location, err := time.LoadLocation("Asia/Kathmandu")
 	if err != nil {
 		t.Fatal(err)
 	}
-	start := time.Date(2026, 10, 1, 0, 0, 0, 0, location)
-	buckets, err := store.QueryUsageBuckets(context.Background(), start, start.AddDate(0, 1, 0), location, true)
+	// 使用保留期内的数据，避免后台清理使固定日期样本随机消失。
+	now := time.Now().In(location)
+	start := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, location).AddDate(0, 0, -1)
+	store.AddRecord(PersistentRecord{MetricsKey: "key", BaseURL: "https://example.com", APIType: "chat",
+		Timestamp: start.Add(30 * time.Minute).UTC(), Success: true})
+	buckets, err := store.QueryUsageBuckets(context.Background(), start, start.AddDate(0, 0, 1), location, true)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(buckets) != 1 || buckets[0].Timestamp.Format(time.RFC3339) != "2026-10-02T00:00:00+05:45" {
+	if len(buckets) != 1 || !buckets[0].Timestamp.Equal(start) || buckets[0].Timestamp.Format("-07:00") != "+05:45" {
 		t.Fatalf("buckets = %+v, want local hour boundary", buckets)
 	}
 }

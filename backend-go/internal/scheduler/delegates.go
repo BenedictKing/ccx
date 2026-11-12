@@ -15,13 +15,13 @@ func (s *ChannelScheduler) RecordSuccess(baseURL, apiKey, serviceType string, ki
 }
 
 // RecordSuccessWithUsage 记录渠道成功（带 Usage 数据）
-func (s *ChannelScheduler) RecordSuccessWithUsage(baseURL, apiKey, serviceType string, usage *types.Usage, kind ChannelKind) {
-	s.getMetricsManager(kind).RecordSuccessWithUsage(baseURL, apiKey, serviceType, usage)
+func (s *ChannelScheduler) RecordSuccessWithUsage(baseURL, apiKey, serviceType string, usage *types.Usage, kind ChannelKind, models ...string) {
+	s.getMetricsManager(kind).RecordSuccessWithUsage(baseURL, apiKey, serviceType, usage, models...)
 }
 
 // RecordFailure 记录渠道失败（使用 baseURL + apiKey）
-func (s *ChannelScheduler) RecordFailure(baseURL, apiKey, serviceType string, kind ChannelKind) {
-	s.getMetricsManager(kind).RecordFailure(baseURL, apiKey, serviceType)
+func (s *ChannelScheduler) RecordFailure(baseURL, apiKey, serviceType string, kind ChannelKind, models ...string) {
+	s.getMetricsManager(kind).RecordFailure(baseURL, apiKey, serviceType, models...)
 }
 
 // RecordRequestStart 记录请求开始
