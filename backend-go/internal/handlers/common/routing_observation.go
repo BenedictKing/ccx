@@ -21,8 +21,8 @@ import (
 
 type routingStoreContextKey struct{}
 type routingObservation struct {
-	store                 *metrics.RoutingStore
-	id, model, lastStatus string
+	store                                *metrics.RoutingStore
+	id, model, lastStatus, lastAttemptID string
 }
 
 const routingObservationKey = "ccxRoutingObservation"
@@ -133,7 +133,7 @@ func startRoutingAttempt(c *gin.Context, req *http.Request, upstream *config.Ups
 	if len(decisions) > 0 {
 		mapped, source, match = decisions[0].Model, decisions[0].Source, decisions[0].Match
 	}
-	if c.GetBool("ccxRoutingPolicy") {
+	if !auxiliary && c.GetBool("ccxRoutingPolicy") {
 		effectiveModel = c.GetString("ccxRoutingEffectiveModel")
 		mapped, source, match = effectiveModel, "", ""
 	}
@@ -145,8 +145,12 @@ func startRoutingAttempt(c *gin.Context, req *http.Request, upstream *config.Ups
 		}
 	}
 	transform := ""
+	modelChangeKind := "model_fallback"
+	if auxiliary {
+		modelChangeKind = "compact_model"
+	}
 	if effectiveModel != tracker.model {
-		transform = "model_fallback"
+		transform = modelChangeKind
 	}
 	if sent != mapped {
 		if transform != "" {
@@ -156,7 +160,7 @@ func startRoutingAttempt(c *gin.Context, req *http.Request, upstream *config.Ups
 	}
 	steps := []metrics.RoutingTransform{}
 	if effectiveModel != tracker.model {
-		steps = append(steps, metrics.RoutingTransform{Kind: "model_fallback", From: tracker.model, To: effectiveModel})
+		steps = append(steps, metrics.RoutingTransform{Kind: modelChangeKind, From: tracker.model, To: effectiveModel})
 	}
 	if match != "" {
 		steps = append(steps, metrics.RoutingTransform{Kind: "model_mapping", From: effectiveModel, To: mapped})
@@ -174,6 +178,7 @@ func startRoutingAttempt(c *gin.Context, req *http.Request, upstream *config.Ups
 	if transport == "" {
 		transport = "http"
 	}
+	tracker.lastAttemptID = attemptID
 	tracker.store.StartAttempt(tracker.id, metrics.RoutingAttempt{Transport: transport, Auxiliary: auxiliary, AttemptID: attemptID, EffectiveModel: effectiveModel, MappedModel: mapped, SentModel: sent, ChannelUID: upstream.ChannelUID, ChannelName: upstream.Name, ServiceType: upstream.ServiceType, ConfigRevision: hex.EncodeToString(revision[:8]), MappingOutcome: outcome, MappingSource: source, MappingTarget: mapped, MatchType: match, TransformReason: transform, TransformSteps: steps, ModelChanged: sent != tracker.model, SelectionTraceSummary: c.GetString("ccxRoutingSelectionSummary"), SelectionReason: reason})
 }
 func completeRoutingLog(c *gin.Context, store *metrics.ChannelLogStore, key, id string, code int, success bool, info string, retry bool) {
@@ -205,6 +210,10 @@ func ObserveAuxiliaryAttempt(c *gin.Context, req *http.Request, upstream *config
 		}
 		if c.Request.Context().Err() == context.Canceled {
 			status = metrics.RoutingStatusCancelled
+		}
+		// 原生 compact 失败后可嵌套调用本地 compact；外层 defer 不能覆盖后一次尝试的终态。
+		if tracker.lastAttemptID == id {
+			tracker.lastStatus = status
 		}
 		tracker.store.FinishAttempt(tracker.id, id, status, code)
 	}

@@ -66,8 +66,12 @@ func routingQuery(c *gin.Context, apiType string) (metrics.RoutingFilter, time.T
 			return bad()
 		}
 	}
-	if !from.Before(to) || to.Sub(from) > 24*time.Hour || to.After(time.Now().Add(time.Minute)) || from.Before(time.Now().Add(-24*time.Hour-time.Minute)) {
+	if !from.Before(to) || to.Sub(from) > 24*time.Hour || to.After(time.Now().Add(time.Minute)) {
 		return bad()
+	}
+	if to.Before(time.Now().Add(-metrics.RoutingSnapshotMaxAge)) {
+		c.JSON(http.StatusGone, gin.H{"error": "Routing snapshot expired; refresh the time range", "code": "routing_snapshot_expired"})
+		return filter, time.Time{}, time.Time{}, nil, false
 	}
 	if cursor == nil {
 		cursor = &routingCursor{From: from, To: to, Fingerprint: fingerprint}

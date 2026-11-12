@@ -359,7 +359,10 @@ func tryCompactWithKey(
 	utils.ApplyCustomHeaders(req.Header, upstream.CustomHeaders)
 	req = common.WithRequestLogContext(req, c)
 
-	doneRouting := common.ObserveAuxiliaryAttempt(c, req, upstream, extractCompactRequestModel(bodyBytes))
+	// 原生 compact 发送原始 body，不执行渠道 ModelMapping。
+	nativeCompactUpstream := upstream.Clone()
+	nativeCompactUpstream.ModelMapping = nil
+	doneRouting := common.ObserveAuxiliaryAttempt(c, req, nativeCompactUpstream, extractCompactRequestModel(bodyBytes))
 	resp, err := common.SendRequest(req, upstream, envCfg, false, "Responses")
 	defer func() {
 		code := 0

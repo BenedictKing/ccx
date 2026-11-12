@@ -96,6 +96,10 @@ type RoutingStore struct {
 
 const maxRoutingRequests = 50000
 
+// RoutingSnapshotMaxAge 允许用户在同一查询窗口内翻页；缓存额外保留这段宽限期。
+const RoutingSnapshotMaxAge = 15 * time.Minute
+const routingHistoryWindow = 24*time.Hour + RoutingSnapshotMaxAge
+
 func NewRoutingStore(store *SQLiteStore) (*RoutingStore, error) {
 	s := &RoutingStore{requests: make(map[string]RoutingRequest), startedAt: time.Now(), retentionDays: 3, writes: make(chan RoutingRequest, 2048), done: make(chan struct{})}
 	if store != nil {
@@ -127,7 +131,7 @@ func (s *RoutingStore) init() error {
 		return err
 	}
 	s.dropped.Store(dropped)
-	rows, err := s.db.Query("SELECT payload FROM routing_records_v1 WHERE received_at >= ? ORDER BY received_at DESC LIMIT ?", time.Now().Add(-24*time.Hour).UnixNano(), maxRoutingRequests+1)
+	rows, err := s.db.Query("SELECT payload FROM routing_records_v1 WHERE received_at >= ? ORDER BY received_at DESC LIMIT ?", time.Now().Add(-routingHistoryWindow).UnixNano(), maxRoutingRequests+1)
 	if err != nil {
 		return err
 	}
@@ -240,7 +244,7 @@ func (s *RoutingStore) StartRequest(request RoutingRequest) {
 	s.requests[request.GatewayRequestID] = request
 	s.order = append(s.order, request.GatewayRequestID)
 	if time.Since(s.lastCleanup) > time.Minute {
-		cutoff := time.Now().Add(-24 * time.Hour)
+		cutoff := time.Now().Add(-routingHistoryWindow)
 		for id, old := range s.requests {
 			if old.ReceivedAt.Before(cutoff) && old.Status != RoutingStatusInProgress {
 				delete(s.requests, id)

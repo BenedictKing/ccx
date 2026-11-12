@@ -2,6 +2,7 @@ package responses
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -101,7 +102,7 @@ func TestResponsesWebSocketHandler_ResponsesUpstreamKeepsNativeV2Continuation(t 
 				return
 			}
 			upstreamBody <- req
-			if err := conn.WriteJSON(map[string]interface{}{"type": "response.completed", "response": map[string]interface{}{"id": "resp-1", "status": "completed"}}); err != nil {
+			if err := conn.WriteJSON(map[string]interface{}{"type": "response.completed", "response": map[string]interface{}{"id": fmt.Sprintf("resp-%d", i+1), "status": "completed"}}); err != nil {
 				t.Errorf("write upstream response: %v", err)
 				return
 			}

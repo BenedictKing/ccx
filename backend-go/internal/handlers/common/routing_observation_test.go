@@ -95,6 +95,7 @@ func TestSocketRoutingCorrelatesTurnsAndSkipsWarmup(t *testing.T) {
 	if observer.Begin([]byte(`{"type":"response.create","model":"client","generate":false}`)) != nil {
 		t.Fatal("warmup was counted")
 	}
+	observer.Event([]byte(`{"type":"response.completed","response":{"id":"warmup"}}`))
 	upstream := &config.UpstreamConfig{ChannelUID: "channel", Name: "snapshot", ModelMapping: map[string]string{"client": "actual"}}
 	first := observer.Begin([]byte(`{"type":"response.create","model":"client"}`))
 	second := observer.Begin([]byte(`{"type":"response.create","model":"client"}`))
@@ -120,5 +121,107 @@ func TestSocketRoutingCorrelatesTurnsAndSkipsWarmup(t *testing.T) {
 	records, _ := store.Snapshot("responses", time.Now().Add(-time.Hour), time.Now().Add(time.Second))
 	if len(records) != 3 {
 		t.Fatalf("records=%+v", records)
+	}
+}
+
+func TestSocketRoutingIgnoresDuplicateForeignAndWarmupEvents(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		events []string
+		bound  bool
+	}{
+		{"duplicate terminal before next created", []string{`{"type":"response.completed","response":{"id":"first"}}`}, false},
+		{"foreign terminal after next created", []string{`{"type":"response.created","response":{"id":"second"}}`, `{"type":"response.failed","response":{"id":"unrelated"}}`}, true},
+		{"response_id terminal", []string{`{"type":"response.created","response":{"id":"second"}}`, `{"type":"response.completed","response_id":"first"}`}, true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			store, _ := metrics.NewRoutingStore(nil)
+			defer store.Close()
+			c, _ := gin.CreateTestContext(httptest.NewRecorder())
+			c.Request = httptest.NewRequest("GET", "/v1/responses", nil)
+			c.Request = c.Request.WithContext(context.WithValue(c.Request.Context(), routingStoreContextKey{}, store))
+			observer := NewSocketRoutingObserver(c)
+			first := observer.Begin([]byte(`{"type":"response.create","model":"first"}`))
+			observer.Event([]byte(`{"type":"response.created","response":{"id":"first"}}`))
+			observer.Event([]byte(`{"type":"response.completed","response":{"id":"first"}}`))
+			second := observer.Begin([]byte(`{"type":"response.create","model":"second"}`))
+			for _, event := range test.events {
+				observer.Event([]byte(event))
+			}
+			request, _ := store.Get("responses", second.id)
+			if request.Status != metrics.RoutingStatusInProgress {
+				t.Fatalf("unrelated event finalized next request: %+v", request)
+			}
+			original, _ := store.Get("responses", first.id)
+			if original.Status != metrics.RoutingStatusSuccess {
+				t.Fatal("original status changed")
+			}
+			if !test.bound {
+				observer.Event([]byte(`{"type":"response.created","response":{"id":"second"}}`))
+			}
+			observer.Event([]byte(`{"type":"response.failed","response_id":"second"}`))
+			request, _ = store.Get("responses", second.id)
+			if request.Status != metrics.RoutingStatusFailed {
+				t.Fatalf("actual terminal not associated: %+v", request)
+			}
+		})
+	}
+	t.Run("overlapping warmup", func(t *testing.T) {
+		store, _ := metrics.NewRoutingStore(nil)
+		defer store.Close()
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		c.Request = httptest.NewRequest("GET", "/v1/responses", nil)
+		c.Request = c.Request.WithContext(context.WithValue(c.Request.Context(), routingStoreContextKey{}, store))
+		observer := NewSocketRoutingObserver(c)
+		observer.Begin([]byte(`{"type":"response.create","generate":false}`))
+		actual := observer.Begin([]byte(`{"type":"response.create","model":"actual"}`))
+		observer.Event([]byte(`{"type":"response.created","response":{"id":"warm"}}`))
+		observer.Event([]byte(`{"type":"response.completed","response":{"id":"warm"}}`))
+		request, _ := store.Get("responses", actual.id)
+		if request.Status != metrics.RoutingStatusInProgress {
+			t.Fatal("warmup response finalized real request")
+		}
+		observer.Event([]byte(`{"type":"response.completed","response":{"id":"real"}}`))
+		records, _ := store.Snapshot("responses", time.Now().Add(-time.Hour), time.Now().Add(time.Second))
+		if len(records) != 1 || records[0].Status != metrics.RoutingStatusSuccess {
+			t.Fatalf("records=%+v", records)
+		}
+	})
+}
+
+func TestAuxiliaryOutcomeOverridesHTTP200AndUsesActualMapping(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		innerSuccess bool
+	}{{"stream fails after 200", false}, {"nested fallback succeeds", true}} {
+		t.Run(tc.name, func(t *testing.T) {
+			store, _ := metrics.NewRoutingStore(nil)
+			defer store.Close()
+			c, _ := gin.CreateTestContext(httptest.NewRecorder())
+			c.Request = httptest.NewRequest("POST", "/v1/responses", nil)
+			c.Request = c.Request.WithContext(context.WithValue(c.Request.Context(), routingStoreContextKey{}, store))
+			finish := ObserveRoutingRequest(c, "responses")
+			recordRoutingModel(c, []byte(`{"model":"client"}`))
+			original, _ := http.NewRequest("POST", "http://upstream/compact", bytes.NewBufferString(`{"model":"client"}`))
+			outer := ObserveAuxiliaryAttempt(c, original, &config.UpstreamConfig{ChannelUID: "channel"}, "client")
+			actual, _ := http.NewRequest("POST", "http://upstream/responses", bytes.NewBufferString(`{"model":"summary-model"}`))
+			inner := ObserveAuxiliaryAttempt(c, actual, &config.UpstreamConfig{ChannelUID: "channel", CompactModel: "summary-model"}, "summary-model")
+			c.Data(200, "text/event-stream", []byte("data: partial\n\n"))
+			inner(tc.innerSuccess, 200)
+			outer(false, 503)
+			finish()
+			records, _ := store.Snapshot("responses", time.Now().Add(-time.Hour), time.Now().Add(time.Second))
+			expected := metrics.RoutingStatusFailed
+			if tc.innerSuccess {
+				expected = metrics.RoutingStatusSuccess
+			}
+			if len(records) != 1 || records[0].Status != expected {
+				t.Fatalf("records=%+v", records)
+			}
+			second := records[0].Attempts[1]
+			if second.MappingOutcome != metrics.MappingOutcomeUnmatched || second.TransformReason != "compact_model" || second.SentModel != "summary-model" {
+				t.Fatalf("compact mapping=%+v", second)
+			}
+		})
 	}
 }

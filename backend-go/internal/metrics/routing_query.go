@@ -109,7 +109,7 @@ func AggregateRouting(requests []RoutingRequest, filter RoutingFilter) (RoutingD
 		if proxyAttempts > 1 {
 			s.RetriedRequests++
 		}
-		if proxyAttempts == 0 {
+		if len(request.Attempts) == 0 {
 			s.NoAttemptRequests++
 		}
 		for _, attempt := range matches {

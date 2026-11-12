@@ -1,10 +1,7 @@
 <template>
   <section class="routing-panel">
-    <button class="routing-heading" :aria-expanded="expanded" @click="expanded = !expanded">
-      <v-icon size="18">{{ expanded ? 'mdi-chevron-down' : 'mdi-chevron-right' }}</v-icon
-      ><strong>{{ t('routing.title') }}</strong>
-    </button>
-    <div v-if="expanded" class="routing-content">
+    <h3 class="routing-heading">{{ t('routing.title') }}</h3>
+    <div class="routing-content">
       <v-alert v-if="!supported" type="info" variant="tonal" density="compact">
         {{ t('routing.rangeUnsupported')
         }}<v-btn size="small" variant="text" @click="emit('update:duration', '24h')">{{ t('routing.use24h') }}</v-btn>
@@ -157,11 +154,15 @@
           <v-btn v-if="selectedPath" size="small" variant="text" @click="openPath()">{{ t('routing.allPaths') }}</v-btn>
           <p v-if="!selectedPath" class="text-caption">{{ t('routing.selectPath') }}</p>
           <div v-if="!selectedPath" class="drawer-paths">
-            <button v-for="path in data?.paths" :key="routingPathKey(path)" class="mobile-path" @click="openPath(path)">
+            <button v-for="path in drawerPaths" :key="routingPathKey(path)" class="mobile-path" @click="openPath(path)">
               {{ pathTitle(path) }}<br />{{ path.count }} · {{ share(path.share) }}
             </button>
           </div>
-          <v-alert v-if="drawerError" type="error" variant="tonal" density="compact">{{ drawerError }}</v-alert
+          <v-alert v-if="drawerError" type="error" variant="tonal" density="compact">
+            {{ drawerError }}
+            <v-btn variant="text" size="small" :disabled="drawerLoading" @click="retryRequests">
+              {{ t(drawerExpired ? 'routing.refreshRequests' : 'routing.retry') }}
+            </v-btn> </v-alert
           ><v-progress-linear v-if="drawerLoading" indeterminate />
           <v-expansion-panels variant="accordion">
             <v-expansion-panel v-for="request in requestPage?.requests" :key="request.gatewayRequestId">
@@ -230,11 +231,12 @@
   </section>
 </template>
 <script setup lang="ts">
-import { computed, reactive, ref, watch, onBeforeUnmount, nextTick } from 'vue'
+import { computed, reactive, ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useDisplay } from 'vuetify'
 import { VNavigationDrawer } from 'vuetify/components/VNavigationDrawer'
 import { useI18n } from '../i18n'
 import { api, type ChannelKind } from '../services/api'
+import { ApiError } from '../services/api-helpers'
 import type {
   RoutingBasis,
   RoutingDistribution,
@@ -254,8 +256,7 @@ const emit = defineEmits<{ 'update:duration': [value: StatsDuration] }>()
 const { t } = useI18n()
 const { smAndDown, width } = useDisplay()
 const fields: RoutingField[] = ['requestedModel', 'channelUid', 'sentModel']
-const expanded = ref(false),
-  basis = ref<RoutingBasis>('successful_requests')
+const basis = ref<RoutingBasis>('successful_requests')
 const filters = reactive<Partial<Record<RoutingField, string>>>({})
 const data = ref<RoutingDistribution | null>(null)
 const loading = ref(false),
@@ -266,6 +267,8 @@ const drawerOpen = ref(false),
 const selectedPath = ref<RoutingPath>(),
   requestPage = ref<RoutingRequestPage>()
 const cursorHistory = ref<string[]>([])
+const drawerExpired = ref(false)
+const drawerPaths = ref<RoutingPath[]>([])
 let generation = 0,
   drawerGeneration = 0,
   currentCursor = ''
@@ -317,7 +320,7 @@ function toggleNode(field: RoutingField, value: string) {
 }
 async function load() {
   const id = ++generation
-  if (!expanded.value || !supported.value) {
+  if (!supported.value) {
     loading.value = false
     return
   }
@@ -351,12 +354,23 @@ async function loadRequests(cursor = '') {
   if (!drawerQuery) return
   drawerLoading.value = true
   drawerError.value = ''
-  currentCursor = cursor
+  drawerExpired.value = false
   try {
     const page = await api.getRoutingRequests(props.apiType, { ...drawerQuery, cursor, limit: 10 })
-    if (id === drawerGeneration && drawerOpen.value) requestPage.value = page
+    if (id === drawerGeneration && drawerOpen.value) {
+      requestPage.value = page
+      currentCursor = cursor
+      return true
+    }
   } catch (err) {
-    if (id === drawerGeneration) drawerError.value = err instanceof Error ? err.message : String(err)
+    if (id === drawerGeneration) {
+      drawerExpired.value = err instanceof ApiError && err.status === 410
+      drawerError.value = drawerExpired.value
+        ? t('routing.snapshotExpired')
+        : err instanceof Error
+          ? err.message
+          : String(err)
+    }
   } finally {
     if (id === drawerGeneration) drawerLoading.value = false
   }
@@ -364,6 +378,7 @@ async function loadRequests(cursor = '') {
 function openPath(path?: RoutingPath) {
   if (!data.value) return
   selectedPath.value = path
+  drawerPaths.value = [...data.value.paths]
   cursorHistory.value = []
   requestPage.value = undefined
   drawerOpen.value = true
@@ -376,15 +391,27 @@ function openPath(path?: RoutingPath) {
   }
   loadRequests()
 }
-function nextPage() {
+async function nextPage() {
   if (requestPage.value?.nextCursor) {
-    cursorHistory.value.push(currentCursor)
-    loadRequests(requestPage.value.nextCursor)
+    const previous = currentCursor
+    if (await loadRequests(requestPage.value.nextCursor)) cursorHistory.value.push(previous)
   }
 }
-function previousPage() {
-  const cursor = cursorHistory.value.pop()
-  if (cursor !== undefined) loadRequests(cursor)
+async function previousPage() {
+  const cursor = cursorHistory.value[cursorHistory.value.length - 1]
+  if (cursor !== undefined && (await loadRequests(cursor))) cursorHistory.value.pop()
+}
+async function retryRequests() {
+  if (!drawerExpired.value) {
+    await loadRequests(currentCursor)
+    return
+  }
+  const id = drawerGeneration
+  const key = selectedPath.value && routingPathKey(selectedPath.value)
+  await load()
+  if (id === drawerGeneration && drawerOpen.value && data.value) {
+    openPath(key ? data.value.paths.find(path => routingPathKey(path) === key) : undefined)
+  }
 }
 watch([() => props.apiType, () => props.duration], () => {
   closeDrawer()
@@ -401,10 +428,7 @@ watch(
   },
   { deep: true }
 )
-watch(expanded, value => {
-  if (!value) closeDrawer()
-  load()
-})
+onMounted(load)
 watch(
   () => props.refreshVersion,
   () => load()
@@ -441,7 +465,6 @@ onBeforeUnmount(() => {
   padding: 7px 0;
   text-align: left;
 }
-.routing-heading:focus-visible,
 .flow-node:focus-visible,
 .flow-link:focus-visible,
 .mobile-path:focus-visible {

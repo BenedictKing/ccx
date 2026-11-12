@@ -1057,5 +1057,8 @@
   "routing.reason.manual_override": "人工指定渠道",
   "routing.reason.rate_limit_pressure": "限流压力回退",
   "routing.reason.websocket_connection": "复用 WebSocket 渠道",
-  "routing.countNote": "按客户端请求接收时间归属；重试及 WebSocket 调用的计数可能与上方趋势不同。"
+  "routing.countNote": "按客户端请求接收时间归属；重试及 WebSocket 调用的计数可能与上方趋势不同。",
+  "routing.snapshotExpired": "当前请求窗口已过期，请刷新后继续查看。",
+  "routing.refreshRequests": "刷新请求窗口",
+  "routing.transform.compact_model": "Compact 专用模型"
 }

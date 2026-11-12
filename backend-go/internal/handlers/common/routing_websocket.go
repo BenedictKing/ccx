@@ -14,11 +14,13 @@ import (
 
 // SocketRoutingObserver 按 response.create 记录逻辑请求，连接本身不算请求。
 type SocketRoutingObserver struct {
-	mu      sync.Mutex
-	request *http.Request
-	store   *metrics.RoutingStore
-	pending []*SocketRoutingTurn
-	closed  bool
+	mu            sync.Mutex
+	request       *http.Request
+	store         *metrics.RoutingStore
+	pending       []*SocketRoutingTurn
+	finishedIDs   map[string]bool
+	finishedOrder []string
+	closed        bool
 }
 type SocketRoutingTurn struct {
 	context                   *gin.Context
@@ -27,15 +29,20 @@ type SocketRoutingTurn struct {
 
 func NewSocketRoutingObserver(parent *gin.Context) *SocketRoutingObserver {
 	store, _ := parent.Request.Context().Value(routingStoreContextKey{}).(*metrics.RoutingStore)
-	return &SocketRoutingObserver{request: parent.Request, store: store}
+	return &SocketRoutingObserver{request: parent.Request, store: store, finishedIDs: make(map[string]bool)}
 }
 func (o *SocketRoutingObserver) Begin(payload []byte) *SocketRoutingTurn {
-	if o.store == nil || gjson.GetBytes(payload, "generate").Exists() && !gjson.GetBytes(payload, "generate").Bool() {
+	if o.store == nil {
 		return nil
 	}
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	if o.closed {
+		return nil
+	}
+	if gjson.GetBytes(payload, "generate").Exists() && !gjson.GetBytes(payload, "generate").Bool() {
+		// 预热不计入业务，但保留响应槽位，避免预热事件结束下一轮请求。
+		o.pending = append(o.pending, &SocketRoutingTurn{})
 		return nil
 	}
 	id := GenerateRequestID()
@@ -70,7 +77,17 @@ func (o *SocketRoutingObserver) finishLocked(turn *SocketRoutingTurn, status str
 	if status == metrics.RoutingStatusFailed {
 		stage = "websocket"
 	}
-	o.store.FinishRequest(turn.id, status, stage)
+	if turn.id != "" {
+		o.store.FinishRequest(turn.id, status, stage)
+	}
+	if turn.responseID != "" && !o.finishedIDs[turn.responseID] {
+		o.finishedIDs[turn.responseID] = true
+		o.finishedOrder = append(o.finishedOrder, turn.responseID)
+		if len(o.finishedOrder) > 256 {
+			delete(o.finishedIDs, o.finishedOrder[0])
+			o.finishedOrder = o.finishedOrder[1:]
+		}
+	}
 	for i, candidate := range o.pending {
 		if candidate == turn {
 			o.pending = append(o.pending[:i], o.pending[i+1:]...)
@@ -90,7 +107,18 @@ func (o *SocketRoutingObserver) Event(payload []byte) {
 		return
 	}
 	event := gjson.GetBytes(payload, "type").String()
+	switch event {
+	case "response.created", "response.completed", "response.failed", "response.incomplete", "response.cancelled", "response.done", "error":
+	default:
+		return
+	}
 	id := gjson.GetBytes(payload, "response.id").String()
+	if id == "" {
+		id = gjson.GetBytes(payload, "response_id").String()
+	}
+	if id != "" && o.finishedIDs[id] {
+		return
+	}
 	var turn *SocketRoutingTurn
 	if id != "" {
 		for _, candidate := range o.pending {
@@ -100,7 +128,7 @@ func (o *SocketRoutingObserver) Event(payload []byte) {
 			}
 		}
 	}
-	if turn == nil {
+	if turn == nil && id != "" {
 		for _, candidate := range o.pending {
 			if candidate.responseID == "" {
 				turn = candidate
@@ -108,7 +136,7 @@ func (o *SocketRoutingObserver) Event(payload []byte) {
 			}
 		}
 	}
-	if turn == nil && len(o.pending) == 1 {
+	if turn == nil && id == "" && len(o.pending) == 1 {
 		turn = o.pending[0]
 	}
 	if turn == nil {

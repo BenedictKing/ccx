@@ -1057,5 +1057,8 @@
   "routing.reason.manual_override": "Manual channel override",
   "routing.reason.rate_limit_pressure": "Rate limit pressure fallback",
   "routing.reason.websocket_connection": "Reused WebSocket channel",
-  "routing.countNote": "Grouped by client request arrival time. Retries and WebSocket calls may differ from the trend counts above."
+  "routing.countNote": "Grouped by client request arrival time. Retries and WebSocket calls may differ from the trend counts above.",
+  "routing.snapshotExpired": "This request window expired. Refresh it to continue.",
+  "routing.refreshRequests": "Refresh request window",
+  "routing.transform.compact_model": "Compact model"
 }

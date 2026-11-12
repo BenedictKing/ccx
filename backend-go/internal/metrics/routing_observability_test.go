@@ -97,3 +97,25 @@ func TestRoutingAggregationCountsPathsAndFilters(t *testing.T) {
 		})
 	}
 }
+
+func TestRoutingAuxiliaryOnlyRequestDoesNotClaimNoUpstream(t *testing.T) {
+	requests := []RoutingRequest{{GatewayRequestID: "compact", Status: RoutingStatusSuccess, Attempts: []RoutingAttempt{{Auxiliary: true, Status: RoutingStatusSuccess, SentModel: "summary"}}}}
+	result, _ := AggregateRouting(requests, RoutingFilter{Basis: "all_attempts"})
+	if result.Summary.NoAttemptRequests != 0 || result.Summary.Attempts != 0 || result.Summary.MatchedCount != 0 {
+		t.Fatalf("auxiliary misclassified: %+v", result.Summary)
+	}
+}
+
+func TestRoutingRetentionPreservesOpenSnapshotGrace(t *testing.T) {
+	store, _ := NewRoutingStore(nil)
+	defer store.Close()
+	received := time.Now().Add(-24*time.Hour - 3*time.Minute)
+	store.StartRequest(RoutingRequest{GatewayRequestID: "old-boundary", APIType: "chat", ReceivedAt: received})
+	store.FinishRequest("old-boundary", RoutingStatusSuccess, "")
+	store.lastCleanup = time.Time{}
+	store.StartRequest(RoutingRequest{GatewayRequestID: "new", APIType: "chat", ReceivedAt: time.Now()})
+	records, _ := store.Snapshot("chat", received.Add(-time.Minute), received.Add(time.Minute))
+	if len(records) != 1 {
+		t.Fatal("open snapshot lost its oldest records")
+	}
+}

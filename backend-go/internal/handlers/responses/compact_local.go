@@ -335,7 +335,7 @@ func tryLocalCompactWithKey(
 	req = common.WithRequestLogContext(req, c)
 
 	// 发送请求
-	doneRouting := common.ObserveAuxiliaryAttempt(c, req, upstream, extractCompactRequestModel(bodyBytes))
+	doneRouting := common.ObserveAuxiliaryAttempt(c, req, upstreamForCompact, extractCompactRequestModel(localBody))
 	resp, err := common.SendRequest(req, upstream, envCfg, stream, "Responses")
 	defer func() {
 		code := 0

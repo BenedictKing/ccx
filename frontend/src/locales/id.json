@@ -1057,5 +1057,8 @@
   "routing.reason.manual_override": "Channel pilihan manual",
   "routing.reason.rate_limit_pressure": "Cadangan karena batas laju",
   "routing.reason.websocket_connection": "Channel WebSocket yang digunakan kembali",
-  "routing.countNote": "Dikelompokkan menurut waktu permintaan klien. Percobaan ulang dan WebSocket dapat berbeda dari jumlah pada grafik di atas."
+  "routing.countNote": "Dikelompokkan menurut waktu permintaan klien. Percobaan ulang dan WebSocket dapat berbeda dari jumlah pada grafik di atas.",
+  "routing.snapshotExpired": "Rentang permintaan ini kedaluwarsa. Segarkan untuk melanjutkan.",
+  "routing.refreshRequests": "Segarkan rentang permintaan",
+  "routing.transform.compact_model": "Model pemadatan"
 }

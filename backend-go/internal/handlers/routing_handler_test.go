@@ -50,3 +50,43 @@ func TestRoutingAPIValidationIsolationAndCursor(t *testing.T) {
 		t.Fatal("cross-protocol detail leaked")
 	}
 }
+
+func TestRoutingSnapshotAllowsReadingAfterOneMinute(t *testing.T) {
+	store, _ := metrics.NewRoutingStore(nil)
+	defer store.Close()
+	router := gin.New()
+	RegisterRoutingRoutes(router.Group("/api"), store)
+	end := time.Now().Add(-3 * time.Minute)
+	start := end.Add(-24 * time.Hour)
+	for i, id := range []string{"recent", "old"} {
+		store.StartRequest(metrics.RoutingRequest{GatewayRequestID: id, APIType: "chat", RequestedModel: "source", ReceivedAt: end.Add(-time.Duration(i+1) * time.Minute)})
+		store.FinishRequest(id, metrics.RoutingStatusFailed, "selection")
+	}
+	path := "/api/chat/models/routing/requests?from=" + url.QueryEscape(start.Format(time.RFC3339Nano)) + "&to=" + url.QueryEscape(end.Format(time.RFC3339Nano)) + "&limit=1"
+	first := httptest.NewRecorder()
+	router.ServeHTTP(first, httptest.NewRequest("GET", path, nil))
+	if first.Code != 200 {
+		t.Fatalf("open snapshot became invalid: %d %s", first.Code, first.Body.String())
+	}
+	var page struct{ NextCursor string }
+	_ = json.Unmarshal(first.Body.Bytes(), &page)
+	next := httptest.NewRecorder()
+	router.ServeHTTP(next, httptest.NewRequest("GET", "/api/chat/models/routing/requests?cursor="+url.QueryEscape(page.NextCursor), nil))
+	if next.Code != 200 {
+		t.Fatalf("paging failed: %d %s", next.Code, next.Body.String())
+	}
+}
+
+func TestRoutingExpiredSnapshotReturnsRefreshableError(t *testing.T) {
+	store, _ := metrics.NewRoutingStore(nil)
+	defer store.Close()
+	router := gin.New()
+	RegisterRoutingRoutes(router.Group("/api"), store)
+	end := time.Now().Add(-metrics.RoutingSnapshotMaxAge - time.Minute)
+	path := "/api/chat/models/routing/requests?from=" + url.QueryEscape(end.Add(-time.Hour).Format(time.RFC3339Nano)) + "&to=" + url.QueryEscape(end.Format(time.RFC3339Nano))
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, httptest.NewRequest("GET", path, nil))
+	if recorder.Code != 410 {
+		t.Fatalf("expected expiry, got %d %s", recorder.Code, recorder.Body.String())
+	}
+}

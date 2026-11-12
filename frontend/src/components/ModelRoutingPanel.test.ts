@@ -5,6 +5,7 @@ import { defineComponent, nextTick, ref } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ModelRoutingPanel from './ModelRoutingPanel.vue'
 import { api } from '../services/api'
+import { ApiError } from '../services/api-helpers'
 import type { RoutingDistribution } from '../services/routing-types'
 
 vi.mock('../i18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }))
@@ -50,9 +51,9 @@ const result = (model: string): RoutingDistribution => ({
     }
   ]
 })
-function render() {
+function render(duration: '6h' | '7d' = '6h') {
   return mount(ModelRoutingPanel, {
-    props: { apiType: 'chat', duration: '6h', refreshVersion: 0, resetVersion: 0 },
+    props: { apiType: 'chat', duration, refreshVersion: 0, resetVersion: 0 },
     global: {
       stubs: {
         VIcon: Slot,
@@ -61,7 +62,8 @@ function render() {
         VBtnToggle: Slot,
         VBtn: Button,
         VChip: Slot,
-        VNavigationDrawer: true,
+        VNavigationDrawer: Slot,
+        teleport: true,
         VExpansionPanels: Slot,
         VExpansionPanel: Slot,
         VExpansionPanelTitle: Slot,
@@ -74,7 +76,7 @@ beforeEach(() => {
   vi.resetAllMocks()
 })
 describe('model routing query lifecycle', () => {
-  it('loads only when expanded, rejects stale time-window responses and stops on collapse', async () => {
+  it('loads on mount without a collapse control and rejects stale time-window responses', async () => {
     let resolveOld!: (_data: RoutingDistribution) => void
     vi.mocked(api.getModelRouting)
       .mockImplementationOnce(
@@ -85,25 +87,21 @@ describe('model routing query lifecycle', () => {
       )
       .mockResolvedValueOnce(result('new-window'))
     const wrapper = render()
-    expect(api.getModelRouting).not.toHaveBeenCalled()
-    await wrapper.find('.routing-heading').trigger('click')
+    expect(wrapper.find('.routing-heading').element.tagName).toBe('H3')
+    expect(wrapper.find('button.routing-heading').exists()).toBe(false)
+    expect(api.getModelRouting).toHaveBeenCalledTimes(1)
     await wrapper.setProps({ duration: '1h' })
     await flushPromises()
     expect(wrapper.find('.routing-content').text()).toContain('new-window')
     resolveOld(result('stale-window'))
     await flushPromises()
     expect(wrapper.find('.routing-content').text()).not.toContain('stale-window')
-    await wrapper.find('.routing-heading').trigger('click')
-    await wrapper.setProps({ refreshVersion: 1 })
-    await flushPromises()
     expect(api.getModelRouting).toHaveBeenCalledTimes(2)
     wrapper.unmount()
   })
   it('shows unsupported ranges without querying and clears filters on manual refresh', async () => {
     vi.mocked(api.getModelRouting).mockResolvedValue(result('source'))
-    const wrapper = render()
-    await wrapper.setProps({ duration: '7d' })
-    await wrapper.find('.routing-heading').trigger('click')
+    const wrapper = render('7d')
     await flushPromises()
     expect(api.getModelRouting).not.toHaveBeenCalled()
     expect(wrapper.text()).toContain('routing.rangeUnsupported')
@@ -116,6 +114,43 @@ describe('model routing query lifecycle', () => {
     await nextTick()
     await flushPromises()
     expect(wrapper.find('.routing-filters').text()).toContain('routing.interactionHint')
+    wrapper.unmount()
+  })
+  it('refreshes an expired drawer window before querying requests again', async () => {
+    vi.mocked(api.getModelRouting)
+      .mockResolvedValueOnce(result('source'))
+      .mockResolvedValueOnce({
+        ...result('source'),
+        from: '2026-11-13T00:05:00Z',
+        to: '2026-11-13T01:05:00Z'
+      })
+    vi.mocked(api.getRoutingRequests)
+      .mockRejectedValueOnce(new ApiError('expired', 410))
+      .mockResolvedValueOnce({
+        requests: [],
+        nextCursor: '',
+        from: '2026-11-13T00:05:00Z',
+        to: '2026-11-13T01:05:00Z',
+        coverage: result('source').coverage
+      })
+    const wrapper = render()
+    await flushPromises()
+    await wrapper
+      .findAll('button')
+      .find(button => button.text() === 'routing.viewRequests')!
+      .trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('routing.snapshotExpired')
+    await wrapper
+      .findAll('button')
+      .find(button => button.text() === 'routing.refreshRequests')!
+      .trigger('click')
+    await flushPromises()
+    expect(api.getRoutingRequests).toHaveBeenLastCalledWith(
+      'chat',
+      expect.objectContaining({ from: '2026-11-13T00:05:00Z', to: '2026-11-13T01:05:00Z' })
+    )
+    expect(wrapper.text()).not.toContain('routing.snapshotExpired')
     wrapper.unmount()
   })
 })
