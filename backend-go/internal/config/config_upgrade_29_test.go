@@ -49,6 +49,15 @@ func TestV2937ConfigSurvivesLoadSaveAndRestart(t *testing.T) {
 			{"vectors", got.VectorsUpstream, want.VectorsUpstream},
 		}
 		for _, pair := range pairs {
+			// 旧配置补齐的观测身份不改变既有业务字段。
+			for i := range pair.got {
+				if pair.got[i].ChannelUID == "" {
+					t.Fatal("missing channel UID")
+				}
+				if pair.want[i].ChannelUID == "" {
+					pair.want[i].ChannelUID = pair.got[i].ChannelUID
+				}
+			}
 			if !reflect.DeepEqual(pair.got, pair.want) {
 				t.Errorf("%s 渠道变化: got=%+v want=%+v", pair.name, pair.got, pair.want)
 			}

@@ -183,7 +183,8 @@ func TryUpstreamWithAllKeys(
 	}()
 
 	// 计算重定向后的模型（用于日志记录）
-	redirectedModel := config.RedirectModel(model, upstream)
+	redirectedModel, mappingSource, mappingMatch := config.RedirectModelWithRule(model, upstream)
+	mappingDecision := RoutingMappingDecision{Model: redirectedModel, Source: mappingSource, Match: mappingMatch}
 	capabilityRequestModel := model
 	var originalModel string
 	if redirectedModel != model {
@@ -335,6 +336,10 @@ func TryUpstreamWithAllKeys(
 			// 使用深拷贝避免并发修改问题
 			upstreamCopy := upstream.Clone()
 			upstreamCopy.BaseURL = currentBaseURL
+			// 同一次尝试只解析一次映射；固定已选结果，避免等长包含规则在多次遍历 map 时漂移。
+			if mappingMatch != "" {
+				upstreamCopy.ModelMapping[model] = mappingDecision.Model
+			}
 
 			// 主动限速：在构建/发送请求前获取许可（渠道级 + Key/Quota scope）
 			if rateLimitMgr := channelScheduler.GetRateLimitManager(); rateLimitMgr != nil {
@@ -398,6 +403,18 @@ func TryUpstreamWithAllKeys(
 			// 创建 pending 状态日志（附带代理上下文与会话标识，用于 subagent 观测）
 			logRequestID := CreatePendingLog(channelLogStore, metricsKey, channelIndex, upstream.Name, redirectedModel, originalModel, originalReasoningEffort, actualReasoningEffort, apiKey, currentBaseURL, apiType, operation, metrics.RequestSourceProxy, AgentContextFromGin(c), SessionIDFromGin(c), tryOpts.channelLogOptions...)
 
+			if logRequestID == "" {
+				logRequestID = GenerateRequestID()
+			}
+			selectionReason := ""
+			for _, option := range tryOpts.channelLogOptions {
+				log := &metrics.ChannelLog{}
+				option(log)
+				selectionReason = log.SelectionReason
+				c.Set("ccxRoutingSelectionSummary", log.SelectionTraceSummary)
+			}
+			StartRoutingAttempt(c, req, upstream, model, logRequestID, selectionReason, mappingDecision)
+
 			// TCP 建连开始即计数：将活跃度统计提前到发起上游请求之前
 			requestID := metricsManager.RecordRequestConnected(currentBaseURL, apiKey, metricsServiceType, redirectedModel)
 
@@ -445,7 +462,7 @@ func TryUpstreamWithAllKeys(
 					metricsManager.RecordRequestFinalizeClientCancel(currentBaseURL, apiKey, metricsServiceType, requestID)
 					channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, kind)
 					// 完成日志记录（客户端取消）
-					CompleteLog(channelLogStore, metricsKey, logRequestID, 0, false, "client canceled", isRetryAttempt)
+					completeRoutingLog(c, channelLogStore, metricsKey, logRequestID, 0, false, "client canceled", isRetryAttempt)
 					RequestLogf(c, "[%s-Cancel] 请求已取消（SendRequest 阶段）", apiType)
 					return true, "", 0, nil, nil, err
 				}
@@ -461,7 +478,7 @@ func TryUpstreamWithAllKeys(
 				}
 				// 记录渠道日志
 				// 完成日志记录
-				CompleteLog(channelLogStore, metricsKey, logRequestID, 0, false, err.Error(), isRetryAttempt)
+				completeRoutingLog(c, channelLogStore, metricsKey, logRequestID, 0, false, err.Error(), isRetryAttempt)
 				RequestLogf(c, "[%s-Key] 警告: API密钥失败: %v", apiType, err)
 				continue
 			}
@@ -555,7 +572,7 @@ func TryUpstreamWithAllKeys(
 					if strings.EqualFold(apiType, "Vectors") {
 						channelErrorInfo = errorBodySummaryForLog(apiType, resp.StatusCode, respBodyBytes)
 					}
-					CompleteLog(channelLogStore, metricsKey, logRequestID, resp.StatusCode, false, channelErrorInfo, isRetryAttempt)
+					completeRoutingLog(c, channelLogStore, metricsKey, logRequestID, resp.StatusCode, false, channelErrorInfo, isRetryAttempt)
 
 					if isQuotaRelated {
 						deprioritizeCandidates[apiKey] = true
@@ -598,7 +615,7 @@ func TryUpstreamWithAllKeys(
 				metricsManager.RecordRequestFinalizeFailureWithClass(currentBaseURL, apiKey, metricsServiceType, requestID, metrics.FailureClassNonRetryable)
 				channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, kind)
 				// 记录渠道日志
-				CompleteLog(channelLogStore, metricsKey, logRequestID, clientStatusCode, false, channelErrorInfo, isRetryAttempt)
+				completeRoutingLog(c, channelLogStore, metricsKey, logRequestID, clientStatusCode, false, channelErrorInfo, isRetryAttempt)
 				c.Data(clientStatusCode, "application/json", respBodyBytes)
 				return true, "", 0, nil, nil, nil
 			}
@@ -641,7 +658,7 @@ func TryUpstreamWithAllKeys(
 					channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, kind)
 					RequestLogf(c, "[%s-Cancel] 请求已取消，停止渠道 failover", apiType)
 					// 完成日志记录（客户端取消）
-					CompleteLog(channelLogStore, metricsKey, logRequestID, http.StatusOK, false, "client canceled", isRetryAttempt)
+					completeRoutingLog(c, channelLogStore, metricsKey, logRequestID, http.StatusOK, false, "client canceled", isRetryAttempt)
 				} else if errors.As(err, &rejected) {
 					// 上游以流内错误对象明确拒绝本次请求（invalid_request / 上下文超长等
 					// 请求侧确定性错误）：与 HTTP 4xx 的「非 failover 错误」分支同一语义，
@@ -649,7 +666,7 @@ func TryUpstreamWithAllKeys(
 					// 惩罚（不标记 Key/URL 失败、不计模型级熔断），直接返回真实错误。
 					metricsManager.RecordRequestFinalizeFailureWithClass(currentBaseURL, apiKey, metricsServiceType, requestID, metrics.FailureClassNonRetryable)
 					channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, kind)
-					CompleteLog(channelLogStore, metricsKey, logRequestID, http.StatusBadRequest, false, rejected.Error(), isRetryAttempt)
+					completeRoutingLog(c, channelLogStore, metricsKey, logRequestID, http.StatusBadRequest, false, rejected.Error(), isRetryAttempt)
 					RequestLogf(c, "[%s-RequestRejected] 上游以流内错误拒绝请求 (Key: %s): %s", apiType, utils.MaskAPIKey(apiKey), rejected.Error())
 					// 预检阶段 SSE 头未写：先按客户端协议写出错误体再返回，兑现
 					// handled=true 的「已向客户端写回响应」契约，避免终态错误空 200。
@@ -669,7 +686,7 @@ func TryUpstreamWithAllKeys(
 							metricsManager.ReleaseProbe(currentBaseURL, apiKey, metricsServiceType)
 							delete(probeAcquired, retryKey)
 						}
-						CompleteLog(channelLogStore, metricsKey, logRequestID, http.StatusOK, false, err.Error(), isRetryAttempt)
+						completeRoutingLog(c, channelLogStore, metricsKey, logRequestID, http.StatusOK, false, err.Error(), isRetryAttempt)
 						RequestLogf(c, "[%s-EmptyResponse-Retry] 上游短空响应 (Key: %s, 耗时: %dms)，同渠道同 Key 重试一次",
 							apiType, utils.MaskAPIKey(apiKey), elapsed.Milliseconds())
 						continue
@@ -684,7 +701,7 @@ func TryUpstreamWithAllKeys(
 						markURLFailure(currentBaseURL)
 					}
 					// 记录渠道日志
-					CompleteLog(channelLogStore, metricsKey, logRequestID, http.StatusOK, false, err.Error(), isRetryAttempt)
+					completeRoutingLog(c, channelLogStore, metricsKey, logRequestID, http.StatusOK, false, err.Error(), isRetryAttempt)
 					RequestLogf(c, "[%s-InvalidResponse] 上游返回无效响应 (Key: %s): %v，尝试下一个密钥", apiType, utils.MaskAPIKey(apiKey), err)
 					continue
 				} else if blErr, ok := err.(*ErrBlacklistKey); ok {
@@ -704,7 +721,7 @@ func TryUpstreamWithAllKeys(
 					if markURLFailure != nil {
 						markURLFailure(currentBaseURL)
 					}
-					CompleteLog(channelLogStore, metricsKey, logRequestID, http.StatusOK, false, fmt.Sprintf("key blacklisted: %s - %s", blErr.Reason, blErr.Message), isRetryAttempt)
+					completeRoutingLog(c, channelLogStore, metricsKey, logRequestID, http.StatusOK, false, fmt.Sprintf("key blacklisted: %s - %s", blErr.Reason, blErr.Message), isRetryAttempt)
 					RequestLogf(c, "[%s-Blacklist] SSE 流内错误触发拉黑 (Key: %s, 原因: %s)，尝试下一个密钥", apiType, utils.MaskAPIKey(apiKey), blErr.Reason)
 					continue
 				} else {
@@ -715,7 +732,7 @@ func TryUpstreamWithAllKeys(
 					metricsManager.RecordRequestFinalizeFailureWithClass(currentBaseURL, apiKey, metricsServiceType, requestID, metrics.FailureClassRetryable)
 					channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, kind)
 					// 记录渠道日志
-					CompleteLog(channelLogStore, metricsKey, logRequestID, http.StatusOK, false, err.Error(), isRetryAttempt)
+					completeRoutingLog(c, channelLogStore, metricsKey, logRequestID, http.StatusOK, false, err.Error(), isRetryAttempt)
 					RequestLogf(c, "[%s-Key] 警告: 响应处理失败: %v", apiType, err)
 				}
 				return true, "", 0, nil, usage, err
@@ -731,7 +748,7 @@ func TryUpstreamWithAllKeys(
 				delete(probeAcquired, probeKey)
 			}
 			// 记录渠道日志
-			CompleteLog(channelLogStore, metricsKey, logRequestID, http.StatusOK, true, "", isRetryAttempt)
+			completeRoutingLog(c, channelLogStore, metricsKey, logRequestID, http.StatusOK, true, "", isRetryAttempt)
 			return true, apiKey, originalIdx, nil, usage, nil
 		}
 

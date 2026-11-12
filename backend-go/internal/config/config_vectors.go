@@ -127,6 +127,7 @@ func (cm *ConfigManager) AddVectorsUpstream(upstream UpstreamConfig) error {
 	upstream.BaseURL = utils.CanonicalBaseURL(upstream.BaseURL, upstream.ServiceType)
 	upstream.BaseURLs = deduplicateBaseURLs(upstream.BaseURLs, upstream.ServiceType)
 
+	upstream.ChannelUID = newChannelUID()
 	cm.config.VectorsUpstream = append([]UpstreamConfig{upstream}, cm.config.VectorsUpstream...)
 
 	if err := cm.saveConfigLocked(cm.config); err != nil {

@@ -118,6 +118,7 @@ func (cm *ConfigManager) AddImagesUpstream(upstream UpstreamConfig) error {
 	upstream.BaseURL = utils.CanonicalBaseURL(upstream.BaseURL, upstream.ServiceType)
 	upstream.BaseURLs = deduplicateBaseURLs(upstream.BaseURLs, upstream.ServiceType)
 
+	upstream.ChannelUID = newChannelUID()
 	cm.config.ImagesUpstream = append([]UpstreamConfig{upstream}, cm.config.ImagesUpstream...)
 
 	if err := cm.saveConfigLocked(cm.config); err != nil {

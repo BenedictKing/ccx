@@ -99,6 +99,7 @@ func (cm *ConfigManager) AddResponsesUpstream(upstream UpstreamConfig) error {
 	upstream.BaseURLs = deduplicateBaseURLs(upstream.BaseURLs, upstream.ServiceType)
 	applyDefaultBaseURL(&upstream)
 
+	upstream.ChannelUID = newChannelUID()
 	cm.config.ResponsesUpstream = append([]UpstreamConfig{upstream}, cm.config.ResponsesUpstream...)
 
 	if err := cm.saveConfigLocked(cm.config); err != nil {

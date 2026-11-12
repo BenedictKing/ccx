@@ -42,7 +42,21 @@ import type {
 export * from './api-helpers'
 export * from './api-types'
 
+import type { RoutingDistribution, RoutingQuery, RoutingRequestPage } from "./routing-types"
+
 export class ApiService {
+  async getModelRouting(type: string, query: RoutingQuery): Promise<RoutingDistribution> {
+    return this.request(`/${type}/models/routing?${this.routingQuery(query)}`)
+  }
+
+  async getRoutingRequests(type: string, query: RoutingQuery): Promise<RoutingRequestPage> {
+    return this.request(`/${type}/models/routing/requests?${this.routingQuery(query)}`)
+  }
+
+  private routingQuery(query: RoutingQuery): string {
+    return new URLSearchParams(Object.entries(query).filter(([, value]) => value !== undefined && value !== "").map(([key, value]) => [key, String(value)])).toString()
+  }
+
   async getUsageReportChannels(): Promise<UsageReportChannel[]> {
     return this.request('/reports/usage/channels')
   }

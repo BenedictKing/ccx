@@ -131,6 +131,8 @@ func HandleMultiChannelFailoverWithSelectionFilter(
 		c.Set(retryBudgetContextKey, &retryBudget{remaining: attempts, deadline: time.Now().Add(time.Duration(seconds) * time.Second)})
 	}
 	for _, target := range targets {
+		c.Set("ccxRoutingEffectiveModel", target)
+		c.Set("ccxRoutingPolicy", policy != nil)
 		failedChannels := make(map[int]bool)
 		filter := candidateFilter
 		if policy != nil {

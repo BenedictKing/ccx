@@ -99,6 +99,7 @@ func (cm *ConfigManager) AddChatUpstream(upstream UpstreamConfig) error {
 	upstream.BaseURLs = deduplicateBaseURLs(upstream.BaseURLs, upstream.ServiceType)
 	applyDefaultBaseURL(&upstream)
 
+	upstream.ChannelUID = newChannelUID()
 	cm.config.ChatUpstream = append([]UpstreamConfig{upstream}, cm.config.ChatUpstream...)
 
 	if err := cm.saveConfigLocked(cm.config); err != nil {

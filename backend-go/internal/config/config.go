@@ -17,6 +17,7 @@ import (
 
 // UpstreamConfig 上游配置
 type UpstreamConfig struct {
+	ChannelUID            string                             `json:"channelUid,omitempty"` // 观测身份，重排/改名时保持不变
 	BaseURL               string                             `json:"baseUrl"`
 	BaseURLs              []string                           `json:"baseUrls,omitempty"` // 多 BaseURL 支持（failover 模式）
 	APIKeys               []string                           `json:"apiKeys"`

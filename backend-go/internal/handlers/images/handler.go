@@ -49,6 +49,8 @@ func Handler(
 			return
 		}
 
+		defer common.ObserveRoutingRequest(c, "images")()
+
 		startTime := time.Now()
 		bodyBytes, err := common.ReadRequestBody(c, envCfg.MaxRequestBodySize)
 		if err != nil {

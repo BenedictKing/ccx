@@ -34,6 +34,8 @@ func Handler(
 			return
 		}
 
+		defer common.ObserveRoutingRequest(c, "responses")()
+
 		startTime := time.Now()
 
 		// 读取原始请求体

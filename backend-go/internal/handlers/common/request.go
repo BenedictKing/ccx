@@ -133,6 +133,8 @@ func ReadRequestBody(c *gin.Context, maxBodySize int64) ([]byte, error) {
 		}
 	}
 
+	recordRoutingModel(c, bodyBytes)
+
 	// 恢复请求体供后续使用
 	c.Request.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 	return bodyBytes, nil

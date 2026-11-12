@@ -25,7 +25,7 @@
           <v-btn value="thisyear" size="x-small" class="chart-control-btn">{{ t('chart.thisyear') }}</v-btn>
         </v-btn-toggle>
 
-        <v-btn icon size="x-small" variant="text" :loading="isLoading" :disabled="isLoading" @click="refreshData">
+        <v-btn icon size="x-small" variant="text" :loading="isLoading" :disabled="isLoading" @click="refreshData()">
           <v-icon size="small">mdi-refresh</v-icon>
         </v-btn>
       </div>
@@ -172,9 +172,11 @@ const apexchart = VueApexCharts
 const props = withDefaults(defineProps<{
   apiType: 'messages' | 'chat' | 'responses' | 'gemini' | 'images' | 'vectors'
   compact?: boolean
+  duration?: Duration
 }>(), {
   compact: false
 })
+const emit = defineEmits<{ 'update:duration': [value: Duration]; refreshed: [manual: boolean] }>()
 const { t } = useI18n()
 
 // Types
@@ -208,7 +210,7 @@ const savedPrefs = loadSavedPreferences(props.apiType)
 
 // State (initialized from saved preferences)
 const selectedView = ref<ViewMode>(savedPrefs.view)
-const selectedDuration = ref<Duration>(savedPrefs.duration)
+const selectedDuration = ref<Duration>(props.duration ?? savedPrefs.duration)
 const isLoading = ref(false)
 const historyData = ref<GlobalStatsHistoryResponse | null>(null)
 const samplingKey = computed(() => `${props.apiType}:${selectedDuration.value}`)
@@ -817,13 +819,17 @@ const refreshData = async (isAutoRefresh = false) => {
       isLoading.value = false
     }
     if (requestId === refreshRequestId) {
+      emit('refreshed', !isAutoRefresh)
       isRefreshing.value = false
     }
   }
 }
 
 // Watchers
+watch(() => props.duration, value => { if (value) selectedDuration.value = value })
+
 watch(selectedDuration, (newVal) => {
+  emit('update:duration', newVal)
   savePreference(props.apiType, 'duration', newVal)
   adaptiveInterval.value = null
   refreshData()

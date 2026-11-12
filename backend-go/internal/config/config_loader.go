@@ -96,6 +96,9 @@ func (cm *ConfigManager) loadConfig() error {
 	// 兼容旧配置：检查 FuzzyModeEnabled 字段是否存在
 	// 如果不存在，默认设为 true（新功能默认启用）
 	needSaveDefaults := cm.applyConfigDefaults(data)
+	if normalizeChannelUIDs(&cm.config) {
+		needSaveDefaults = true
+	}
 	if cm.applyServiceTypeDefaults() {
 		needSaveDefaults = true
 	}
@@ -607,6 +610,7 @@ func (cm *ConfigManager) normalizeChannelPriorities() bool {
 
 // saveConfigLocked 保存配置（已加锁）。
 func (cm *ConfigManager) saveConfigLocked(config Config) error {
+	normalizeChannelUIDs(&config)
 	// 备份当前配置
 	cm.backupConfig()
 

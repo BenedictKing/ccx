@@ -22,6 +22,7 @@ import (
 	"github.com/BenedictKing/ccx/internal/conversation"
 	"github.com/BenedictKing/ccx/internal/handlers"
 	"github.com/BenedictKing/ccx/internal/handlers/chat"
+	"github.com/BenedictKing/ccx/internal/handlers/common"
 	"github.com/BenedictKing/ccx/internal/handlers/copilot"
 	"github.com/BenedictKing/ccx/internal/handlers/gemini"
 	"github.com/BenedictKing/ccx/internal/handlers/images"
@@ -373,6 +374,13 @@ func main() {
 		log.Printf("[Metrics-Init] 指标持久化已禁用，使用纯内存模式")
 	}
 
+	routingStore, routingErr := metrics.NewRoutingStore(metricsStore)
+	if routingErr != nil {
+		log.Printf("[Routing-Init] 持久化不可用: %v", routingErr)
+		routingStore, _ = metrics.NewRoutingStore(nil)
+	}
+	defer routingStore.Close()
+
 	// 初始化多渠道调度器（Messages、Responses、Gemini、Chat、Images 和 Vectors 使用独立的指标管理器）
 	var messagesMetricsManager, responsesMetricsManager, geminiMetricsManager, chatMetricsManager, imagesMetricsManager, vectorsMetricsManager *metrics.MetricsManager
 	if metricsStore != nil {
@@ -632,6 +640,7 @@ func main() {
 	r := gin.New()
 	r.Use(middleware.FilteredLogger(envCfg))
 	r.Use(gin.Recovery())
+	r.Use(common.RoutingStoreMiddleware(routingStore))
 
 	// 配置 CORS
 	r.Use(middleware.CORSMiddleware(envCfg))
@@ -660,6 +669,7 @@ func main() {
 	apiGroup := r.Group("/api")
 	{
 		siteaccess.RegisterRoutes(apiGroup, siteAccessDeps)
+		handlers.RegisterRoutingRoutes(apiGroup, routingStore, cfgManager)
 		apiGroup.GET("/reports/usage/channels", handlers.GetUsageReportChannels(cfgManager))
 		apiGroup.GET("/reports/usage.csv", handlers.GetUsageReportCSV(metricsStore, cfgManager))
 
@@ -1094,6 +1104,7 @@ func main() {
 		}
 
 		// 关闭指标持久化存储
+		routingStore.Close()
 		if metricsStore != nil {
 			if err := metricsStore.Close(); err != nil {
 				log.Printf("[Metrics-Shutdown] 警告: 关闭指标存储时发生错误: %v", err)

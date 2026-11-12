@@ -35,6 +35,8 @@ func Handler(
 			return
 		}
 
+		defer common.ObserveRoutingRequest(c, "gemini")()
+
 		startTime := time.Now()
 
 		// 读取原始请求体

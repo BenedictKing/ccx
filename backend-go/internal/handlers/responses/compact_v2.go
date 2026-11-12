@@ -93,7 +93,7 @@ func tryLocalCompactV2WithKey(
 	envCfg *config.EnvConfig,
 	cfgManager *config.ConfigManager,
 	sessionManager *session.SessionManager,
-) (bool, *compactError) {
+) (success bool, result *compactError) {
 	var originalReq types.ResponsesRequest
 	if err := json.Unmarshal(bodyBytes, &originalReq); err != nil {
 		return false, &compactError{status: 400, body: []byte(`{"error":"解析 compact v2 请求失败"}`), shouldFailover: false, err: err}
@@ -120,7 +120,15 @@ func tryLocalCompactV2WithKey(
 	}
 	req = common.WithRequestLogContext(req, c)
 
+	doneRouting := common.ObserveAuxiliaryAttempt(c, req, upstream, extractCompactRequestModel(bodyBytes))
 	resp, err := common.SendRequest(req, upstream, envCfg, originalReq.Stream, "Responses")
+	defer func() {
+		code := 0
+		if resp != nil {
+			code = resp.StatusCode
+		}
+		doneRouting(success, code)
+	}()
 	if err != nil {
 		return false, &compactError{status: 502, body: []byte(`{"error":"本地 compact v2 上游请求失败"}`), shouldFailover: true, err: err}
 	}

@@ -250,7 +250,7 @@
           <v-expand-transition>
             <div v-if="preferencesStore.showGlobalStats">
               <v-divider />
-              <GlobalStatsChart :api-type="channelStore.activeTab" />
+              <GlobalStatsPanel :key="channelStore.activeTab" :api-type="channelStore.activeTab" />
             </div>
           </v-expand-transition>
         </v-card>
@@ -696,7 +696,7 @@ import UserGuideDialog from './components/UserGuideDialog.vue'
 import { useAppController } from './composables/useAppController'
 
 // 异步加载图表组件，减少首屏 JS 体积
-const GlobalStatsChart = defineAsyncComponent(() => import('./components/GlobalStatsChart.vue'))
+const GlobalStatsPanel = defineAsyncComponent(() => import('./components/GlobalStatsPanel.vue'))
 
 const {
   route,

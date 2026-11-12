@@ -18,6 +18,7 @@ import (
 
 	"github.com/BenedictKing/ccx/internal/config"
 	"github.com/BenedictKing/ccx/internal/handlers/common"
+	"github.com/BenedictKing/ccx/internal/metrics"
 	"github.com/BenedictKing/ccx/internal/middleware"
 	"github.com/BenedictKing/ccx/internal/providers"
 	"github.com/BenedictKing/ccx/internal/scheduler"
@@ -88,6 +89,9 @@ func WebSocketHandler(
 
 			selection, err := selectResponsesWebSocketChannel(c, cfgManager, channelScheduler, payload)
 			if err != nil {
+				observer := common.NewSocketRoutingObserver(c)
+				observer.Begin(payload)
+				observer.Close(metrics.RoutingStatusFailed)
 				writeWebSocketError(conn, http.StatusServiceUnavailable, "channel_selection_error", err.Error())
 				return
 			}
@@ -267,6 +271,9 @@ func serveNativeResponsesWebSocket(
 	selection *scheduler.SelectionResult,
 	firstPayload []byte,
 ) error {
+	observer := common.NewSocketRoutingObserver(c)
+	firstTurn := observer.Begin(firstPayload)
+	defer observer.Close(metrics.RoutingStatusFailed)
 	upstream := selection.Upstream
 	if upstream == nil {
 		return errors.New("Responses WebSocket 未选择到上游渠道")
@@ -285,7 +292,8 @@ func serveNativeResponsesWebSocket(
 		return err
 	}
 
-	firstRequest, err := buildNativeResponsesWebSocketRequest(c, upstreamCopy, apiKey, firstPayload, sessionManager)
+	firstUpstream, firstDecision := common.PinSocketModelMapping(upstreamCopy, firstPayload)
+	firstRequest, err := buildNativeResponsesWebSocketRequest(c, firstUpstream, apiKey, firstPayload, sessionManager)
 	if err != nil {
 		return err
 	}
@@ -294,6 +302,7 @@ func serveNativeResponsesWebSocket(
 		return err
 	}
 
+	observer.Sending(firstTurn, firstRequest.Body, firstUpstream, selection.Reason, firstDecision)
 	upstreamConn, resp, err := dialer.DialContext(c.Request.Context(), firstRequest.URL, firstRequest.Header)
 	if err != nil {
 		if resp != nil {
@@ -311,18 +320,25 @@ func serveNativeResponsesWebSocket(
 		return err
 	}
 
-	errCh := make(chan error, 2)
+	errCh := make(chan bool, 2)
 	go func() {
-		errCh <- copyNativeResponsesClientToUpstream(c, clientConn, upstreamConn, upstreamCopy, apiKey, sessionManager)
+		_ = copyNativeResponsesClientToUpstream(c, clientConn, upstreamConn, upstreamCopy, apiKey, sessionManager, observer)
+		errCh <- true
 	}()
 	go func() {
-		errCh <- copyNativeResponsesUpstreamToClient(upstreamConn, clientConn)
+		_ = copyNativeResponsesUpstreamToClient(upstreamConn, clientConn, observer)
+		errCh <- false
 	}()
-
+	status := metrics.RoutingStatusFailed
 	select {
 	case <-c.Request.Context().Done():
-	case <-errCh:
+		status = metrics.RoutingStatusCancelled
+	case clientClosed := <-errCh:
+		if clientClosed {
+			status = metrics.RoutingStatusCancelled
+		}
 	}
+	observer.Close(status)
 
 	_ = upstreamConn.Close()
 	_ = clientConn.Close()
@@ -428,6 +444,7 @@ func copyNativeResponsesClientToUpstream(
 	upstream *config.UpstreamConfig,
 	apiKey string,
 	sessionManager *session.SessionManager,
+	observer *common.SocketRoutingObserver,
 ) error {
 	for {
 		messageType, payload, err := clientConn.ReadMessage()
@@ -435,19 +452,25 @@ func copyNativeResponsesClientToUpstream(
 			return err
 		}
 		if messageType != websocket.TextMessage {
+			observer.Close(metrics.RoutingStatusFailed)
 			return errors.New("only text messages are supported")
 		}
-		body, err := buildNativeResponsesWebSocketBody(c, upstream, apiKey, payload, sessionManager)
+		turn := observer.Begin(payload)
+		pinned, decision := common.PinSocketModelMapping(upstream, payload)
+		body, err := buildNativeResponsesWebSocketBody(c, pinned, apiKey, payload, sessionManager)
 		if err != nil {
+			observer.Close(metrics.RoutingStatusFailed)
 			return err
 		}
+		observer.Sending(turn, body, pinned, "websocket_connection", decision)
 		if err := writeWebSocketText(upstreamConn, body); err != nil {
+			observer.Close(metrics.RoutingStatusFailed)
 			return err
 		}
 	}
 }
 
-func copyNativeResponsesUpstreamToClient(upstreamConn *websocket.Conn, clientConn *websocket.Conn) error {
+func copyNativeResponsesUpstreamToClient(upstreamConn *websocket.Conn, clientConn *websocket.Conn, observer *common.SocketRoutingObserver) error {
 	for {
 		messageType, payload, err := upstreamConn.ReadMessage()
 		if err != nil {
@@ -457,8 +480,10 @@ func copyNativeResponsesUpstreamToClient(upstreamConn *websocket.Conn, clientCon
 			continue
 		}
 		if err := writeWebSocketText(clientConn, payload); err != nil {
+			observer.Close(metrics.RoutingStatusCancelled)
 			return err
 		}
+		observer.Event(payload)
 	}
 }
 

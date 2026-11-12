@@ -2,6 +2,7 @@ package common
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -74,6 +75,11 @@ func TestModelFallbackWithRealUpstreamAttempts(t *testing.T) {
 			c, _ := gin.CreateTestContext(recorder)
 			body := []byte(`{"model":"client","messages":[{"role":"user","content":"hello"}]}`)
 			c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewReader(body))
+			routingStore, _ := metrics.NewRoutingStore(nil)
+			defer routingStore.Close()
+			c.Request = c.Request.WithContext(context.WithValue(c.Request.Context(), routingStoreContextKey{}, routingStore))
+			finishObservation := ObserveRoutingRequest(c, "chat")
+			recordRoutingModel(c, body)
 			env := config.NewEnvConfig()
 			HandleMultiChannelFailover(c, env, sch, scheduler.ChannelKindChat, "Chat", "", "client", "", func(selection *scheduler.SelectionResult) MultiChannelAttemptResult {
 				handled, key, index, failover, usage, lastErr := TryUpstreamWithAllKeys(c, env, cm, sch, scheduler.ChannelKindChat, "Chat", manager, selection.Upstream, []warmup.URLLatencyResult{{URL: srv.URL}}, body, nil, false,
@@ -94,6 +100,21 @@ func TestModelFallbackWithRealUpstreamAttempts(t *testing.T) {
 					}, "client", "", selection.ChannelIndex, sch.GetChannelLogStore(scheduler.ChannelKindChat))
 				return MultiChannelAttemptResult{Handled: handled, Attempted: true, SuccessKey: key, SuccessBaseURLIdx: index, FailoverError: failover, Usage: usage, LastError: lastErr}
 			}, nil, nil)
+			finishObservation()
+			records, _ := routingStore.Snapshot("chat", time.Now().Add(-time.Hour), time.Now().Add(time.Second))
+			if len(records) != 1 || records[0].RequestedModel != "client" || len(records[0].Attempts) != tc.wantAttempts {
+				t.Fatalf("routing records=%+v", records)
+			}
+			first := records[0].Attempts[0]
+			if first.EffectiveModel != "primary" || first.TransformReason != "model_fallback" || first.MappingOutcome != metrics.MappingOutcomeUnmatched {
+				t.Fatalf("first model fallback=%+v", first)
+			}
+			if !tc.allFail {
+				last := records[0].Attempts[len(records[0].Attempts)-1]
+				if last.SentModel != "backup" || last.EffectiveModel != "backup" {
+					t.Fatalf("last fallback=%+v", last)
+				}
+			}
 			if recorder.Code != tc.wantStatus || int(attempts.Load()) != tc.wantAttempts {
 				t.Fatalf("status=%d attempts=%d body=%s", recorder.Code, attempts.Load(), recorder.Body.String())
 			}

@@ -120,13 +120,19 @@ func RedirectModel(model string, upstream *UpstreamConfig) string {
 
 // RedirectModelWithMatch 返回模型重定向结果，并标记是否命中 ModelMapping。
 func RedirectModelWithMatch(model string, upstream *UpstreamConfig) (string, bool) {
+	mapped, _, match := RedirectModelWithRule(model, upstream)
+	return mapped, match != ""
+}
+
+// RedirectModelWithRule 返回实际执行的规则，供观测复用，避免重新推断匹配。
+func RedirectModelWithRule(model string, upstream *UpstreamConfig) (string, string, string) {
 	if upstream == nil || upstream.ModelMapping == nil || len(upstream.ModelMapping) == 0 {
-		return model, false
+		return model, "", ""
 	}
 
 	// 直接匹配（精确匹配优先）
 	if mapped, ok := upstream.ModelMapping[model]; ok {
-		return mapped, true
+		return mapped, model, "exact"
 	}
 
 	// 模糊匹配：按源模型长度从长到短排序，确保最长匹配优先
@@ -144,11 +150,11 @@ func RedirectModelWithMatch(model string, upstream *UpstreamConfig) (string, boo
 
 	for _, m := range mappings {
 		if strings.Contains(model, m.source) {
-			return m.target, true
+			return m.target, m.source, "contains"
 		}
 	}
 
-	return model, false
+	return model, "", ""
 }
 
 // ResolveReasoningEffort 根据原始模型名解析 reasoning effort

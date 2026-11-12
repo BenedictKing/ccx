@@ -60,6 +60,8 @@ func CompactHandler(
 			return
 		}
 
+		defer common.ObserveRoutingRequest(c, "responses")()
+
 		// 读取请求体
 		maxBodySize := envCfg.MaxRequestBodySize
 		bodyBytes, err := common.ReadRequestBody(c, maxBodySize)
@@ -337,7 +339,7 @@ func tryCompactWithKey(
 	envCfg *config.EnvConfig,
 	cfgManager *config.ConfigManager,
 	sessionManager *session.SessionManager,
-) (bool, *compactError) {
+) (success bool, result *compactError) {
 	// 非 responses 类型上游走本地 compact
 	if needsLocalCompact(upstream) {
 		return tryLocalCompactWithKey(c, upstream, apiKey, bodyBytes, envCfg, cfgManager, sessionManager)
@@ -357,7 +359,15 @@ func tryCompactWithKey(
 	utils.ApplyCustomHeaders(req.Header, upstream.CustomHeaders)
 	req = common.WithRequestLogContext(req, c)
 
+	doneRouting := common.ObserveAuxiliaryAttempt(c, req, upstream, extractCompactRequestModel(bodyBytes))
 	resp, err := common.SendRequest(req, upstream, envCfg, false, "Responses")
+	defer func() {
+		code := 0
+		if resp != nil {
+			code = resp.StatusCode
+		}
+		doneRouting(success, code)
+	}()
 	if err != nil {
 		common.RequestLogf(c, "[Compact-Local] 原生 compact 请求失败，回退本地 compact: %v", err)
 		return tryLocalCompactWithKey(c, upstream, apiKey, bodyBytes, envCfg, cfgManager, sessionManager)

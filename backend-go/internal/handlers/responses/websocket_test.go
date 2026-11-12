@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/BenedictKing/ccx/internal/config"
+	"github.com/BenedictKing/ccx/internal/handlers/common"
 	"github.com/BenedictKing/ccx/internal/metrics"
 	"github.com/BenedictKing/ccx/internal/scheduler"
 	"github.com/BenedictKing/ccx/internal/session"
@@ -108,13 +109,15 @@ func TestResponsesWebSocketHandler_ResponsesUpstreamKeepsNativeV2Continuation(t 
 	}))
 	defer upstream.Close()
 
+	store, _ := metrics.NewRoutingStore(nil)
+	defer store.Close()
 	router := newResponsesWebSocketTestRouter(t, config.UpstreamConfig{
 		Name:        "responses-ws-test",
 		BaseURL:     upstream.URL,
 		APIKeys:     []string{"sk-test"},
 		ServiceType: "responses",
 		Status:      "active",
-	})
+	}, store)
 	server := httptest.NewServer(router)
 	defer server.Close()
 
@@ -150,6 +153,22 @@ func TestResponsesWebSocketHandler_ResponsesUpstreamKeepsNativeV2Continuation(t 
 	}
 	_ = readWebSocketJSONUntilType(t, conn, "response.completed")
 
+	deadline := time.Now().Add(time.Second)
+	for {
+		records, _ := store.Snapshot("responses", time.Now().Add(-time.Hour), time.Now().Add(time.Second))
+		if len(records) == 2 && records[0].Status == metrics.RoutingStatusSuccess && records[1].Status == metrics.RoutingStatusSuccess {
+			for _, request := range records {
+				if len(request.Attempts) != 1 || request.Attempts[0].Transport != "websocket" || request.Attempts[0].SentModel != "gpt-5" {
+					t.Fatalf("native observation=%+v", request)
+				}
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("native records=%+v", records)
+		}
+		time.Sleep(time.Millisecond)
+	}
 	first := <-upstreamBody
 	second := <-upstreamBody
 	if first["type"] != "response.create" || second["previous_response_id"] != "resp-1" {
@@ -234,7 +253,7 @@ func TestResponsesWebSocketHandler_NonResponsesUpstreamKeepsHTTPBridge(t *testin
 	}
 }
 
-func newResponsesWebSocketTestRouter(t *testing.T, upstream config.UpstreamConfig) *gin.Engine {
+func newResponsesWebSocketTestRouter(t *testing.T, upstream config.UpstreamConfig, stores ...*metrics.RoutingStore) *gin.Engine {
 	t.Helper()
 	cfgManager := setupResponsesTestConfigManager(t, []config.UpstreamConfig{upstream})
 	channelScheduler := scheduler.NewChannelScheduler(
@@ -253,6 +272,9 @@ func newResponsesWebSocketTestRouter(t *testing.T, upstream config.UpstreamConfi
 	}
 
 	r := gin.New()
+	if len(stores) > 0 {
+		r.Use(common.RoutingStoreMiddleware(stores[0]))
+	}
 	r.GET("/v1/responses", WebSocketHandler(envCfg, cfgManager, session.NewSessionManager(time.Hour, 100, 100000), channelScheduler))
 	return r
 }

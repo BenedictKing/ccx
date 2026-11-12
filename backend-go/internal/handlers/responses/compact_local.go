@@ -301,7 +301,7 @@ func tryLocalCompactWithKey(
 	envCfg *config.EnvConfig,
 	cfgManager *config.ConfigManager,
 	sessionManager *session.SessionManager,
-) (bool, *compactError) {
+) (success bool, result *compactError) {
 	// 解析原始请求判断 stream
 	var originalReq types.ResponsesRequest
 	if err := json.Unmarshal(bodyBytes, &originalReq); err != nil {
@@ -335,7 +335,15 @@ func tryLocalCompactWithKey(
 	req = common.WithRequestLogContext(req, c)
 
 	// 发送请求
+	doneRouting := common.ObserveAuxiliaryAttempt(c, req, upstream, extractCompactRequestModel(bodyBytes))
 	resp, err := common.SendRequest(req, upstream, envCfg, stream, "Responses")
+	defer func() {
+		code := 0
+		if resp != nil {
+			code = resp.StatusCode
+		}
+		doneRouting(success, code)
+	}()
 	if err != nil {
 		return false, &compactError{status: 502, body: []byte(`{"error":"本地 compact 上游请求失败"}`), shouldFailover: true, err: err}
 	}

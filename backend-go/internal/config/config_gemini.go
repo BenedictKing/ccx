@@ -99,6 +99,7 @@ func (cm *ConfigManager) AddGeminiUpstream(upstream UpstreamConfig) error {
 	upstream.BaseURLs = deduplicateBaseURLs(upstream.BaseURLs, upstream.ServiceType)
 	applyDefaultBaseURL(&upstream)
 
+	upstream.ChannelUID = newChannelUID()
 	cm.config.GeminiUpstream = append([]UpstreamConfig{upstream}, cm.config.GeminiUpstream...)
 
 	if err := cm.saveConfigLocked(cm.config); err != nil {

@@ -30,6 +30,8 @@ func Handler(envCfg *config.EnvConfig, cfgManager *config.ConfigManager, channel
 			return
 		}
 
+		defer common.ObserveRoutingRequest(c, "messages")()
+
 		startTime := time.Now()
 
 		// 读取请求体

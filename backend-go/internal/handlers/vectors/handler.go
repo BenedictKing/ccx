@@ -38,6 +38,8 @@ func Handler(
 			return
 		}
 
+		defer common.ObserveRoutingRequest(c, "vectors")()
+
 		startTime := time.Now()
 		bodyBytes, err := common.ReadRequestBody(c, envCfg.MaxRequestBodySize)
 		if err != nil {
