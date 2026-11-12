@@ -230,9 +230,9 @@ func TestResolveUpstreamCapability_Step37FlashBuiltin(t *testing.T) {
 	if pricing == nil {
 		t.Fatal("Pricing = nil, want step-3.7-flash pricing")
 	}
-	assertFloatPointerValue(t, pricing.InputCacheHitPrice, 0.04, "Pricing.InputCacheHitPrice")
-	assertFloatPointerValue(t, pricing.InputCacheMissPrice, 0.2, "Pricing.InputCacheMissPrice")
-	assertFloatPointerValue(t, pricing.OutputPrice, 1.15, "Pricing.OutputPrice")
+	assertFloatPointerValue(t, pricing.InputCacheHitPrice, 0.27, "Pricing.InputCacheHitPrice")
+	assertFloatPointerValue(t, pricing.InputCacheMissPrice, 1.35, "Pricing.InputCacheMissPrice")
+	assertFloatPointerValue(t, pricing.OutputPrice, 8.1, "Pricing.OutputPrice")
 }
 
 func TestResolveUpstreamCapability_GPT56BedrockBuiltin(t *testing.T) {
@@ -249,8 +249,8 @@ func TestResolveUpstreamCapability_GPT56BedrockBuiltin(t *testing.T) {
 	if resolved.Capability.Provider != "amazon-bedrock" {
 		t.Fatalf("Provider = %q, want amazon-bedrock", resolved.Capability.Provider)
 	}
-	if resolved.Capability.ContextWindowTokens != 272000 {
-		t.Fatalf("ContextWindowTokens = %d, want 272000", resolved.Capability.ContextWindowTokens)
+	if resolved.Capability.ContextWindowTokens != 1050000 {
+		t.Fatalf("ContextWindowTokens = %d, want 1050000", resolved.Capability.ContextWindowTokens)
 	}
 	if resolved.Capability.MaxOutputTokens != 128000 {
 		t.Fatalf("MaxOutputTokens = %d, want 128000", resolved.Capability.MaxOutputTokens)

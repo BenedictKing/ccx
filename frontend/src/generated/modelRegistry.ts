@@ -719,7 +719,7 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
   "(?:^|[-/])gpt-5\\.5(?=$|@)": {
     "provider": "openai",
     "displayName": "GPT-5.5",
-    "contextWindowTokens": 272000,
+    "contextWindowTokens": 1050000,
     "maxOutputTokens": 128000,
     "reasoningEfforts": [
       "low",
@@ -743,13 +743,14 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
       "inputCacheHitPrice": 0.5
     },
     "sources": [
-      "https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json"
+      "https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json",
+      "https://developers.openai.com/api/docs/models/gpt-5.5"
     ]
   },
   "(?:^|[-/])gpt-5\\.5-2026-04-23(?=$|@)": {
     "provider": "openai",
     "displayName": "GPT-5.5",
-    "contextWindowTokens": 272000,
+    "contextWindowTokens": 1050000,
     "maxOutputTokens": 128000,
     "reasoningEfforts": [
       "low",
@@ -773,7 +774,8 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
       "inputCacheHitPrice": 0.5
     },
     "sources": [
-      "https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json"
+      "https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json",
+      "https://developers.openai.com/api/docs/models/gpt-5.5"
     ]
   },
   "(?:^|[-/])gpt-5\\.5-pro(?=$|@)": {
@@ -1199,7 +1201,7 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
   "(?:^|[-/])gpt-5\\.6(?=$|@)": {
     "provider": "amazon-bedrock",
     "displayName": "Amazon Bedrock GPT-5.6",
-    "contextWindowTokens": 272000,
+    "contextWindowTokens": 1050000,
     "maxOutputTokens": 128000,
     "reasoningEfforts": [
       "low",
@@ -1225,13 +1227,14 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
     },
     "sources": [
       "https://github.com/openai/codex/compare/rust-v0.142.2...rust-v0.142.3",
-      "https://developer.cloud.tencent.com/article/2728426"
+      "https://developer.cloud.tencent.com/article/2728426",
+      "https://developers.openai.com/api/docs/guides/amazon-bedrock"
     ]
   },
   "(?:^|[-/])gpt-5\\.6-sol(?=$|@)": {
     "provider": "amazon-bedrock",
     "displayName": "Amazon Bedrock GPT-5.6",
-    "contextWindowTokens": 272000,
+    "contextWindowTokens": 1050000,
     "maxOutputTokens": 128000,
     "reasoningEfforts": [
       "low",
@@ -1257,13 +1260,14 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
     },
     "sources": [
       "https://github.com/openai/codex/compare/rust-v0.142.2...rust-v0.142.3",
-      "https://developer.cloud.tencent.com/article/2728426"
+      "https://developer.cloud.tencent.com/article/2728426",
+      "https://developers.openai.com/api/docs/guides/amazon-bedrock"
     ]
   },
   "(?:^|[-/])gpt-5\\.6-terra(?=$|@)": {
     "provider": "amazon-bedrock",
     "displayName": "Amazon Bedrock GPT-5.6",
-    "contextWindowTokens": 272000,
+    "contextWindowTokens": 1050000,
     "maxOutputTokens": 128000,
     "reasoningEfforts": [
       "low",
@@ -1289,13 +1293,14 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
     },
     "sources": [
       "https://github.com/openai/codex/compare/rust-v0.142.2...rust-v0.142.3",
-      "https://developer.cloud.tencent.com/article/2728426"
+      "https://developer.cloud.tencent.com/article/2728426",
+      "https://developers.openai.com/api/docs/guides/amazon-bedrock"
     ]
   },
   "(?:^|[-/])gpt-5\\.6-luna(?=$|@)": {
     "provider": "amazon-bedrock",
     "displayName": "Amazon Bedrock GPT-5.6",
-    "contextWindowTokens": 272000,
+    "contextWindowTokens": 1050000,
     "maxOutputTokens": 128000,
     "reasoningEfforts": [
       "low",
@@ -1321,13 +1326,14 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
     },
     "sources": [
       "https://github.com/openai/codex/compare/rust-v0.142.2...rust-v0.142.3",
-      "https://developer.cloud.tencent.com/article/2728426"
+      "https://developer.cloud.tencent.com/article/2728426",
+      "https://developers.openai.com/api/docs/guides/amazon-bedrock"
     ]
   },
   "(?:^|[-/])gpt-5\\.4(?:-openai-compact)?(?=$|@)": {
     "provider": "openai",
     "displayName": "GPT-5.4",
-    "contextWindowTokens": 1000000,
+    "contextWindowTokens": 1050000,
     "maxOutputTokens": 128000,
     "reasoningEfforts": [
       "low",
@@ -1350,13 +1356,14 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
       "inputCacheHitPrice": 0.25
     },
     "sources": [
-      "https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json"
+      "https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json",
+      "https://developers.openai.com/api/docs/models/gpt-5.4"
     ]
   },
   "(?:^|[-/])gpt-5\\.4-2026-03-05(?=$|@)": {
     "provider": "openai",
     "displayName": "GPT-5.4",
-    "contextWindowTokens": 1000000,
+    "contextWindowTokens": 1050000,
     "maxOutputTokens": 128000,
     "reasoningEfforts": [
       "low",
@@ -1379,7 +1386,8 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
       "inputCacheHitPrice": 0.25
     },
     "sources": [
-      "https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json"
+      "https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json",
+      "https://developers.openai.com/api/docs/models/gpt-5.4"
     ]
   },
   "(?:^|[-/])gpt-5\\.4-pro(?=$|@)": {
@@ -1638,14 +1646,15 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
     "pricing": {
       "unit": "per_1m_tokens_cny",
       "currency": "CNY",
+      "inputCacheHitPrice": 2,
       "inputCacheMissPrice": 8,
-      "outputPrice": 28,
-      "inputCacheHitPrice": 0.26
+      "outputPrice": 28
     },
     "sources": [
       "https://docs.bigmodel.cn/cn/guide/models/text/glm-5.3",
       "https://docs.z.ai/devpack/latest-model",
-      "https://docs.z.ai/release-notes/new-released"
+      "https://docs.z.ai/release-notes/new-released",
+      "https://docs.bigmodel.cn/cn/guide/start/pricing"
     ]
   },
   "(?:^|[-/])glm-5p3(?=$|@)": {
@@ -1670,17 +1679,18 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
     "pricing": {
       "unit": "per_1m_tokens_cny",
       "currency": "CNY",
+      "inputCacheHitPrice": 2,
       "inputCacheMissPrice": 8,
-      "outputPrice": 28,
-      "inputCacheHitPrice": 0.26
+      "outputPrice": 28
     },
     "sources": [
       "https://docs.bigmodel.cn/cn/guide/models/text/glm-5.3",
       "https://docs.z.ai/devpack/latest-model",
-      "https://docs.z.ai/release-notes/new-released"
+      "https://docs.z.ai/release-notes/new-released",
+      "https://docs.bigmodel.cn/cn/guide/start/pricing"
     ]
   },
-  "(?:^|[-/])glm-5\\.3-flash(?:x)?(?:-legal)?(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?:\\[1m\\])?(?=$|@)": {
+  "(?:^|[-/])glm-5\\.3-flash(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?:\\[1m\\])?(?=$|@)": {
     "provider": "zai",
     "displayName": "GLM-5.3-Flash",
     "description": "Multimodal MoE variant (320B total / 18B active) with vision input. Model codes: glm-5.3-flash / glm-5.3-flashx / glm-5.3-flashx-legal. Append [1m] to enable the 1M context window.",
@@ -1701,18 +1711,55 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
       "contextCaching": true
     },
     "pricing": {
-      "unit": "per_1m_tokens_usd",
-      "currency": "USD",
-      "inputCacheMissPrice": 0.15,
-      "outputPrice": 0.5,
-      "inputCacheHitPrice": 0.03
+      "unit": "per_1m_tokens_cny",
+      "currency": "CNY",
+      "inputCacheHitPrice": 0.23,
+      "inputCacheMissPrice": 0.8,
+      "outputPrice": 2.8
     },
     "sources": [
       "https://docs.z.ai/guides/vlm/glm-5.3-flash",
       "https://docs.bigmodel.cn/cn/update/new-releases",
       "https://docs.bigmodel.cn/cn/guide/models/vlm/glm-5.3-flash",
       "https://docs.z.ai/devpack/latest-model",
-      "https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json"
+      "https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json",
+      "https://docs.bigmodel.cn/cn/guide/start/pricing"
+    ]
+  },
+  "(?:^|[-/])glm-5\\.3-flashx(?:-legal)?(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?:\\[1m\\])?(?=$|@)": {
+    "provider": "zai",
+    "displayName": "GLM-5.3-FlashX",
+    "description": "Multimodal MoE variant (320B total / 18B active) with vision input. Model codes: glm-5.3-flash / glm-5.3-flashx / glm-5.3-flashx-legal. Append [1m] to enable the 1M context window.",
+    "contextWindowTokens": 1048576,
+    "maxOutputTokens": 131072,
+    "thinkingMode": "thinking",
+    "reasoningEfforts": [
+      "low",
+      "high",
+      "max"
+    ],
+    "capabilities": {
+      "toolCalls": true,
+      "streamingToolCalls": true,
+      "jsonMode": true,
+      "reasoning": true,
+      "vision": true,
+      "contextCaching": true
+    },
+    "pricing": {
+      "unit": "per_1m_tokens_cny",
+      "currency": "CNY",
+      "inputCacheHitPrice": 0.57,
+      "inputCacheMissPrice": 2,
+      "outputPrice": 7
+    },
+    "sources": [
+      "https://docs.z.ai/guides/vlm/glm-5.3-flash",
+      "https://docs.bigmodel.cn/cn/update/new-releases",
+      "https://docs.bigmodel.cn/cn/guide/models/vlm/glm-5.3-flash",
+      "https://docs.z.ai/devpack/latest-model",
+      "https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json",
+      "https://docs.bigmodel.cn/cn/guide/start/pricing"
     ]
   },
   "(?:^|[-/])glm-5\\.2(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)": {
@@ -1998,21 +2045,22 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
     "pricing": {
       "unit": "per_1m_tokens_cny",
       "currency": "CNY",
-      "inputCacheHitPrice": 0.04,
-      "inputCacheMissPrice": 0.2,
-      "outputPrice": 1.15
+      "inputCacheHitPrice": 0.27,
+      "inputCacheMissPrice": 1.35,
+      "outputPrice": 8.1
     },
     "sources": [
       "https://platform.stepfun.ai/docs/en/guides/models/step-3.7-flash",
       "https://platform.stepfun.ai/docs/en/guides/models/step-3.7-flash-quickstart",
-      "https://platform.stepfun.ai/docs/en/api-reference/chat/chat-completion-create"
+      "https://platform.stepfun.ai/docs/en/api-reference/chat/chat-completion-create",
+      "https://platform.stepfun.com/docs/zh/guides/pricing/details"
     ]
   },
   "(?:^|[-/])qwen3\\.8-max(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{4,8})?(?=$|@)": {
     "provider": "dashscope",
     "displayName": "Qwen3.8 Max",
     "description": "Qwen3.8 Max multimodal flagship (2.4T total / 95B active). 1M context with max input 991,808 tokens, 131,072 max output tokens and 262,144 max reasoning tokens. Snapshot qwen3.8-max-0902 is available.",
-    "contextWindowTokens": 991808,
+    "contextWindowTokens": 1000000,
     "maxOutputTokens": 131072,
     "thinkingMode": "thinking",
     "reasoningEfforts": [
@@ -2049,7 +2097,7 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
     "provider": "dashscope",
     "displayName": "Qwen3.8 Max",
     "description": "Qwen3.8 Max multimodal flagship (2.4T total / 95B active). 1M context with max input 991,808 tokens, 131,072 max output tokens and 262,144 max reasoning tokens. Snapshot qwen3.8-max-0902 is available.",
-    "contextWindowTokens": 991808,
+    "contextWindowTokens": 1000000,
     "maxOutputTokens": 131072,
     "thinkingMode": "thinking",
     "reasoningEfforts": [
@@ -2300,7 +2348,7 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
   "(?:^|[-/])deepseek-v4-flash(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{4,8})?(?=$|@)": {
     "provider": "deepseek",
     "displayName": "DeepSeek V4 Flash",
-    "description": "Supports thinking and non-thinking modes. deepseek-chat is a deprecated compatibility alias for the non-thinking mode.",
+    "description": "Supports thinking and non-thinking modes. deepseek-chat is a deprecated compatibility alias for the non-thinking mode. Pricing is the official off-peak CNY baseline; weekday peak rates are twice this amount.",
     "contextWindowTokens": 1000000,
     "maxOutputTokens": 384000,
     "thinkingMode": "thinking",
@@ -2320,7 +2368,7 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
       "currency": "CNY",
       "inputCacheHitPrice": 0.02,
       "inputCacheMissPrice": 1,
-      "outputPrice": 2
+      "outputPrice": 4
     },
     "sources": [
       "https://api-docs.deepseek.com/zh-cn/quick_start/pricing",
@@ -2331,7 +2379,7 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
   "(?:^|[-/])deepseek-chat(?=$|@)": {
     "provider": "deepseek",
     "displayName": "DeepSeek V4 Flash",
-    "description": "Supports thinking and non-thinking modes. deepseek-chat is a deprecated compatibility alias for the non-thinking mode.",
+    "description": "Supports thinking and non-thinking modes. deepseek-chat is a deprecated compatibility alias for the non-thinking mode. Pricing is the official off-peak CNY baseline; weekday peak rates are twice this amount.",
     "contextWindowTokens": 1000000,
     "maxOutputTokens": 384000,
     "thinkingMode": "thinking",
@@ -2351,7 +2399,7 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
       "currency": "CNY",
       "inputCacheHitPrice": 0.02,
       "inputCacheMissPrice": 1,
-      "outputPrice": 2
+      "outputPrice": 4
     },
     "sources": [
       "https://api-docs.deepseek.com/zh-cn/quick_start/pricing",
@@ -2392,7 +2440,7 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
   "(?:^|[-/])deepseek-v4-pro(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{4,8})?(?=$|@)": {
     "provider": "deepseek",
     "displayName": "DeepSeek V4 Pro",
-    "description": "Supports thinking and non-thinking modes. deepseek-reasoner is a deprecated compatibility alias for the thinking mode.",
+    "description": "Supports thinking and non-thinking modes. deepseek-reasoner is a deprecated compatibility alias for the thinking mode. Pricing is the official off-peak CNY baseline; weekday peak rates are twice this amount.",
     "contextWindowTokens": 1000000,
     "maxOutputTokens": 384000,
     "thinkingMode": "thinking",
@@ -2410,9 +2458,9 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
     "pricing": {
       "unit": "per_1m_tokens_cny",
       "currency": "CNY",
-      "inputCacheHitPrice": 0.025,
-      "inputCacheMissPrice": 3,
-      "outputPrice": 6
+      "inputCacheHitPrice": 0.15,
+      "inputCacheMissPrice": 4.5,
+      "outputPrice": 13.5
     },
     "sources": [
       "https://api-docs.deepseek.com/zh-cn/quick_start/pricing",
@@ -2422,7 +2470,7 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
   "(?:^|[-/])deepseek-reasoner(?=$|@)": {
     "provider": "deepseek",
     "displayName": "DeepSeek V4 Pro",
-    "description": "Supports thinking and non-thinking modes. deepseek-reasoner is a deprecated compatibility alias for the thinking mode.",
+    "description": "Supports thinking and non-thinking modes. deepseek-reasoner is a deprecated compatibility alias for the thinking mode. Pricing is the official off-peak CNY baseline; weekday peak rates are twice this amount.",
     "contextWindowTokens": 1000000,
     "maxOutputTokens": 384000,
     "thinkingMode": "thinking",
@@ -2440,9 +2488,9 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
     "pricing": {
       "unit": "per_1m_tokens_cny",
       "currency": "CNY",
-      "inputCacheHitPrice": 0.025,
-      "inputCacheMissPrice": 3,
-      "outputPrice": 6
+      "inputCacheHitPrice": 0.15,
+      "inputCacheMissPrice": 4.5,
+      "outputPrice": 13.5
     },
     "sources": [
       "https://api-docs.deepseek.com/zh-cn/quick_start/pricing",
@@ -2475,7 +2523,9 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
     "displayName": "Kimi K3",
     "description": "Kimi K3 (released 2026-07-16), 2.8T MoE with native vision and 1M context. OpenRouter model id moonshotai/kimi-k3.",
     "contextWindowTokens": 1048576,
-    "maxOutputTokens": 262144,
+    "maxOutputTokens": 1048576,
+    "defaultOutputTokens": 131072,
+    "recommendedOutputTokens": 131072,
     "thinkingMode": "thinking",
     "reasoningEfforts": [
       "low",
@@ -2491,16 +2541,19 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
       "jsonMode": true
     },
     "pricing": {
-      "unit": "per_1m_tokens_usd",
-      "currency": "USD",
-      "inputCacheMissPrice": 3,
-      "outputPrice": 15,
-      "inputCacheHitPrice": 0.3
+      "unit": "per_1m_tokens_cny",
+      "currency": "CNY",
+      "inputCacheHitPrice": 2,
+      "inputCacheMissPrice": 20,
+      "outputPrice": 100
     },
     "sources": [
       "https://openrouter.ai/moonshotai/kimi-k3",
       "https://trilogyai.substack.com/p/kimi-k3-is-live-pricing-benchmarks",
-      "https://www.kimi.com/code/docs/kimi-code/models.html"
+      "https://www.kimi.com/code/docs/kimi-code/models.html",
+      "https://platform.kimi.com/docs/api/responses",
+      "https://platform.kimi.com/docs/guide/kimi-k3-1-pro-quickstart",
+      "https://platform.kimi.com/docs/pricing/chat"
     ]
   },
   "(?:^|[-/])k3\\[1m\\](?=$|@)": {
@@ -2508,7 +2561,9 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
     "displayName": "Kimi K3 (1M)",
     "description": "Kimi K3 (released 2026-07-16), 2.8T MoE with native vision and 1M context. OpenRouter model id moonshotai/kimi-k3.",
     "contextWindowTokens": 1048576,
-    "maxOutputTokens": 262144,
+    "maxOutputTokens": 1048576,
+    "defaultOutputTokens": 131072,
+    "recommendedOutputTokens": 131072,
     "thinkingMode": "thinking",
     "reasoningEfforts": [
       "low",
@@ -2524,17 +2579,20 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
       "jsonMode": true
     },
     "pricing": {
-      "unit": "per_1m_tokens_usd",
-      "currency": "USD",
-      "inputCacheMissPrice": 3,
-      "outputPrice": 15,
-      "inputCacheHitPrice": 0.3
+      "unit": "per_1m_tokens_cny",
+      "currency": "CNY",
+      "inputCacheHitPrice": 2,
+      "inputCacheMissPrice": 20,
+      "outputPrice": 100
     },
     "sources": [
       "https://openrouter.ai/moonshotai/kimi-k3",
       "https://trilogyai.substack.com/p/kimi-k3-is-live-pricing-benchmarks",
       "https://www.kimi.com/code/docs/kimi-code/models.html",
-      "https://platform.kimi.com/docs/api/models-overview"
+      "https://platform.kimi.com/docs/api/models-overview",
+      "https://platform.kimi.com/docs/api/responses",
+      "https://platform.kimi.com/docs/guide/kimi-k3-1-pro-quickstart",
+      "https://platform.kimi.com/docs/pricing/chat"
     ]
   },
   "(?:^|[-/])kimi-k3(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)": {
@@ -2542,7 +2600,9 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
     "displayName": "Kimi K3 (1M)",
     "description": "Kimi K3 (released 2026-07-16), 2.8T MoE with native vision and 1M context. OpenRouter model id moonshotai/kimi-k3.",
     "contextWindowTokens": 1048576,
-    "maxOutputTokens": 262144,
+    "maxOutputTokens": 1048576,
+    "defaultOutputTokens": 131072,
+    "recommendedOutputTokens": 131072,
     "thinkingMode": "thinking",
     "reasoningEfforts": [
       "low",
@@ -2558,17 +2618,20 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
       "jsonMode": true
     },
     "pricing": {
-      "unit": "per_1m_tokens_usd",
-      "currency": "USD",
-      "inputCacheMissPrice": 3,
-      "outputPrice": 15,
-      "inputCacheHitPrice": 0.3
+      "unit": "per_1m_tokens_cny",
+      "currency": "CNY",
+      "inputCacheHitPrice": 2,
+      "inputCacheMissPrice": 20,
+      "outputPrice": 100
     },
     "sources": [
       "https://openrouter.ai/moonshotai/kimi-k3",
       "https://trilogyai.substack.com/p/kimi-k3-is-live-pricing-benchmarks",
       "https://www.kimi.com/code/docs/kimi-code/models.html",
-      "https://platform.kimi.com/docs/api/models-overview"
+      "https://platform.kimi.com/docs/api/models-overview",
+      "https://platform.kimi.com/docs/api/responses",
+      "https://platform.kimi.com/docs/guide/kimi-k3-1-pro-quickstart",
+      "https://platform.kimi.com/docs/pricing/chat"
     ]
   },
   "(?:^|[-/])k3-256k(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)": {
@@ -2632,7 +2695,9 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
     "displayName": "Kimi K3.1 Pro",
     "description": "Moonshot flagship open-weight multimodal reasoning model (3T-class), post-trained successor to Kimi K3. Highspeed variant doubles pricing with 2-3x faster output.",
     "contextWindowTokens": 1048576,
-    "maxOutputTokens": 262144,
+    "maxOutputTokens": 1048576,
+    "defaultOutputTokens": 131072,
+    "recommendedOutputTokens": 131072,
     "thinkingMode": "thinking",
     "reasoningEfforts": [
       "low",
@@ -2649,11 +2714,11 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
       "jsonMode": true
     },
     "pricing": {
-      "unit": "per_1m_tokens_usd",
-      "currency": "USD",
-      "inputCacheMissPrice": 2,
-      "outputPrice": 10,
-      "inputCacheHitPrice": 0.2
+      "unit": "per_1m_tokens_cny",
+      "currency": "CNY",
+      "inputCacheHitPrice": 1.3,
+      "inputCacheMissPrice": 13,
+      "outputPrice": 68
     },
     "sources": [
       "https://www.requesty.ai/blog/kimi-k3-1-pro-pricing-api",
@@ -2661,7 +2726,8 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
       "https://www.kimi.com/code/docs/kimi-code/models.html",
       "https://platform.kimi.com/docs/guide/kimi-k3-1-pro-quickstart",
       "https://platform.kimi.com/docs/api/models-overview",
-      "https://platform.kimi.com/docs/pricing/chat"
+      "https://platform.kimi.com/docs/pricing/chat",
+      "https://platform.kimi.com/docs/api/responses"
     ]
   },
   "(?:^|[-/])kimi-k3\\.1-pro(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)": {
@@ -2669,7 +2735,9 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
     "displayName": "Kimi K3.1 Pro",
     "description": "Moonshot flagship open-weight multimodal reasoning model (3T-class), post-trained successor to Kimi K3. Highspeed variant doubles pricing with 2-3x faster output.",
     "contextWindowTokens": 1048576,
-    "maxOutputTokens": 262144,
+    "maxOutputTokens": 1048576,
+    "defaultOutputTokens": 131072,
+    "recommendedOutputTokens": 131072,
     "thinkingMode": "thinking",
     "reasoningEfforts": [
       "low",
@@ -2686,11 +2754,11 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
       "jsonMode": true
     },
     "pricing": {
-      "unit": "per_1m_tokens_usd",
-      "currency": "USD",
-      "inputCacheMissPrice": 2,
-      "outputPrice": 10,
-      "inputCacheHitPrice": 0.2
+      "unit": "per_1m_tokens_cny",
+      "currency": "CNY",
+      "inputCacheHitPrice": 1.3,
+      "inputCacheMissPrice": 13,
+      "outputPrice": 68
     },
     "sources": [
       "https://www.requesty.ai/blog/kimi-k3-1-pro-pricing-api",
@@ -2698,7 +2766,8 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
       "https://www.kimi.com/code/docs/kimi-code/models.html",
       "https://platform.kimi.com/docs/guide/kimi-k3-1-pro-quickstart",
       "https://platform.kimi.com/docs/api/models-overview",
-      "https://platform.kimi.com/docs/pricing/chat"
+      "https://platform.kimi.com/docs/pricing/chat",
+      "https://platform.kimi.com/docs/api/responses"
     ]
   },
   "(?:^|[-/])k3\\.1-pro-highspeed(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)": {
@@ -2706,7 +2775,9 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
     "displayName": "Kimi K3.1 Pro Highspeed",
     "description": "Highspeed variant of Kimi K3.1 Pro with identical model capability at roughly 2-3x output speed and about 2x quota consumption in Kimi Code; requires Pro tier and above. Thinking-only like the base model.",
     "contextWindowTokens": 1048576,
-    "maxOutputTokens": 131072,
+    "maxOutputTokens": 1048576,
+    "defaultOutputTokens": 131072,
+    "recommendedOutputTokens": 131072,
     "thinkingMode": "thinking",
     "reasoningEfforts": [
       "low",
@@ -2721,16 +2792,18 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
       "reasoning": true
     },
     "pricing": {
-      "unit": "per_1m_tokens_usd",
-      "currency": "USD",
-      "inputCacheMissPrice": 4,
-      "outputPrice": 20,
-      "inputCacheHitPrice": 0.2
+      "unit": "per_1m_tokens_cny",
+      "currency": "CNY",
+      "inputCacheHitPrice": 1.3,
+      "inputCacheMissPrice": 26,
+      "outputPrice": 136
     },
     "sources": [
       "https://www.kimi.com/code/docs/kimi-code/models.html",
       "https://platform.kimi.com/docs/models",
-      "https://platform.kimi.com/docs/pricing/chat"
+      "https://platform.kimi.com/docs/pricing/chat",
+      "https://platform.kimi.com/docs/api/responses",
+      "https://platform.kimi.com/docs/guide/kimi-k3-1-pro-quickstart"
     ]
   },
   "(?:^|[-/])kimi-k3\\.1-pro-highspeed(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)": {
@@ -2738,7 +2811,9 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
     "displayName": "Kimi K3.1 Pro Highspeed",
     "description": "Highspeed variant of Kimi K3.1 Pro with identical model capability at roughly 2-3x output speed and about 2x quota consumption in Kimi Code; requires Pro tier and above. Thinking-only like the base model.",
     "contextWindowTokens": 1048576,
-    "maxOutputTokens": 131072,
+    "maxOutputTokens": 1048576,
+    "defaultOutputTokens": 131072,
+    "recommendedOutputTokens": 131072,
     "thinkingMode": "thinking",
     "reasoningEfforts": [
       "low",
@@ -2753,23 +2828,25 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
       "reasoning": true
     },
     "pricing": {
-      "unit": "per_1m_tokens_usd",
-      "currency": "USD",
-      "inputCacheMissPrice": 4,
-      "outputPrice": 20,
-      "inputCacheHitPrice": 0.2
+      "unit": "per_1m_tokens_cny",
+      "currency": "CNY",
+      "inputCacheHitPrice": 1.3,
+      "inputCacheMissPrice": 26,
+      "outputPrice": 136
     },
     "sources": [
       "https://www.kimi.com/code/docs/kimi-code/models.html",
       "https://platform.kimi.com/docs/models",
-      "https://platform.kimi.com/docs/pricing/chat"
+      "https://platform.kimi.com/docs/pricing/chat",
+      "https://platform.kimi.com/docs/api/responses",
+      "https://platform.kimi.com/docs/guide/kimi-k3-1-pro-quickstart"
     ]
   },
   "(?:^|[-/])kimi-for-coding(?=$|@)": {
     "provider": "moonshot",
     "displayName": "Kimi K2.8 Preview (Kimi Code 会员)",
     "description": "Kimi coding model with text, image and video input plus thinking mode. kimi-for-coding token plan alias falls back to this model.",
-    "contextWindowTokens": 262144,
+    "contextWindowTokens": 1048576,
     "maxOutputTokens": 32768,
     "defaultOutputTokens": 32768,
     "recommendedOutputTokens": 32768,
@@ -2786,13 +2863,6 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
       "contextCaching": true,
       "jsonMode": true,
       "partialMode": true
-    },
-    "pricing": {
-      "unit": "per_1m_tokens_usd",
-      "currency": "USD",
-      "inputCacheHitPrice": 0.19,
-      "inputCacheMissPrice": 0.95,
-      "outputPrice": 4
     },
     "sources": [
       "https://platform.kimi.com/docs/pricing/chat-k27-code",

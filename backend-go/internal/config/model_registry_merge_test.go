@@ -69,7 +69,7 @@ func TestResolveUpstreamCapabilityMergedFamiliesAndLegacyAliases(t *testing.T) {
 		{"deepseek-v4-pro", 1000000, 384000},
 		{"doubao-seed-2.1-turbo", 256000, 256000},
 		{"doubao-seed-2-1-turbo", 256000, 256000},
-		{"kimi-k3.1-pro-highspeed", 1048576, 131072},
+		{"kimi-k3.1-pro-highspeed", 1048576, 1048576},
 		{"glm-5p3", 1048576, 131072},
 		{"glm-5.3-20261112[1m]", 1048576, 131072},
 		{"glm-5.3-flashx-legal[1m]", 1048576, 131072},
