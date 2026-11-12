@@ -2518,18 +2518,14 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
       "https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json"
     ]
   },
-  "(?:^|[-/])k3(?=$|@)": {
+  "(?:^|/)k3(?=$|@)": {
     "provider": "moonshot",
-    "displayName": "Kimi K3",
-    "description": "Kimi K3 (released 2026-07-16), 2.8T MoE with native vision and 1M context. OpenRouter model id moonshotai/kimi-k3.",
+    "displayName": "Kimi Code K3 (会员)",
+    "description": "Kimi Code membership model k3 with up to 1M context depending on the subscription tier. Not billed at Kimi API per-token prices; output limit is not published on the Code model page.",
     "contextWindowTokens": 1048576,
-    "maxOutputTokens": 1048576,
-    "defaultOutputTokens": 131072,
-    "recommendedOutputTokens": 131072,
     "thinkingMode": "thinking",
     "reasoningEfforts": [
       "low",
-      "medium",
       "high",
       "max"
     ],
@@ -2540,34 +2536,18 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
       "reasoning": true,
       "jsonMode": true
     },
-    "pricing": {
-      "unit": "per_1m_tokens_cny",
-      "currency": "CNY",
-      "inputCacheHitPrice": 2,
-      "inputCacheMissPrice": 20,
-      "outputPrice": 100
-    },
     "sources": [
-      "https://openrouter.ai/moonshotai/kimi-k3",
-      "https://trilogyai.substack.com/p/kimi-k3-is-live-pricing-benchmarks",
-      "https://www.kimi.com/code/docs/kimi-code/models.html",
-      "https://platform.kimi.com/docs/api/responses",
-      "https://platform.kimi.com/docs/guide/kimi-k3-1-pro-quickstart",
-      "https://platform.kimi.com/docs/pricing/chat"
+      "https://www.kimi.com/code/docs/kimi-code/models.html"
     ]
   },
-  "(?:^|[-/])k3\\[1m\\](?=$|@)": {
+  "(?:^|/)k3\\[1m\\](?=$|@)": {
     "provider": "moonshot",
-    "displayName": "Kimi K3 (1M)",
-    "description": "Kimi K3 (released 2026-07-16), 2.8T MoE with native vision and 1M context. OpenRouter model id moonshotai/kimi-k3.",
+    "displayName": "Kimi Code K3 (会员)",
+    "description": "Kimi Code membership model k3 with up to 1M context depending on the subscription tier. Not billed at Kimi API per-token prices; output limit is not published on the Code model page.",
     "contextWindowTokens": 1048576,
-    "maxOutputTokens": 1048576,
-    "defaultOutputTokens": 131072,
-    "recommendedOutputTokens": 131072,
     "thinkingMode": "thinking",
     "reasoningEfforts": [
       "low",
-      "medium",
       "high",
       "max"
     ],
@@ -2578,21 +2558,8 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
       "reasoning": true,
       "jsonMode": true
     },
-    "pricing": {
-      "unit": "per_1m_tokens_cny",
-      "currency": "CNY",
-      "inputCacheHitPrice": 2,
-      "inputCacheMissPrice": 20,
-      "outputPrice": 100
-    },
     "sources": [
-      "https://openrouter.ai/moonshotai/kimi-k3",
-      "https://trilogyai.substack.com/p/kimi-k3-is-live-pricing-benchmarks",
-      "https://www.kimi.com/code/docs/kimi-code/models.html",
-      "https://platform.kimi.com/docs/api/models-overview",
-      "https://platform.kimi.com/docs/api/responses",
-      "https://platform.kimi.com/docs/guide/kimi-k3-1-pro-quickstart",
-      "https://platform.kimi.com/docs/pricing/chat"
+      "https://www.kimi.com/code/docs/kimi-code/models.html"
     ]
   },
   "(?:^|[-/])kimi-k3(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)": {
@@ -2634,10 +2601,10 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
       "https://platform.kimi.com/docs/pricing/chat"
     ]
   },
-  "(?:^|[-/])k3-256k(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)": {
+  "(?:^|/)k3-256k(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)": {
     "provider": "moonshot",
-    "displayName": "Kimi K3 (256K)",
-    "description": "Kimi K3 (256K context window). Moonshot Kimi Code flagship coding model, half-price 256K variant.",
+    "displayName": "Kimi Code K3 (256K) (会员)",
+    "description": "Kimi Code membership model. Context availability depends on subscription tier; quota multipliers are not per-token API prices. The Code model page does not publish an output token limit.",
     "contextWindowTokens": 262144,
     "thinkingMode": "thinking",
     "reasoningEfforts": [
@@ -2650,16 +2617,8 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
       "contextCaching": true,
       "vision": true
     },
-    "pricing": {
-      "unit": "per_1m_tokens_usd",
-      "currency": "USD",
-      "inputCacheMissPrice": 1.48,
-      "outputPrice": 7.41,
-      "inputCacheHitPrice": 0.15
-    },
     "sources": [
-      "https://www.kimi.com/code/docs/kimi-code/models.html",
-      "https://platform.kimi.com/docs/api/models-overview"
+      "https://www.kimi.com/code/docs/kimi-code/models.html"
     ]
   },
   "(?:^|[-/])kimi-k3-256k(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)": {
@@ -2690,18 +2649,14 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
       "https://platform.kimi.com/docs/api/models-overview"
     ]
   },
-  "(?:^|[-/])k3\\.1-pro(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)": {
+  "(?:^|/)k3\\.1-pro(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)": {
     "provider": "moonshot",
-    "displayName": "Kimi K3.1 Pro",
-    "description": "Moonshot flagship open-weight multimodal reasoning model (3T-class), post-trained successor to Kimi K3. Highspeed variant doubles pricing with 2-3x faster output.",
+    "displayName": "Kimi Code K3.1 Pro (会员)",
+    "description": "Kimi Code membership model. Context availability depends on subscription tier; quota multipliers are not per-token API prices. The Code model page does not publish an output token limit.",
     "contextWindowTokens": 1048576,
-    "maxOutputTokens": 1048576,
-    "defaultOutputTokens": 131072,
-    "recommendedOutputTokens": 131072,
     "thinkingMode": "thinking",
     "reasoningEfforts": [
       "low",
-      "medium",
       "high",
       "max"
     ],
@@ -2713,21 +2668,8 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
       "reasoning": true,
       "jsonMode": true
     },
-    "pricing": {
-      "unit": "per_1m_tokens_cny",
-      "currency": "CNY",
-      "inputCacheHitPrice": 1.3,
-      "inputCacheMissPrice": 13,
-      "outputPrice": 68
-    },
     "sources": [
-      "https://www.requesty.ai/blog/kimi-k3-1-pro-pricing-api",
-      "https://m.economictimes.com/tech/artificial-intelligence/chinas-moonshot-ai-launches-kimi-k3-1-pro-plans-full-model-weights-release-by-nov/articleshow/135162538.cms",
-      "https://www.kimi.com/code/docs/kimi-code/models.html",
-      "https://platform.kimi.com/docs/guide/kimi-k3-1-pro-quickstart",
-      "https://platform.kimi.com/docs/api/models-overview",
-      "https://platform.kimi.com/docs/pricing/chat",
-      "https://platform.kimi.com/docs/api/responses"
+      "https://www.kimi.com/code/docs/kimi-code/models.html"
     ]
   },
   "(?:^|[-/])kimi-k3\\.1-pro(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)": {
@@ -2770,14 +2712,11 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
       "https://platform.kimi.com/docs/api/responses"
     ]
   },
-  "(?:^|[-/])k3\\.1-pro-highspeed(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)": {
+  "(?:^|/)k3\\.1-pro-highspeed(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)": {
     "provider": "moonshot",
-    "displayName": "Kimi K3.1 Pro Highspeed",
-    "description": "Highspeed variant of Kimi K3.1 Pro with identical model capability at roughly 2-3x output speed and about 2x quota consumption in Kimi Code; requires Pro tier and above. Thinking-only like the base model.",
+    "displayName": "Kimi Code K3.1 Pro Highspeed (会员)",
+    "description": "Kimi Code membership model. Context availability depends on subscription tier; quota multipliers are not per-token API prices. The Code model page does not publish an output token limit.",
     "contextWindowTokens": 1048576,
-    "maxOutputTokens": 1048576,
-    "defaultOutputTokens": 131072,
-    "recommendedOutputTokens": 131072,
     "thinkingMode": "thinking",
     "reasoningEfforts": [
       "low",
@@ -2791,19 +2730,8 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
       "videoInput": true,
       "reasoning": true
     },
-    "pricing": {
-      "unit": "per_1m_tokens_cny",
-      "currency": "CNY",
-      "inputCacheHitPrice": 1.3,
-      "inputCacheMissPrice": 26,
-      "outputPrice": 136
-    },
     "sources": [
-      "https://www.kimi.com/code/docs/kimi-code/models.html",
-      "https://platform.kimi.com/docs/models",
-      "https://platform.kimi.com/docs/pricing/chat",
-      "https://platform.kimi.com/docs/api/responses",
-      "https://platform.kimi.com/docs/guide/kimi-k3-1-pro-quickstart"
+      "https://www.kimi.com/code/docs/kimi-code/models.html"
     ]
   },
   "(?:^|[-/])kimi-k3\\.1-pro-highspeed(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)": {
