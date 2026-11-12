@@ -165,6 +165,40 @@ describe('model routing query lifecycle', () => {
     )
     wrapper.unmount()
   })
+  it.each(['.flow-source', '.flow-channel', '.flow-model'])(
+    'keeps the graph mounted while selecting and clearing %s',
+    async selector => {
+      const initial = result('source')
+      let resolveQuery!: (_data: RoutingDistribution) => void
+      vi.mocked(api.getModelRouting)
+        .mockResolvedValueOnce(initial)
+        .mockImplementation(
+          () =>
+            new Promise(resolve => {
+              resolveQuery = resolve
+            })
+        )
+      const wrapper = render()
+      await flushPromises()
+      const graph = wrapper.find('.model-routing-flow').element
+      const node = wrapper.find(selector).element
+      await wrapper.find(selector).trigger('click')
+      expect(wrapper.find('.model-routing-flow').element).toBe(graph)
+      expect(wrapper.find(selector).element).toBe(node)
+      expect(wrapper.find('.routing-loading').attributes('aria-busy')).toBe('true')
+      resolveQuery(initial)
+      await flushPromises()
+      expect(wrapper.find('.model-routing-flow').element).toBe(graph)
+      expect(wrapper.find(selector).element).toBe(node)
+      await wrapper.find('.routing-filters button').trigger('click')
+      expect(wrapper.find('.model-routing-flow').element).toBe(graph)
+      resolveQuery(initial)
+      await flushPromises()
+      expect(wrapper.find(selector).element).toBe(node)
+      expect(wrapper.find('.routing-filters').exists()).toBe(false)
+      wrapper.unmount()
+    }
+  )
   it('refreshes an expired drawer window before querying requests again', async () => {
     vi.mocked(api.getModelRouting)
       .mockResolvedValueOnce(result('source'))

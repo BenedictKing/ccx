@@ -9,11 +9,23 @@
           :width="2"
           :style="{ visibility: loading ? 'visible' : 'hidden' }"
       /></span>
-      <v-tooltip v-if="incomplete" :text="coverageNote" location="bottom">
+      <v-tooltip v-if="incomplete" :text="coverageNote" location="bottom" content-class="ccx-tooltip" :open-delay="150">
         <template #activator="{ props: tooltipProps }"
           ><v-btn v-bind="tooltipProps" icon="mdi-information" variant="text" size="x-small" :aria-label="coverageNote"
         /></template>
       </v-tooltip>
+      <v-btn-toggle
+        v-if="supported"
+        v-model="basis"
+        class="routing-basis"
+        mandatory
+        density="compact"
+        variant="outlined"
+        divided
+      >
+        <v-btn size="x-small" value="successful_requests">{{ t('routing.successBasis') }}</v-btn
+        ><v-btn size="x-small" value="all_attempts">{{ t('routing.attemptBasis') }}</v-btn>
+      </v-btn-toggle>
     </div>
     <div class="routing-content">
       <v-alert v-if="!supported" type="info" variant="tonal" density="compact">
@@ -21,49 +33,36 @@
         }}<v-btn size="small" variant="text" @click="emit('update:duration', '24h')">{{ t('routing.use24h') }}</v-btn>
       </v-alert>
       <template v-else>
-        <div class="routing-toolbar">
-          <v-btn-toggle v-model="basis" mandatory density="compact" variant="outlined" divided>
-            <v-btn size="x-small" value="successful_requests">{{ t('routing.successBasis') }}</v-btn
-            ><v-btn size="x-small" value="all_attempts">{{ t('routing.attemptBasis') }}</v-btn>
-          </v-btn-toggle>
-        </div>
-        <div v-if="Object.keys(filters).length" class="routing-filters">
-          <v-chip
-            v-for="(value, field) in filters"
-            :key="field"
-            closable
-            size="small"
-            @click:close="removeFilter(field)"
-            >{{ fieldTitle(field) }}: {{ field === 'channelUid' ? channelLabel(value) : value }}</v-chip
-          >
-          <v-btn v-if="Object.keys(filters).length" variant="text" size="x-small" @click="clearFilters">{{
-            t('routing.clear')
-          }}</v-btn>
-        </div>
         <v-alert v-if="error" type="error" variant="tonal" density="compact"
           >{{ error }} <v-btn variant="text" size="small" @click="load">{{ t('routing.retry') }}</v-btn></v-alert
         >
         <template v-if="data">
-          <p class="routing-summary text-caption">
-            <span v-for="metric in summaryMetrics" :key="metric.key"
-              >{{ t('routing.' + metric.key) }} <strong>{{ metric.value }}</strong></span
-            >
-          </p>
           <div v-if="!data.paths.length" class="routing-empty text-medium-emphasis">{{ t('routing.empty') }}</div>
           <ModelRoutingFlow
             v-else
-            :key="scopeKey"
             :paths="data.paths"
             :total="data.summary.matchedCount"
             @select="selectNode"
             @path="openPath"
           />
           <div class="routing-toolbar">
-            <span v-if="hiddenPathCount" class="text-caption">{{
-              t('routing.hiddenPaths', { count: hiddenPathCount })
-            }}</span
-            ><span v-else></span
-            ><v-btn size="small" variant="text" @click="openPath()">{{ t('routing.viewRequests') }}</v-btn>
+            <div class="routing-actions">
+              <div v-if="Object.keys(filters).length" class="routing-filters">
+                <v-chip
+                  v-for="(value, field) in filters"
+                  :key="field"
+                  closable
+                  size="small"
+                  @click:close="removeFilter(field)"
+                  >{{ fieldTitle(field) }}: {{ field === 'channelUid' ? channelLabel(value) : value }}</v-chip
+                >
+                <v-btn variant="text" size="x-small" @click="clearFilters">{{ t('routing.clear') }}</v-btn>
+              </div>
+              <span v-if="hiddenPathCount" class="text-caption">{{
+                t('routing.hiddenPaths', { count: hiddenPathCount })
+              }}</span>
+            </div>
+            <v-btn size="small" variant="text" @click="openPath()">{{ t('routing.viewRequests') }}</v-btn>
           </div>
         </template>
       </template>
@@ -215,7 +214,6 @@ let generation = 0,
 let drawerQuery: RoutingQuery | undefined
 const supported = computed(() => ['1h', '6h', '24h', 'today'].includes(props.duration))
 const hiddenPathCount = computed(() => Math.max(0, (data.value?.paths.length ?? 0) - 12))
-const scopeKey = computed(() => JSON.stringify([props.apiType, props.duration, basis.value, filters]))
 const incomplete = computed(
   () =>
     data.value &&
@@ -234,17 +232,6 @@ const coverageNote = computed(() => {
     .filter(Boolean)
     .join(' ')
 })
-const summaryMetrics = computed(() =>
-  data.value
-    ? Object.entries(data.value.summary)
-        .filter(
-          ([key, value]) =>
-            !['matchedCount', 'noAttemptRequests'].includes(key) &&
-            (value || ['requests', 'success', 'attempts'].includes(key))
-        )
-        .map(([key, value]) => ({ key, value }))
-    : []
-)
 const time = (value: string) => new Date(value).toLocaleString()
 const share = (value: number) => value.toFixed(1) + '%'
 const fieldTitle = (field: RoutingField) => t('routing.' + field)
@@ -382,7 +369,6 @@ watch(
   [basis, filters],
   () => {
     closeDrawer()
-    data.value = null
     load()
   },
   { deep: true }
@@ -419,6 +405,8 @@ onBeforeUnmount(() => {
 .routing-heading {
   display: flex;
   align-items: center;
+  flex-shrink: 0;
+  white-space: nowrap;
   gap: 7px;
   width: auto;
   margin: 0;
@@ -429,6 +417,10 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+.routing-basis {
+  margin-left: auto;
+  flex-shrink: 0;
 }
 .routing-loading {
   display: inline-flex;
@@ -449,8 +441,8 @@ onBeforeUnmount(() => {
   min-width: 0;
 }
 .routing-toolbar,
-.routing-filters,
-.routing-summary {
+.routing-actions,
+.routing-filters {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -458,12 +450,6 @@ onBeforeUnmount(() => {
 }
 .routing-toolbar {
   justify-content: space-between;
-}
-.routing-summary {
-  font-variant-numeric: tabular-nums;
-}
-.routing-summary strong {
-  padding-left: 4px;
 }
 .mobile-path {
   display: grid;
@@ -510,5 +496,18 @@ onBeforeUnmount(() => {
   display: grid;
   gap: 5px;
   font-size: 12px;
+}
+@media (max-width: 600px) {
+  .routing-title {
+    gap: 4px;
+  }
+  .routing-heading {
+    font-size: 14px;
+  }
+  .routing-basis :deep(.v-btn) {
+    min-width: 0;
+    padding: 0 6px;
+    font-size: 11px;
+  }
 }
 </style>
