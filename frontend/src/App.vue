@@ -379,7 +379,6 @@
           @edit="editChannel"
           @delete="deleteChannel"
           @ping="pingChannel"
-          @test-capability="testChannelCapability"
           @refresh="refreshChannels"
           @error="showErrorToast"
           @success="showSuccessToast"
@@ -401,23 +400,7 @@
       :channel="dialogStore.editingChannel"
       :channel-type="channelStore.activeTab"
       @save="saveChannel"
-      @test-capability="testChannelCapability"
       @error="showErrorToast"
-    />
-
-    <!-- 能力测试对话框 -->
-    <CapabilityTestDialog
-      ref="capabilityTestDialogRef"
-      v-model="showCapabilityTestDialog"
-      :channel-name="capabilityTestChannelName"
-      :current-tab="channelStore.activeTab"
-      :capability-job="capabilityTestJob"
-      :capability-rpm="capabilityTestRpm"
-      @update:capability-rpm="capabilityTestRpm = $event"
-      @copy-to-tab="handleCopyToTab"
-      @cancel="handleCancelCapabilityTest"
-      @retry-model="handleRetryCapabilityModel"
-      @test-protocol="handleTestCapabilityProtocolWithModels"
     />
 
     <!-- OTA 更新对话框 -->
@@ -708,7 +691,6 @@ import { computed, defineAsyncComponent } from 'vue'
 import Logo from './components/Logo.vue'
 import AddChannelModal from './components/AddChannelModal.vue'
 import EditChannelModal from './components/EditChannelModal.vue'
-import CapabilityTestDialog from './components/CapabilityTestDialog.vue'
 import UpdateDialog from './components/UpdateDialog.vue'
 import UserGuideDialog from './components/UserGuideDialog.vue'
 import { useAppController } from './composables/useAppController'
@@ -747,56 +729,6 @@ const {
   openAddChannelModal,
   addApiKey,
   pingChannel,
-  showCapabilityTestDialog,
-  capabilityTestChannelName,
-  capabilityTestChannelId,
-  capabilityTestChannelType,
-  capabilityTestSourceTab,
-  capabilityTestDialogRef,
-  capabilityTestJobId,
-  capabilityPollers,
-  capabilityTestJob,
-  capabilityTestRpm,
-  capabilityTestPreviousJobId,
-  capabilityRetryPendingUntil,
-  isCapabilityChannelKind,
-  capabilityPlaceholderModels,
-  getPlaceholderModelsForProtocol,
-  capabilityBaseProtocolOrder,
-  capabilityNativeServiceTypeByProtocol,
-  getCapabilityNativeServiceType,
-  isCapabilityProtocol,
-  buildCapabilityModels,
-  buildCapabilityProtocolResult,
-  toRetryingCapabilityModel,
-  markCapabilityModelRetrying,
-  applyCapabilityRetryPending,
-  isIdleCapabilityTest,
-  isActiveCapabilityTest,
-  isBusyCapabilityTest,
-  isPendingCapabilityTest,
-  isSuccessfulCapabilityTest,
-  getCapabilityAggregateState,
-  buildCapabilityProgress,
-  mergeCapabilityProtocolResult,
-  normalizeCapabilityTests,
-  buildCapabilityIdleJob,
-  mergeCapabilityJob,
-  getCapabilitySnapshotJobId,
-  buildCapabilityJobFromSnapshot,
-  collectActiveJobIds,
-  isCapabilityJobTerminal,
-  stopCapabilityPolling,
-  stopAllCapabilityPolling,
-  startCapabilityPolling,
-  updateCapabilityJob,
-  getCapabilityPreviousJobId,
-  testChannelCapability,
-  handleTestCapabilityProtocol,
-  handleTestCapabilityProtocolWithModels,
-  handleCancelCapabilityTest,
-  handleRetryCapabilityModel,
-  handleCopyToTab,
   pingAllChannels,
   toggleFuzzyMode,
   showGuide,

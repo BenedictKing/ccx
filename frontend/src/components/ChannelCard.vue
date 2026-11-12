@@ -309,18 +309,6 @@
 
         <v-btn
           size="small"
-          color="success"
-          variant="outlined"
-          rounded="lg"
-          class="action-btn"
-          prepend-icon="mdi-test-tube"
-          @click="$emit('testCapability', channel.index)"
-        >
-          {{ t('addChannel.testCapability') }}
-        </v-btn>
-        
-        <v-btn
-          size="small"
           color="info"
           variant="outlined"
           rounded="lg"
@@ -387,7 +375,6 @@ defineEmits<{
   ping: [channelId: number]
   togglePin: [channelId: number]
   toggleVision: [channelId: number]
-  testCapability: [channelId: number]
 }>()
 
 // 获取服务类型对应的芯片颜色

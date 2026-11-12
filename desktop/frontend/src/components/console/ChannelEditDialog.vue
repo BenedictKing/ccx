@@ -143,7 +143,6 @@ const {
   copyApiKey,
   handleDisabledKeyRestore,
   handleDisabledKeyRemove,
-  handleTestCapability,
   handleDiagnoseCompat,
   handleDiscoverChannelConfig,
   applyChannelDiscoveryRecommendation,
@@ -176,7 +175,6 @@ const embeddingTargetModels = computed(() =>
             :saving="saving"
             @close="emit('close')"
             @toggle-no-vision="form.noVision = !form.noVision"
-            @test-capability="handleTestCapability"
           />
 
           <!-- 创建模式：独立快速添加，不展示编辑器大纲和高级配置 -->

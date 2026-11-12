@@ -135,10 +135,6 @@ export function useAppController() {
       dialogStore.closeEditChannelModal()
       await refreshChannels()
 
-      if (options?.triggerCapabilityTest && result.channelId !== undefined) {
-        testChannelCapability(result.channelId)
-      }
-
       return result
     } catch (error) {
       handleAuthError(error)

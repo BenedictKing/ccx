@@ -13,7 +13,6 @@ import { useLanguage } from '@/composables/useLanguage'
 import ChannelCard from '@/components/console/ChannelCard.vue'
 import ChannelEditDialog from '@/components/console/ChannelEditDialog.vue'
 import ChannelLogsDialog from '@/components/console/ChannelLogsDialog.vue'
-import CapabilityTestDialog from '@/components/console/CapabilityTestDialog.vue'
 import CircuitBreakerDialog from '@/components/console/CircuitBreakerDialog.vue'
 import GlobalStatsChart from '@/components/console/charts/GlobalStatsChart.vue'
 import KeyTrendChart from '@/components/console/charts/KeyTrendChart.vue'
@@ -50,7 +49,6 @@ const channels = computed(() => channelsByType.value[props.type]?.channels || []
 const metrics = computed(() => dashboardCache.value[props.type]?.metrics || [])
 const activity = computed(() => dashboardCache.value[props.type]?.recentActivity || [])
 const stats = computed(() => dashboardCache.value[props.type]?.stats)
-const supportsCapability = computed(() => props.type !== 'images' && props.type !== 'vectors')
 
 const searchQuery = ref('')
 const normalizedSearch = computed(() => searchQuery.value.trim().toLowerCase())
@@ -95,8 +93,6 @@ const isRefreshing = ref(false)
 const showChannelEditor = ref(false)
 const editingChannel = ref<Channel | null>(null)
 const logsChannel = ref<Channel | null>(null)
-const capabilityChannel = ref<Channel | null>(null)
-const showCapabilityDialog = ref(false)
 const draggedIndex = ref<number | null>(null)
 
 // Fuzzy 模式
@@ -464,25 +460,8 @@ function handleSaved() {
   refreshCurrentChannels()
 }
 
-async function handleEditTestCapability(channel: Channel) {
-  showChannelEditor.value = false
-  await refreshCurrentChannels()
-  capabilityChannel.value = channels.value.find(ch => ch.index === channel.index) ?? channel
-  showCapabilityDialog.value = true
-}
-
 function handleLogs(channel: Channel) {
   logsChannel.value = channel
-}
-
-function handleCapability(channel: Channel) {
-  capabilityChannel.value = channel
-  showCapabilityDialog.value = true
-}
-
-function closeCapabilityDialog() {
-  showCapabilityDialog.value = false
-  capabilityChannel.value = null
 }
 
 async function handleReorder(newOrder: number[]) {
@@ -707,7 +686,6 @@ onBeforeUnmount(() => {
               :metrics="metricsMap.get(channel.index)"
               :activity="activityMap.get(channel.index)"
               :priority="index + 1"
-              :supports-capability="supportsCapability"
               :can-move-top="!isFirstOrderedActiveChannel(channel)"
               :can-move-bottom="!isLastOrderedActiveChannel(channel)"
               :expanded="expandedChannelId === channel.index"
@@ -721,7 +699,6 @@ onBeforeUnmount(() => {
               @move-top="handleMoveTop(channel.index)"
               @move-bottom="handleMoveBottom(channel.index)"
               @logs="handleLogs(channel)"
-              @capability="handleCapability(channel)"
               @toggle="handleToggleChart(channel.index)"
             />
             <!-- Expanded key trend chart area -->
@@ -755,7 +732,6 @@ onBeforeUnmount(() => {
             :metrics="metricsMap.get(channel.index)"
             :activity="activityMap.get(channel.index)"
             :priority="index + 1"
-            :supports-capability="supportsCapability"
             inactive
             @edit="handleEdit(channel)"
             @delete="handleDelete(channel)"
@@ -765,7 +741,6 @@ onBeforeUnmount(() => {
             @resume="handleResume(channel.index)"
             @promote="handlePromote(channel, 300)"
             @logs="handleLogs(channel)"
-            @capability="handleCapability(channel)"
           />
         </div>
       </section>
@@ -778,7 +753,6 @@ onBeforeUnmount(() => {
       :channel-type="type"
       @close="showChannelEditor = false"
       @saved="handleSaved"
-      @test-capability="handleEditTestCapability"
     />
 
     <ChannelLogsDialog
@@ -787,16 +761,6 @@ onBeforeUnmount(() => {
       :channel-id="logsChannel?.index ?? -1"
       :channel-name="logsChannel?.name ?? ''"
       @close="logsChannel = null"
-    />
-
-    <CapabilityTestDialog
-      v-if="capabilityChannel"
-      :key="`${type}-${capabilityChannel.index}`"
-      :open="showCapabilityDialog"
-      :channel-type="type"
-      :channel-id="capabilityChannel.index"
-      :channel-name="capabilityChannel.name ?? ''"
-      @close="closeCapabilityDialog"
     />
 
     <CircuitBreakerDialog

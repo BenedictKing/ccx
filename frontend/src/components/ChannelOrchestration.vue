@@ -407,12 +407,6 @@
                     </template>
                     <v-list-item-title>{{ t('app.actions.ping') }}</v-list-item-title>
                   </v-list-item>
-                  <v-list-item v-if="channelType !== 'images' && channelType !== 'vectors'" @click="$emit('testCapability', element.index)">
-                    <template #prepend>
-                      <v-icon size="small" color="success">mdi-test-tube</v-icon>
-                    </template>
-                    <v-list-item-title>{{ t('addChannel.testCapability') }}</v-list-item-title>
-                  </v-list-item>
                   <v-list-item @click="copyChannelInfo(element)">
                     <template #prepend>
                       <v-icon size="small">mdi-content-copy</v-icon>
@@ -594,12 +588,6 @@
                   </template>
                   <v-list-item-title>{{ t('orchestration.edit') }}</v-list-item-title>
                 </v-list-item>
-                <v-list-item v-if="channelType !== 'images' && channelType !== 'vectors'" @click="$emit('testCapability', channel.index)">
-                  <template #prepend>
-                    <v-icon size="small" color="success">mdi-test-tube</v-icon>
-                  </template>
-                  <v-list-item-title>{{ t('addChannel.testCapability') }}</v-list-item-title>
-                </v-list-item>
                 <v-list-item @click="copyChannelInfo(channel)">
                   <template #prepend>
                     <v-icon size="small">mdi-content-copy</v-icon>
@@ -672,7 +660,6 @@ const emit = defineEmits<{
   (_e: 'edit', _channel: Channel): void
   (_e: 'delete', _channelId: number): void
   (_e: 'ping', _channelId: number): void
-  (_e: 'testCapability', _channelId: number): void
   (_e: 'refresh'): void
   (_e: 'error', _message: string): void
   (_e: 'success', _message: string): void

@@ -14,10 +14,8 @@
         :create-title="t('addChannel.createTitle')"
         :edit-subtitle="t('addChannel.editSubtitle')"
         :create-subtitle="t('addChannel.quickSubtitle')"
-        :test-capability-label="t('addChannel.testCapability')"
         :vision-tooltip="form.noVision ? t('channelCard.noVision') : t('channelCard.hasVision')"
         @toggle-no-vision="form.noVision = !form.noVision"
-        @test-capability="handleTestCapability"
       />
 
       <!-- 主体内容 -->
@@ -524,7 +522,6 @@ const {
   applyPreset,
   handleSubmit,
   handleCancel,
-  handleTestCapability,
   diagnosingCompat,
   diagnoseResult,
   handleDiagnoseCompat,

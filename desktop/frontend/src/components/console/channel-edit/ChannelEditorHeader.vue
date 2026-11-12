@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Button } from '@/components/ui/button'
-import { Eye, EyeOff, Zap } from 'lucide-vue-next'
+import { Eye, EyeOff } from 'lucide-vue-next'
 import { useLanguage } from '@/composables/useLanguage'
 
 defineProps<{
@@ -12,7 +12,6 @@ defineProps<{
 
 const emit = defineEmits<{
   (e: 'toggle-no-vision'): void
-  (e: 'test-capability'): void
 }>()
 
 const { t } = useLanguage()
@@ -44,17 +43,6 @@ const { t } = useLanguage()
       >
         <EyeOff v-if="noVision" class="h-3.5 w-3.5 text-amber-500" />
         <Eye v-else class="h-3.5 w-3.5" />
-      </Button>
-      <Button
-        v-if="channelType !== 'images' && channelType !== 'vectors'"
-        variant="outline"
-        size="sm"
-        class="h-8 rounded-full border border-border/80 bg-background/50 px-3.5 shadow-sm hover:bg-accent"
-        :disabled="saving"
-        @click="emit('test-capability')"
-      >
-        <Zap class="mr-1 h-3.5 w-3.5 fill-amber-500/20 text-amber-500" />
-        {{ t('capability.startTest') }}
       </Button>
     </div>
   </div>

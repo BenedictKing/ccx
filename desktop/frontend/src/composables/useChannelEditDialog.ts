@@ -42,7 +42,6 @@ export interface ChannelEditDialogProps {
 export type ChannelEditDialogEmit = {
   (e: 'close'): void
   (e: 'saved'): void
-  (e: 'test-capability', channel: Channel): void
 }
 
 export function useChannelEditDialog(props: ChannelEditDialogProps, emit: ChannelEditDialogEmit) {
@@ -973,21 +972,7 @@ const { t } = useLanguage()
     }
   })
 
-  // ── 编辑头部动作：noVision toggle + Test Capability ──
-
-  async function handleTestCapability() {
-    if (!props.channel) return
-
-    // 父组件收到 test-capability 后负责关闭编辑弹窗并刷新；这里不能先 emit saved，避免组件卸载后丢失事件。
-    const saved = await persistCurrentDraft()
-    if (!saved) return
-
-    emit('test-capability', {
-      ...props.channel,
-      name: form.name || props.channel.name,
-      index: props.channel.index,
-    })
-  }
+  // ── 编辑头部动作：noVision toggle ──
 
   async function handleDiagnoseCompat() {
     if (!props.channel || props.channelType === 'images' || props.channelType === 'vectors') return
@@ -1202,7 +1187,6 @@ const { t } = useLanguage()
     copyApiKey,
     handleDisabledKeyRestore,
     handleDisabledKeyRemove,
-    handleTestCapability,
     handleDiagnoseCompat,
     handleDiscoverChannelConfig,
     applyChannelDiscoveryRecommendation,

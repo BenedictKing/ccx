@@ -35,7 +35,6 @@ import { useStreamTimeoutStrategy } from './useStreamTimeoutStrategy'
 import { useSupportedModelFilters } from './useSupportedModelFilters'
 import { useEditChannelOptions } from '../utils/editChannelOptions'
 import { isValidUrl, normalizeModelCapabilities } from '../utils/editChannelHelpers'
-import { createHandleTestCapability } from '../utils/editChannelPayload'
 
 export interface EditChannelModalProps {
   show: boolean
@@ -46,7 +45,6 @@ export interface EditChannelModalProps {
 export type EditChannelModalEmits = {
   'update:show': [value: boolean]
   save: [channel: Omit<Channel, 'index' | 'latency' | 'status'>, options?: { isQuickAdd?: boolean; triggerCapabilityTest?: boolean }]
-  testCapability: [channelId: number]
   error: [message: string]
   success: [message: string]
 }
@@ -1085,17 +1083,6 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     resetForm()
   }
 
-  const handleTestCapability = createHandleTestCapability({
-    buildSubmitPayload,
-    channel: computed(() => props.channel),
-    emitSave: (channelData, options) => emit('save', channelData, options),
-    emitTestCapability: channelId => emit('testCapability', channelId),
-    formRef,
-    modelCapabilitiesError,
-    syncModelCapabilitiesFromMapping,
-    syncModelMappingToForm,
-  })
-
   const diagnosingCompat = ref(false)
   const diagnoseResult = ref<{ type: 'success' | 'error'; message: string; appliedCount: number } | null>(null)
   let diagnoseTimer: ReturnType<typeof setTimeout> | null = null
@@ -1364,7 +1351,6 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     applyPreset,
     handleSubmit,
     handleCancel,
-    handleTestCapability,
     diagnosingCompat,
     diagnoseResult,
     handleDiagnoseCompat,

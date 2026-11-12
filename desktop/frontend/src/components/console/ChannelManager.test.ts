@@ -146,10 +146,6 @@ vi.mock('@/components/console/ChannelLogsDialog.vue', () => ({
   default: defineComponent({ setup: () => () => h('div') }),
 }))
 
-vi.mock('@/components/console/CapabilityTestDialog.vue', () => ({
-  default: defineComponent({ setup: () => () => h('div') }),
-}))
-
 vi.mock('@/components/console/CircuitBreakerDialog.vue', () => ({
   default: defineComponent({ setup: () => () => h('div') }),
 }))
@@ -208,6 +204,22 @@ describe('ChannelManager', () => {
 
     expect(apiGet).not.toHaveBeenCalledWith(expect.stringContaining('/global/stats/history'))
     expect(chartUpdateData).not.toHaveBeenCalled()
+  })
+
+  it('does not render capability test entry points', async () => {
+    apiGet.mockResolvedValue(createStatsResponse())
+    mountChannelManager()
+    await nextTick()
+    await Promise.resolve()
+
+    expect(root.textContent).not.toContain('addChannel.testCapability')
+    expect(root.textContent).not.toContain('capability.startTest')
+    expect(root.textContent).not.toContain('capability.title')
+    // 能力测试弹窗不再挂载
+    const dialogs = [...root.querySelectorAll('*')].filter(el =>
+      el.textContent?.includes('capability.')
+    )
+    expect(dialogs).toHaveLength(0)
   })
 
   it('deletes the last active channel', async () => {
