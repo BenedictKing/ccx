@@ -179,48 +179,45 @@ func isCJK(r rune) bool {
 
 // ============== Responses API Token 估算 ==============
 
+const (
+	responsesBytesPerToken            = 4
+	responsesReasoningOverheadBytes   = 650
+	responsesDefaultFunctionNamespace = "functions"
+)
+
 // EstimateResponsesRequestTokens 从 Responses API 请求体估算输入 token
 // 支持 instructions、input (string 或 []item) 格式
 //
-// 注意：这是「路由用的保守上界估算」，非计费精度。结果在上游不回 usage 时会回填给客户端，
-// 而图片按 Qwen3-VL 16384 上界估算，对 OpenAI/Anthropic 实际计费可能偏高（详见 image_tokens.go）。
+// 文本与密文采用 Codex 的模型可见字节口径；媒体仍使用本项目的模态估算。
+// 结果是路由估算而非计费精度，媒体对 OpenAI/Anthropic 实际计费可能偏高（详见 image_tokens.go）。
 func EstimateResponsesRequestTokens(bodyBytes []byte) int {
 	if len(bodyBytes) == 0 {
 		return 0
 	}
 
-	// 先用 gjson 提取图片 token 并把 base64 字段清空
 	cleaned, imageTokens := extractMediaTokensAndStripBytes(bodyBytes)
 
 	var req map[string]interface{}
 	if err := json.Unmarshal(cleaned, &req); err != nil {
-		return EstimateTokens(string(cleaned)) + imageTokens
+		return estimateResponsesTextTokens(string(cleaned)) + imageTokens
 	}
 
 	total := imageTokens
-
-	// instructions (系统指令)
 	if instructions, ok := req["instructions"].(string); ok {
-		total += EstimateTokens(instructions)
+		total += estimateResponsesTextTokens(instructions)
 	}
-
-	// input 字段处理
 	if input := req["input"]; input != nil {
 		total += estimateResponsesInputTokens(input)
 	}
-
-	// tools (每个工具约 100-200 tokens)
 	if tools, ok := req["tools"].([]interface{}); ok {
-		total += estimateToolsTokens(tools)
+		total += estimateResponsesJSONTokens(tools)
 	}
-
 	return total
 }
 
-// estimateResponsesInputTokens 估算 Responses input 字段的 token
 func estimateResponsesInputTokens(input interface{}) int {
 	if text, ok := input.(string); ok {
-		return EstimateTokens(text)
+		return estimateResponsesTextTokens(text)
 	}
 	data, err := json.Marshal(input)
 	if err != nil {
@@ -228,41 +225,135 @@ func estimateResponsesInputTokens(input interface{}) int {
 	}
 	var items []map[string]interface{}
 	if json.Unmarshal(data, &items) != nil {
-		return EstimateTokens(string(data))
+		return estimateResponsesTextTokens(string(data))
 	}
 	total := 0
 	for _, item := range items {
-		// 保留未知 item 的所有字段，避免先转窄类型而丢掉新协议负载。
-		total += 4 + estimateResponseItemMapTokens(item)
+		total += estimateResponseItemContextTokens(item)
 	}
 	return total
 }
 
-// estimateResponseItemMapTokens 对密文单独估算，其他字段按实际负载计数。
-func estimateResponseItemMapTokens(item map[string]interface{}) int {
-	total := 0
-	plain := make(map[string]interface{}, len(item))
-	for key, value := range item {
-		switch key {
-		case "encrypted_content":
-			if text, ok := value.(string); ok {
-				total += estimateOpaqueStringTokens(text)
-				continue
-			}
-		case "encrypted_function_args":
-			if segments, ok := value.([]interface{}); ok {
-				for _, segment := range segments {
-					if text, ok := segment.(string); ok {
-						total += estimateOpaqueStringTokens(text)
-					}
-				}
-				continue
-			}
+// estimateResponseItemContextTokens 对齐 Codex 的 replay 估算：不计传输元数据和 JSON 外包装。
+func estimateResponseItemContextTokens(item map[string]interface{}) int {
+	itemType, _ := item["type"].(string)
+	switch itemType {
+	case "message", "text":
+		return estimateResponsesByteTokens(estimateResponsesContentBytes(item["content"]))
+	case "reasoning":
+		if encrypted, ok := item["encrypted_content"].(string); ok {
+			return estimateResponsesReasoningTokens(encrypted)
 		}
-		plain[key] = value
+		return 0
+	case "compaction", "context_compaction":
+		if encrypted, ok := item["encrypted_content"].(string); ok {
+			return (len(encrypted) + 2) / 3
+		}
+		return 0
+	case "function_call", "custom_tool_call":
+		input := item["input"]
+		if itemType == "function_call" {
+			input = item["arguments"]
+		}
+		bytes := len(stringValue(item["name"])) + len(responsesDefaultFunctionNamespace) + len(stringValue(input))
+		if namespace, ok := item["namespace"].(string); ok {
+			bytes += len(namespace) - len(responsesDefaultFunctionNamespace)
+		}
+		return estimateResponsesByteTokens(bytes) + estimateEncryptedFunctionArgsTokens(item)
+	case "function_call_output", "custom_tool_call_output":
+		bytes := estimateResponsesContentBytes(item["output"]) + len(stringValue(item["call_id"])) + len(stringValue(item["name"]))
+		if itemType == "function_call_output" {
+			bytes += len(stringValue(item["namespace"]))
+		}
+		return estimateResponsesByteTokens(bytes)
+	case "additional_tools":
+		return estimateResponsesJSONTokens(item["tools"])
+	case "tool_search_call":
+		return estimateResponsesJSONTokens(item["arguments"])
+	case "tool_search_output":
+		return estimateResponsesJSONTokens(item["tools"])
+	case "local_shell_call", "web_search_call":
+		return estimateResponsesJSONTokens(item["action"])
+	case "configuration_update", "compaction_trigger":
+		return 0
+	default:
+		// 未知协议负载保留保守回退，避免因类型收窄而漏算上下文。
+		return estimateResponsesJSONTokens(item)
 	}
-	data, _ := json.Marshal(plain)
-	return total + EstimateTokens(string(data))
+}
+
+func estimateResponsesContentBytes(content interface{}) int {
+	switch value := content.(type) {
+	case string:
+		return len(value)
+	case []interface{}:
+		total := 0
+		for _, part := range value {
+			total += estimateResponsesContentBytes(part)
+		}
+		return total
+	case map[string]interface{}:
+		if text, ok := value["text"].(string); ok {
+			return len(text)
+		}
+		if encrypted, ok := value["encrypted_content"].(string); ok {
+			return (len(encrypted)*9 + 15) / 16
+		}
+		if value["image_url"] != nil || value["audio_url"] != nil || value["file_data"] != nil {
+			return 0
+		}
+	}
+	if content == nil {
+		return 0
+	}
+	data, _ := MarshalJSONNoEscape(content)
+	return len(data)
+}
+
+func estimateResponsesReasoningTokens(encrypted string) int {
+	decodedBytes := len(encrypted)*3/4 - responsesReasoningOverheadBytes
+	return estimateResponsesByteTokens(decodedBytes)
+}
+
+func estimateEncryptedFunctionArgsTokens(item map[string]interface{}) int {
+	segments, ok := item["encrypted_function_args"].([]interface{})
+	if !ok {
+		return 0
+	}
+	total := 0
+	for _, segment := range segments {
+		if text, ok := segment.(string); ok {
+			total += estimateOpaqueStringTokens(text)
+		}
+	}
+	return total
+}
+
+func estimateResponsesTextTokens(text string) int {
+	return estimateResponsesByteTokens(len(text))
+}
+
+func estimateResponsesJSONTokens(value interface{}) int {
+	if value == nil {
+		return 0
+	}
+	data, err := MarshalJSONNoEscape(value)
+	if err != nil {
+		return 0
+	}
+	return estimateResponsesByteTokens(len(data))
+}
+
+func estimateResponsesByteTokens(bytes int) int {
+	if bytes <= 0 {
+		return 0
+	}
+	return (bytes + responsesBytesPerToken - 1) / responsesBytesPerToken
+}
+
+func stringValue(value interface{}) string {
+	text, _ := value.(string)
+	return text
 }
 
 func estimateToolsTokens(tools []interface{}) int {
@@ -298,11 +389,17 @@ func EstimateResponsesOutputTokens(output interface{}) int {
 	}
 	var items []map[string]interface{}
 	if json.Unmarshal(data, &items) != nil {
-		return EstimateTokens(string(data))
+		return estimateResponsesTextTokens(string(data))
 	}
 	total := 0
 	for _, item := range items {
-		total += estimateResponseItemMapTokens(item)
+		if itemType, _ := item["type"].(string); itemType == "reasoning" {
+			if _, encrypted := item["encrypted_content"].(string); !encrypted {
+				total += estimateResponsesByteTokens(estimateResponsesContentBytes(item["summary"]))
+				continue
+			}
+		}
+		total += estimateResponseItemContextTokens(item)
 	}
 	return total
 }
