@@ -4,6 +4,8 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"math"
+	stdmime "mime"
+	"strconv"
 	"strings"
 )
 
@@ -76,6 +78,20 @@ func estimateAudioDurationSeconds(b64, mime, format string) float64 {
 	}
 
 	totalDecodedBytes := int64(len(b64)) * 3 / 4
+	totalDecodedBytes -= int64(len(b64) - len(strings.TrimRight(b64, "=")))
+	if mediaType, params, err := stdmime.ParseMediaType(mime); err == nil && (strings.EqualFold(mediaType, "audio/pcm") || strings.EqualFold(mediaType, "audio/l16")) {
+		rate, _ := strconv.Atoi(params["rate"])
+		channels := 1
+		if value, exists := params["channels"]; exists {
+			channels, _ = strconv.Atoi(value)
+		}
+		if rate > 0 && rate <= 384000 && channels > 0 && channels <= 32 {
+			duration := float64(totalDecodedBytes) / (float64(rate) * float64(channels) * 2)
+			if duration > 0 && duration <= audioMaxDurationSeconds {
+				return duration
+			}
+		}
+	}
 
 	sniffLen := len(b64)
 	if sniffLen > audioSniffBytes {

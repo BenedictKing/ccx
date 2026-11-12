@@ -115,62 +115,25 @@ func extractImageTokensAndStripBytes(body []byte) ([]byte, int) {
 // collectImageReplacementsFromGeminiContents 遍历 Gemini contents[].parts[]，
 // 复用 imagePayloadFromBlock 的 Gemini 分支识别 inlineData/inline_data。
 func collectImageReplacementsFromGeminiContents(body []byte, contents gjson.Result) ([]imageReplacement, int) {
-	var replacements []imageReplacement
-	imageTokens := 0
-
-	contents.ForEach(func(_, content gjson.Result) bool {
-		parts := content.Get("parts")
-		if !parts.IsArray() {
-			return true
-		}
-		parts.ForEach(func(_, part gjson.Result) bool {
-			b64, field := imagePayloadFromBlock(part)
-			if b64 == "" {
-				return true
-			}
-			start, end, ok := stringLiteralRange(body, field)
-			if !ok {
-				return true
-			}
-			tokens := estimateImageTokensFromBase64(b64)
-			imageTokens += tokens
-			replacements = append(replacements, imageReplacement{start: start, end: end, tokens: tokens})
-			return true
-		})
-		return true
-	})
-
-	return replacements, imageTokens
+	return collectImageReplacementsFromMessageArray(body, contents)
 }
 
 func collectImageReplacementsFromMessageArray(body []byte, arr gjson.Result) ([]imageReplacement, int) {
 	var replacements []imageReplacement
 	imageTokens := 0
-
-	arr.ForEach(func(_, msg gjson.Result) bool {
-		content := msg.Get("content")
-		if !content.IsArray() {
-			return true
+	walkMessageMediaBlocks(arr, func(block gjson.Result) {
+		b64, field := imagePayloadFromBlock(block)
+		if b64 == "" {
+			return
 		}
-		content.ForEach(func(_, block gjson.Result) bool {
-			b64, field := imagePayloadFromBlock(block)
-			if b64 == "" {
-				return true
-			}
-			start, end, ok := stringLiteralRange(body, field)
-			if !ok {
-				// 定位失败时不剥离也不计 token：若只计 token 而 base64 仍留在 body 中，
-				// EstimateTokens 会把它按字符数再算一遍，反而退回到本次修复要解决的高估问题。
-				return true
-			}
-			tokens := estimateImageTokensFromBase64(b64)
-			imageTokens += tokens
-			replacements = append(replacements, imageReplacement{start: start, end: end, tokens: tokens})
-			return true
-		})
-		return true
+		start, end, ok := stringLiteralRange(body, field)
+		if !ok {
+			return
+		}
+		tokens := estimateImageTokensFromBase64(b64)
+		imageTokens += tokens
+		replacements = append(replacements, imageReplacement{start: start, end: end, tokens: tokens})
 	})
-
 	return replacements, imageTokens
 }
 

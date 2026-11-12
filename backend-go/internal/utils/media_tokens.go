@@ -3,6 +3,7 @@ package utils
 import (
 	"github.com/tidwall/gjson"
 	"strings"
+	"unicode/utf8"
 )
 
 // extractMediaTokensAndStripBytes 沿用图片精确定位与单次拼接，额外处理内联音频和附件。
@@ -39,7 +40,20 @@ func extractMediaTokensAndStripBytes(body []byte) ([]byte, int) {
 			return
 		}
 		count := attachmentTokenFallback
-		if strings.HasPrefix(strings.ToLower(mime), "audio/") || format != "" || block.Get("type").String() == "input_audio" {
+		plainText := block.Get("source.type").String() == "text"
+		if plainText || strings.HasPrefix(strings.ToLower(mime), "text/") || mime == "application/json" || mime == "application/xml" {
+			text := []byte(value)
+			if !plainText {
+				text = decodeBase64Prefix(value)
+			}
+			if text != nil && utf8.Valid(text) {
+				if root.Get("input").Exists() {
+					count = estimateResponsesTextTokens(string(text))
+				} else {
+					count = EstimateTokens(string(text))
+				}
+			}
+		} else if strings.HasPrefix(strings.ToLower(mime), "audio/") || format != "" || block.Get("type").String() == "input_audio" {
 			count = estimateAudioTokensFromBase64(value, mime, format)
 			// 损坏或无法识别的音频保留非零预算，避免按长 base64 文本估算。
 			if count <= 0 {
@@ -49,28 +63,44 @@ func extractMediaTokensAndStripBytes(body []byte) ([]byte, int) {
 		replacements = append(replacements, imageReplacement{start: start, end: end, tokens: count})
 		tokens += count
 	}
-	visitMessages := func(messages gjson.Result) {
-		messages.ForEach(func(_, message gjson.Result) bool {
-			for _, key := range []string{"content", "parts"} {
-				blocks := message.Get(key)
-				if blocks.IsArray() {
-					blocks.ForEach(func(_, block gjson.Result) bool { visit(block); return true })
-				}
-			}
-			return true
-		})
-	}
 	if root.IsArray() {
-		visitMessages(root)
+		walkMessageMediaBlocks(root, visit)
 	} else {
 		for _, key := range []string{"messages", "input", "contents"} {
 			if messages := root.Get(key); messages.IsArray() {
-				visitMessages(messages)
+				walkMessageMediaBlocks(messages, visit)
 				break
 			}
 		}
 	}
 	return applyImageReplacements(cleaned, replacements, tokens)
+}
+
+// walkMessageMediaBlocks 只进入协议规定的内容区域，不扫描工具参数和工具定义。
+func walkMessageMediaBlocks(messages gjson.Result, visit func(gjson.Result)) {
+	var walkBlocks func(gjson.Result, int)
+	walkBlocks = func(blocks gjson.Result, depth int) {
+		if !blocks.IsArray() || depth > 16 {
+			return
+		}
+		blocks.ForEach(func(_, block gjson.Result) bool {
+			visit(block)
+			if block.Get("type").String() == "tool_result" {
+				walkBlocks(block.Get("content"), depth+1)
+			}
+			walkBlocks(block.Get("functionResponse.parts"), depth+1)
+			return true
+		})
+	}
+	messages.ForEach(func(_, message gjson.Result) bool {
+		walkBlocks(message.Get("content"), 0)
+		walkBlocks(message.Get("parts"), 0)
+		switch message.Get("type").String() {
+		case "function_call_output", "custom_tool_call_output":
+			walkBlocks(message.Get("output"), 0)
+		}
+		return true
+	})
 }
 
 func inlineNonImagePayload(block gjson.Result) (gjson.Result, string, string) {
@@ -90,7 +120,7 @@ func inlineNonImagePayload(block gjson.Result) (gjson.Result, string, string) {
 			return field, "audio/", ""
 		}
 	case "document":
-		if block.Get("source.type").String() == "base64" {
+		if sourceType := block.Get("source.type").String(); sourceType == "base64" || sourceType == "text" {
 			return block.Get("source.data"), block.Get("source.media_type").String(), ""
 		}
 	case "input_file":
