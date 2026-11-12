@@ -27,57 +27,72 @@
     .badge { font-size: 11px; border: 1px dashed var(--muted); padding: 2px 8px; margin-left: auto; white-space: nowrap; }
     .page-heading, .section-heading, .pagination, .basis-bar { justify-content: space-between; flex-wrap: wrap; }
     .page-heading > div { display: grid; gap: 4px; } .page-heading a { font-size: 12px; }
-    .filters { display: grid; grid-template-columns: 140px 1fr 160px 1fr auto; gap: 12px; align-items: end; }
+    .filters { display: grid; grid-template-columns: 1fr 160px 1fr auto; gap: 12px; align-items: end; }
     .notice { border: 1px dashed var(--line); padding: 10px 14px; font-size: 12px; background: var(--paper); }
-    .summary { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); border: 1px solid var(--line); background: var(--paper); }
-    .metric { padding: 12px 16px; display: grid; gap: 2px; } .metric + .metric { border-left: 1px solid var(--line); }
-    .metric span { font-size: 12px; color: var(--muted); } .metric strong { font: 600 25px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; font-variant-numeric: tabular-nums; }
+    .summary { display: flex; flex-wrap: wrap; gap: 8px 18px; color: var(--muted); font-size: 12px; }
+    .metric { display: flex; gap: 5px; } .metric strong { color: var(--ink); font-variant-numeric: tabular-nums; }
     .panel { background: var(--paper); border: 1px solid var(--line); padding: 18px; display: grid; gap: 14px; min-width: 0; }
     .panel > *, .section-heading > div { min-width: 0; }
-    .flow-scroll, .table-scroll { overflow-x: auto; max-width: 100%; } .flow-scroll svg { display: block; width: 100%; min-width: 820px; }
+    .flow-scroll { max-width: 100%; } .flow-scroll svg { display: block; width: 100%; height: 310px; }
     .flow-scroll text { fill: var(--ink); font-size: 13px; font-family: inherit; } .flow-scroll .node { cursor: pointer; }
     .flow-scroll .node rect { fill: var(--paper); stroke: var(--muted); } .flow-scroll .node:hover rect { fill: var(--soft); }
     .flow-scroll .link { fill: none; stroke: var(--muted); opacity: .32; cursor: pointer; } .flow-scroll .link:hover, .flow-scroll .link:focus { opacity: .8; }
-    table { width: 100%; border-collapse: collapse; text-align: left; font-size: 12px; } th { background: var(--ground); color: var(--muted); font-weight: 500; }
-    th, td { padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; } th { white-space: nowrap; }
-    td { overflow-wrap: anywhere; } td code { font-size: 11px; } .numeric { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
     .route-button { text-align: left; min-height: 28px; padding: 2px 7px; font-size: 12px; white-space: nowrap; }
-    tr.selected td { background: var(--soft); } .status { display: inline-block; border: 1px solid var(--line); padding: 0 5px; white-space: nowrap; }
-    details { border: 1px solid var(--line); } details + details { margin-top: 10px; } summary { cursor: pointer; padding: 10px 12px; font-size: 13px; overflow-wrap: anywhere; }
+    .status { display: inline-block; border: 1px solid var(--line); padding: 0 5px; white-space: nowrap; }
+    details { border: 1px solid var(--line); background: var(--paper); min-width: 0; } summary { cursor: pointer; padding: 12px 18px; font-size: 15px; overflow-wrap: anywhere; }
     .empty { text-align: center; padding: 32px 16px; color: var(--muted); } .pagination > div { display: flex; gap: 8px; }
     .mobile-paths { display: none; } .route-card { border: 1px solid var(--line); padding: 12px; display: grid; gap: 6px; width: 100%; text-align: left; overflow-wrap: anywhere; }
     footer { display: flex; flex-wrap: wrap; gap: 8px 28px; color: var(--muted); font-size: 12px; }
     dialog { width: min(760px, calc(100vw - 28px)); max-height: 88vh; overflow-y: auto; padding: 22px; border: 1px solid var(--muted); color: var(--ink); background: var(--paper); }
     dialog::backdrop { background: rgb(20 23 26 / 38%); } #detail-body { display: grid; gap: 14px; padding-top: 16px; }
     .attempt { border: 1px solid var(--line); padding: 14px; display: grid; gap: 8px; } .attempt p, .attempt code { overflow-wrap: anywhere; }
-    @media (max-width: 900px) { .filters { grid-template-columns: 1fr 1fr; } .summary { grid-template-columns: repeat(4, minmax(0, 1fr)); } .metric { border-bottom: 1px solid var(--line); } .review-bar { align-items: flex-start; flex-direction: column; } }
-    @media (max-width: 600px) { main { padding: 0 14px 24px; gap: 14px; } .review-bar { padding: 14px; } .review-controls { flex-wrap: wrap; } .badge { margin-left: 0; } .wordmark { width: 100%; } .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } .metric strong { font-size: 23px; } .metric { padding: 10px 12px; } .panel { padding: 12px; } .basis-bar .switch { width: 100%; } .basis-bar .switch button { flex: 1; } .page-heading a { padding: 6px 0; } }
-    @media (max-width: 600px) { #flow-panel, #paths .table-scroll { display: none; } .mobile-paths { display: grid; gap: 8px; padding: 10px; } }
+    .global-content, .routing-content { padding: 0 18px 18px; display: grid; gap: 14px; min-width: 0; } .global-content > *, .routing-content > * { min-width: 0; }
+    #routing-panel { border: 0; border-top: 1px solid var(--line); } #routing-panel > summary { padding-left: 0; }
+    .routing-content { padding: 0; } .toolbar { display: flex; align-items: end; gap: 12px; } .toolbar label { width: 170px; }
+    .trend-region { display: grid; gap: 8px; } #trend { width: 100%; height: 145px; } #trend polyline { fill: none; stroke: var(--muted); stroke-width: 2; }
+    #flow-panel { padding: 0; border: 0; } .context-stats { display: flex; gap: 14px; flex-wrap: wrap; } .context-stats span { border: 1px dashed var(--line); padding: 10px 18px; background: var(--paper); }
+    .channel-context { border: 1px dashed var(--line); padding: 16px; display: grid; gap: 8px; }
+    #path-detail { position: fixed; inset: 0 0 0 auto; margin: 0; width: min(560px, 100vw); max-width: 100vw; height: 100dvh; max-height: 100dvh; }
+    #path-body, #requests, #path-routes { display: grid; gap: 10px; } #path-body { padding: 18px 0; } .request-card { border: 1px solid var(--line); padding: 12px; display: grid; gap: 6px; }
+    .request-card p, #path-caption { overflow-wrap: anywhere; } .request-card button { justify-self: start; } #path-routes { max-height: 240px; overflow-y: auto; }
+    @media (max-width: 900px) { .filters { grid-template-columns: 1fr 1fr; } .review-bar { align-items: flex-start; flex-direction: column; } }
+    @media (max-width: 600px) { main { padding: 0 14px 24px; gap: 14px; } .review-bar { padding: 14px; } .badge { margin-left: 0; } .wordmark { width: 100%; } .panel { padding: 12px; } .basis-bar .switch { width: 100%; } .basis-bar .switch button { flex: 1; } .page-heading a { padding: 6px 0; } .global-content { padding: 0 12px 12px; } .flow-scroll { display: none; } .mobile-paths { display: grid; gap: 8px; } .context-stats { gap: 8px; } .context-stats span { padding: 8px; } }
     @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; animation: none !important; } }
   </style>
 </head>
 <body>
   <header class="review-bar">
-    <div><strong>模型调用分布 · 线框评审</strong><p>示例数据，仅展示网关内的渠道分配与模型变换。</p></div>
-    <div class="review-controls"><div class="switch" aria-label="布局方向"><button data-layout="flow" aria-pressed="true">A 流向优先</button><button data-layout="table" aria-pressed="false">B 表格优先</button></div><label>示例场景<select id="scenario"><option value="normal">完整示例</option><option value="empty">暂无调用</option><option value="partial">历史覆盖不足</option></select></label></div>
+    <div><strong>模型去向 · 页面融合线框</strong><p>放入当前协议的全局统计，紧接趋势图。全部为示例数据。</p></div>
+    <label>示例场景<select id="scenario"><option value="normal">完整示例</option><option value="empty">暂无调用</option><option value="partial">历史覆盖不足</option></select></label>
   </header>
   <main>
     <div class="app-heading"><strong class="wordmark">CCX</strong><nav aria-label="入口协议" id="protocols"></nav><span class="badge">低保真 · 未实现</span></div>
-    <div class="page-heading"><div><p class="breadcrumb">协议页 / 渠道管理 / 模型调用分布</p><h1>模型调用分布</h1><p id="direction-note"></p></div><a href="../superpowers/specs/2026-11-12-model-routing-observability-design.md">配套设计文档 ↗</a></div>
-    <section class="filters" aria-label="分布筛选">
-      <label>时间范围<select id="duration"><option value="24">最近 24 小时</option><option value="6">最近 6 小时</option><option value="1">最近 1 小时</option></select></label>
-      <label>请求模型<select id="source"></select></label><label>渠道<select id="channel"></select></label><label>实际发送模型<select id="target"></select></label>
-      <button id="reset">清除筛选</button>
-    </section>
-    <p class="caption" id="window-label"></p><aside id="coverage" class="notice" hidden></aside>
-    <section class="summary" id="summary" aria-label="客户端请求汇总" aria-live="polite"></section>
-    <section class="basis-bar"><div><strong>分布计数口径</strong><p>汇总覆盖匹配请求的完整链路；下方路径仅计符合筛选的调用。</p></div><div class="switch" aria-label="计数口径"><button data-basis="success" aria-pressed="true">成功请求去向</button><button data-basis="attempts" aria-pressed="false">全部上游尝试</button></div></section>
-    <p id="basis-note" class="notice"></p>
-    <section class="panel" id="flow-panel"><div class="section-heading"><h2>请求模型 → 渠道 → 实际发送模型</h2><span class="caption">点击节点或连线筛选</span></div><div id="flow-scroll" class="flow-scroll"></div><p class="caption">线宽表示次数；相邻连线是聚合关系，完整分配关系见下方路径。</p></section>
-    <section class="panel"><div class="section-heading"><h2 id="paths-title">分配路径</h2><button id="clear-path" hidden>清除路径选择</button></div><div id="paths"></div></section>
-    <section class="panel"><div class="section-heading"><div><h2>客户端请求</h2><p class="caption">每个请求一行。点击查看链路，可追踪所有重试与切渠。</p></div><button id="retry-example">查看重试样例</button></div><div id="requests"></div><div class="pagination"><span id="page-label" class="caption"></span><div><button id="prev">上一页</button><button id="next">下一页</button></div></div></section>
-    <footer><span>A：先理解去向，再查路径；B：先定位路径，再看请求。窄屏均转为路径卡片。</span><span>视觉样式、图表库与正式组件待后续确定。</span></footer>
+    <div class="page-heading"><div><h1 id="protocol-heading">Messages 渠道</h1><p class="caption">当前协议页 · 示意新增区块与现有内容的位置关系</p></div><a href="../superpowers/specs/2026-11-12-model-routing-observability-design.md">配套设计文档 ↗</a></div>
+    <details id="global-panel" open>
+      <summary><strong id="global-title">Messages 流量统计</strong></summary>
+      <div class="global-content">
+        <div class="toolbar"><label>统计时间（共用）<select id="duration"><option value="24">最近 24 小时</option><option value="6">最近 6 小时</option><option value="1">最近 1 小时</option><option value="today">今日</option><option value="168">最近 7 天</option></select></label><button id="refresh">刷新统计</button></div>
+        <p class="caption" id="window-label"></p>
+        <section class="trend-region" aria-label="现有趋势图位置示意"><div class="section-heading"><h2>调用趋势</h2><span class="caption">现有统计区块 · 按示例调用绘制</span></div><p class="caption" id="trend-summary"></p><svg id="trend" viewBox="0 0 1000 140" preserveAspectRatio="none" role="img" aria-label="当前时间范围的示例调用趋势"></svg></section>
+        <details id="routing-panel" open>
+          <summary><strong>模型去向</strong> <span class="caption">新增 · 请求模型 → 渠道 → 实际发送模型</span></summary>
+          <div id="range-notice" class="notice" hidden>模型去向第一版支持最近 24 小时及以内；上方趋势保持当前范围。<button id="use-24h">切换至 24 小时</button></div>
+          <div id="routing-content" class="routing-content">
+            <div class="basis-bar"><p>沿用上方时间；下列筛选仅影响模型去向。</p><div class="switch" aria-label="计数口径"><button data-basis="success" aria-pressed="true">成功请求去向</button><button data-basis="attempts" aria-pressed="false">全部上游尝试</button></div></div>
+            <section class="filters" aria-label="模型去向筛选"><label>请求模型<select id="source"></select></label><label>渠道<select id="channel"></select></label><label>实际发送模型<select id="target"></select></label><button id="reset">清除筛选</button></section>
+            <aside id="coverage" class="notice" hidden></aside><section class="summary" id="summary" aria-label="匹配请求摘要" aria-live="polite"></section>
+            <p id="basis-note" class="caption"></p>
+            <section class="panel" id="flow-panel"><div id="flow-scroll" class="flow-scroll"></div><div id="mobile-paths" class="mobile-paths"></div></section>
+            <div class="section-heading"><p class="caption">点击节点或连线查看完整路径及请求。计数仅覆盖网关。</p><button id="view-requests">查看请求</button></div>
+          </div>
+        </details>
+      </div>
+    </details>
+    <section class="context-stats" aria-label="现有渠道概况位置"><span>总渠道数　2</span><span>活跃渠道　2</span><span>系统状态　正常</span></section>
+    <section class="channel-context"><h2>渠道编排</h2><p>主渠道　→　备用渠道</p><p class="caption">此处保留现有渠道列表、编辑、日志及诊断操作；线框仅标示位置。</p></section>
+    <footer><span>布局顺序：调用趋势 → 模型去向 → 渠道管理。模型去向可单独收起。</span></footer>
   </main>
+  <dialog id="path-detail" aria-labelledby="path-title"><div class="section-heading"><h2 id="path-title">路径调用明细</h2><button id="close-path" aria-label="关闭路径调用明细">关闭</button></div><div id="path-body"><p class="caption" id="path-caption"></p><div id="path-routes"></div><h3>匹配请求</h3><div id="requests"></div><div class="pagination"><span id="page-label" class="caption"></span><div><button id="prev">上一页</button><button id="next">下一页</button></div></div><button id="retry-example">查看重试样例</button></div></dialog>
   <dialog id="detail" aria-labelledby="detail-title"><div class="section-heading"><h2 id="detail-title">请求链路</h2><button id="close-detail" aria-label="关闭请求链路">关闭</button></div><div id="detail-body"></div></dialog>
   <script>
     const protocols = {
@@ -89,7 +104,7 @@
       vectors: { label: 'Vectors', sources: ['text-embedding-3-large', 'embed-main', 'embed-fast'], targets: ['text-embedding-3-large', 'text-embedding-3-large', 'text-embedding-3-small', 'text-embedding-3-small'], match: 'text-embedding' }
     };
     const channels = { primary: '主渠道', backup: '备用渠道' };
-    const state = { protocol: 'messages', layout: 'flow', basis: 'success', scenario: 'normal', duration: 24, source: '', channel: '', target: '', route: '', page: 0 };
+    const state = { protocol: 'messages', basis: 'success', scenario: 'normal', duration: '24', source: '', channel: '', target: '', route: '', page: 0 };
     const endTime = Date.parse('2026-11-12T12:00:00Z');
     const $ = id => document.getElementById(id);
     const escapeHtml = value => String(value).replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
@@ -97,6 +112,8 @@
     const routeKey = attempt => [attempt.source, attempt.channel, attempt.sent].join('|');
     const percentage = (count, total) => total ? `${(count / total * 100).toFixed(1)}%` : '0.0%';
     const dateText = value => new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(value);
+    const windowHours = () => state.duration === 'today' ? 20 : Number(state.duration);
+    function windowRecords() { return state.scenario === 'empty' ? [] : makeRecords().filter(request => request.receivedAt >= endTime - windowHours() * 3600000); }
     function makeRecords() {
       const config = protocols[state.protocol];
       return Array.from({ length: 100 }, (_, index) => {
@@ -125,7 +142,7 @@
       options('target', [...new Set(protocols[state.protocol].targets)].map(value => [value, value]), '全部实际模型');
     }
     function query() {
-      const records = state.scenario === 'empty' ? [] : makeRecords().filter(request => request.receivedAt >= endTime - state.duration * 3600000 && (!state.source || request.source === state.source));
+      const records = windowRecords().filter(request => !state.source || request.source === state.source);
       const matches = attempt => (!state.channel || attempt.channel === state.channel) && (!state.target || attempt.sent === state.target) && (!state.route || routeKey(attempt) === state.route);
       const eligible = request => state.basis === 'success' ? request.attempts.filter(attempt => attempt.status === 'completed' && request.status === 'completed').slice(-1) : request.attempts;
       const narrowed = Boolean(state.channel || state.target || state.route);
@@ -142,29 +159,15 @@
     function renderSummary(data) {
       const requests = data.requests;
       const metrics = [['客户端请求', requests.length], ['成功', requests.filter(request => request.status === 'completed').length], ['失败', requests.filter(request => request.status === 'failed').length], ['取消', requests.filter(request => request.status === 'cancelled').length], ['进行中', requests.filter(request => request.status === 'pending').length], ['上游尝试', requests.reduce((sum, request) => sum + request.attempts.length, 0)], ['发生重试的请求', requests.filter(request => request.attempts.length > 1).length]];
-      $('summary').innerHTML = metrics.map(([label, count]) => `<div class="metric"><span>${label}</span><strong>${count}</strong></div>`).join('');
+      $('summary').innerHTML = metrics.map(([label, count]) => `<span class="metric"><span>${label}</span><strong>${count}</strong></span>`).join('');
       const noAttempt = requests.filter(request => !request.attempts.length).length;
       $('basis-note').textContent = (state.basis === 'success' ? `每个成功请求仅计最终成功路径。当前路径合计 ${data.attempts.length} 个成功请求。` : `同一请求可计多次尝试。当前路径合计 ${data.attempts.length} 次，包含失败与取消。`) + (noAttempt ? ` 另有 ${noAttempt} 个请求在选渠阶段失败，没有上游尝试。` : '');
     }
     function routeCards(paths, total) {
       return paths.map(path => `<button class="route-card" data-route="${encodeURIComponent(path.key)}"><strong>${escapeHtml(path.source)}</strong><span>→ ${channels[path.channel]} → ${escapeHtml(path.sent)}</span><span>${path.count} 次 · ${percentage(path.count, total)} · ${escapeHtml([...path.mappings].join(' / '))}</span></button>`).join('');
     }
-    function pathTable(paths, total) {
-      return `<div class="table-scroll"><table><thead><tr><th>请求模型</th><th>渠道</th><th>实际发送模型</th><th>网关模型变换</th><th class="numeric">次数 / 占比</th><th>查看</th></tr></thead><tbody>${paths.map(path => `<tr class="${state.route === path.key ? 'selected' : ''}"><td>${escapeHtml(path.source)}</td><td>${channels[path.channel]}</td><td>${escapeHtml(path.sent)}</td><td>${escapeHtml([...path.mappings].join(' / '))}<br><span class="caption">${Object.entries(path.statuses).map(([status, count]) => `${statusText[status]} ${count}`).join(' · ')}</span></td><td class="numeric">${path.count} / ${percentage(path.count, total)}</td><td><button class="route-button" data-route="${encodeURIComponent(path.key)}">筛选路径</button></td></tr>`).join('')}</tbody></table></div>`;
-    }
-    function renderPaths(data) {
-      $('clear-path').hidden = !state.route;
-      $('paths-title').textContent = state.layout === 'flow' ? '分配路径' : '按请求模型查看分配路径';
-      if (!data.paths.length) { $('paths').innerHTML = '<p class="empty">当前条件下没有分配路径。可调整口径或清除筛选。</p>'; return; }
-      const responsivePaths = paths => pathTable(paths, data.attempts.length) + `<div class="mobile-paths">${routeCards(paths, data.attempts.length)}</div>`;
-      if (state.layout === 'flow') $('paths').innerHTML = responsivePaths(data.paths);
-      else {
-        const sources = [...new Set(data.paths.map(path => path.source))];
-        $('paths').innerHTML = sources.map(source => { const paths = data.paths.filter(path => path.source === source); const count = paths.reduce((sum, path) => sum + path.count, 0); return `<details open><summary><strong>${escapeHtml(source)}</strong> · ${count} 次 · ${percentage(count, data.attempts.length)} · ${paths.length} 条路径</summary>${responsivePaths(paths)}</details>`; }).join('');
-      }
-    }
     function renderGraph(data) {
-      $('flow-panel').hidden = state.layout !== 'flow';
+      $('mobile-paths').innerHTML = data.paths.length ? routeCards(data.paths, data.attempts.length) : '<p class="empty">暂无模型去向，可调整筛选。</p>';
       if (!data.paths.length) { $('flow-scroll').innerHTML = '<p class="empty">暂无流向。图中只展示实际发生的上游调用。</p>'; return; }
       const columns = [['source', '请求模型'], ['channel', '渠道'], ['sent', '实际发送模型']];
       const nodes = new Map();
@@ -173,7 +176,7 @@
         nodeMarkup += `<text x="${20 + column * 330}" y="24">${title}</text>`;
         const values = [...new Set(data.paths.map(path => path[field]))];
         values.forEach((value, index) => {
-          const x = 20 + column * 330, y = 58 + index * (270 / Math.max(values.length - 1, 1));
+          const x = 20 + column * 330, y = 48 + index * (200 / Math.max(values.length - 1, 1));
           const count = data.paths.filter(path => path[field] === value).reduce((sum, path) => sum + path.count, 0);
           const name = field === 'channel' ? channels[value] : value;
           const shortName = name.length > 26 ? name.slice(0, 24) + '…' : name;
@@ -185,22 +188,38 @@
         const points = ['source', 'channel', 'sent'].map(field => nodes.get(`${field}:${path[field]}`));
         return [0, 1].map(index => { const from = points[index], to = points[index + 1]; const start = from.x + 240; return `<path class="link" tabindex="0" role="button" aria-label="筛选路径 ${escapeHtml(path.source)} 经 ${channels[path.channel]} 到 ${escapeHtml(path.sent)}，${path.count} 次" data-route="${encodeURIComponent(path.key)}" stroke-width="${Math.max(3, Math.sqrt(path.count) * 2.7)}" d="M ${start} ${from.y} C ${start + 46} ${from.y}, ${to.x - 46} ${to.y}, ${to.x} ${to.y}"><title>${escapeHtml(path.source)} → ${channels[path.channel]} → ${escapeHtml(path.sent)}：${path.count} 次</title></path>`; }).join('');
       }).join('');
-      $('flow-scroll').innerHTML = `<svg viewBox="0 0 960 410" role="group" aria-label="模型经渠道到实际发送模型的分配流向">${links}${nodeMarkup}</svg>`;
+      $('flow-scroll').innerHTML = `<svg viewBox="0 0 960 320" role="group" aria-label="模型经渠道到实际发送模型的分配流向">${links}${nodeMarkup}</svg>`;
     }
     function renderRequests(data) {
       const requests = [...data.requests].reverse();
       state.page = Math.min(state.page, Math.max(0, Math.ceil(requests.length / 8) - 1));
       const visible = requests.slice(state.page * 8, state.page * 8 + 8);
-      $('requests').innerHTML = visible.length ? `<div class="table-scroll"><table><thead><tr><th>请求 / 接收时间</th><th>请求模型</th><th>匹配路径 / 最终去向</th><th>请求终态</th><th class="numeric">总尝试数</th><th>详情</th></tr></thead><tbody>${visible.map(request => {
+      $('requests').innerHTML = visible.length ? visible.map(request => {
         const eligible = state.basis === 'success' ? request.attempts.filter(attempt => attempt.status === 'completed') : request.attempts;
         const matched = eligible.filter(data.matches);
         const shown = matched.at(-1) || request.attempts.at(-1);
         const path = shown ? `${channels[shown.channel]} → ${escapeHtml(shown.sent)}` : '无上游调用 · 无可用渠道';
-        return `<tr><td><code title="${request.id}">…${request.id.slice(-3)}</code><br>${dateText(request.receivedAt)}</td><td>${escapeHtml(request.source)}</td><td>${path}${matched.length > 1 ? `<br><span class="caption">当前条件匹配 ${matched.length} 次尝试</span>` : ''}</td><td><span class="status">${statusText[request.status]}</span></td><td class="numeric">${request.attempts.length}</td><td><button class="route-button" data-request="${request.id}">查看链路</button></td></tr>`;
-      }).join('')}</tbody></table></div>` : '<p class="empty">没有匹配的请求。请调整筛选条件。</p>';
+        return `<article class="request-card"><div class="section-heading"><strong>请求 …${request.id.slice(-3)}</strong><span class="status">${statusText[request.status]}</span></div><p>${escapeHtml(request.source)}<br>${path}</p><p class="caption">${dateText(request.receivedAt)} · 总计 ${request.attempts.length} 次尝试${matched.length > 1 ? ` · 当前路径匹配 ${matched.length} 次` : ''}</p><button class="route-button" data-request="${request.id}">查看链路</button></article>`;
+      }).join('') : '<p class="empty">没有匹配的请求。请调整筛选条件。</p>';
       $('page-label').textContent = requests.length ? `第 ${state.page * 8 + 1}–${Math.min(state.page * 8 + 8, requests.length)} 条 / 共 ${requests.length} 个客户端请求` : '0 个客户端请求';
       $('prev').disabled = state.page === 0; $('next').disabled = (state.page + 1) * 8 >= requests.length;
       $('retry-example').disabled = !requests.some(request => request.attempts.length > 1);
+    }
+    function showMatches() {
+      const data = query();
+      $('path-caption').textContent = `当前${state.basis === 'success' ? '成功去向' : '全部尝试'}口径 · ${data.requests.length} 个请求 · ${data.attempts.length} 次匹配调用。关闭侧栏后保留选择，可用“清除筛选”恢复。`;
+      $('path-routes').innerHTML = data.paths.length ? routeCards(data.paths, data.attempts.length) : '<p class="caption">没有上游路径；请求可能在选渠阶段失败。</p>';
+      renderRequests(data);
+      if (!$('path-detail').open) $('path-detail').showModal();
+    }
+    function renderTrend() {
+      const records = windowRecords(), start = endTime - windowHours() * 3600000;
+      const buckets = Array(24).fill(0);
+      for (const request of records) { const index = Math.min(23, Math.floor((request.receivedAt - start) / (endTime - start) * 24)); buckets[index] += request.attempts.length; }
+      const maximum = Math.max(1, ...buckets);
+      const points = buckets.map((count, index) => `${20 + index * (960 / 23)},${115 - count / maximum * 95}`).join(' ');
+      $('trend').innerHTML = '<path d="M 20 20 H 980 M 20 65 H 980 M 20 115 H 980" stroke="#c6c9cc" stroke-dasharray="4 5" fill="none"/>' + `<polyline points="${points}"/>`;
+      $('trend-summary').textContent = `${protocols[state.protocol].label} 全量示例：${records.reduce((sum, request) => sum + request.attempts.length, 0)} 次上游尝试 · 下方模型筛选不影响此图`;
     }
     function showDetail(id) {
       const request = makeRecords().find(item => item.id === id);
@@ -211,32 +230,40 @@
     }
     function render() {
       for (const id of ['source', 'channel', 'target']) $(id).value = state[id];
-      document.querySelectorAll('[data-layout]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.layout === state.layout)));
       document.querySelectorAll('[data-basis]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.basis === state.basis)));
       document.querySelectorAll('[data-protocol]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.protocol === state.protocol)));
-      $('direction-note').textContent = state.layout === 'flow' ? 'A 流向优先：先看分配关系，再下钻到真实请求。' : 'B 表格优先：按请求模型分组，直接比较渠道和目标模型。';
-      $('window-label').textContent = `示例窗口：${dateText(endTime - state.duration * 3600000)} → ${dateText(endTime)}（Asia/Shanghai） · 静态示例，不连接网关`;
+      $('protocol-heading').textContent = `${protocols[state.protocol].label} 渠道`;
+      $('global-title').textContent = `${protocols[state.protocol].label} 流量统计`;
+      $('window-label').textContent = `共用窗口：${dateText(endTime - windowHours() * 3600000)} → ${dateText(endTime)}（Asia/Shanghai） · 静态示例，不连接网关`;
       $('coverage').hidden = state.scenario !== 'partial';
       $('coverage').textContent = '完整链路记录始于 11-12 08:00；更早的调用仅有旧版模型统计。本页展示已完整记录的调用，不能视为整个窗口的完整分布。';
-      const data = query(); renderSummary(data); renderGraph(data); renderPaths(data); renderRequests(data);
+      const supported = windowHours() <= 24;
+      $('range-notice').hidden = supported; $('routing-content').hidden = !supported;
+      renderTrend();
+      if (supported && $('global-panel').open && $('routing-panel').open) { const data = query(); renderSummary(data); renderGraph(data); }
     }
+    function closePanels() { if ($('detail').open) $('detail').close(); if ($('path-detail').open) $('path-detail').close(); }
     function activate(event) {
       const route = event.target.closest('[data-route]');
       const node = event.target.closest('[data-node-field]');
-      if (route) { state.route = decodeURIComponent(route.dataset.route); state.page = 0; render(); }
-      else if (node) { const field = { source: 'source', channel: 'channel', sent: 'target' }[node.dataset.nodeField]; state[field] = node.dataset.nodeValue; state.route = ''; state.page = 0; render(); }
+      if (route) { state.route = decodeURIComponent(route.dataset.route); state.page = 0; render(); showMatches(); }
+      else if (node) { const field = { source: 'source', channel: 'channel', sent: 'target' }[node.dataset.nodeField]; state[field] = node.dataset.nodeValue; state.route = ''; state.page = 0; render(); showMatches(); }
       else if (event.target.closest('[data-request]')) showDetail(event.target.closest('[data-request]').dataset.request);
-      else if (event.target.closest('[data-layout]')) { state.layout = event.target.closest('[data-layout]').dataset.layout; render(); }
       else if (event.target.closest('[data-basis]')) { state.basis = event.target.closest('[data-basis]').dataset.basis; state.route = ''; state.page = 0; render(); }
-      else if (event.target.closest('[data-protocol]')) { state.protocol = event.target.closest('[data-protocol]').dataset.protocol; resetFilters(); setupSelectors(); render(); }
+      else if (event.target.closest('[data-protocol]')) { closePanels(); state.protocol = event.target.closest('[data-protocol]').dataset.protocol; resetFilters(); setupSelectors(); render(); }
     }
     document.addEventListener('click', activate);
     document.addEventListener('keydown', event => { if (['Enter', ' '].includes(event.key) && event.target.closest('svg [role="button"]')) { event.preventDefault(); activate(event); } });
     for (const id of ['source', 'channel', 'target']) $(id).addEventListener('change', event => { state[id] = event.target.value; state.route = ''; state.page = 0; render(); });
-    $('duration').addEventListener('change', event => { state.duration = Number(event.target.value); state.route = ''; state.page = 0; render(); });
-    $('scenario').addEventListener('change', event => { state.scenario = event.target.value; resetFilters(); render(); });
+    $('duration').addEventListener('change', event => { closePanels(); state.duration = event.target.value; resetFilters(); render(); });
+    $('scenario').addEventListener('change', event => { closePanels(); state.scenario = event.target.value; resetFilters(); render(); });
     $('reset').addEventListener('click', () => { resetFilters(); render(); });
-    $('clear-path').addEventListener('click', () => { state.route = ''; state.page = 0; render(); });
+    $('view-requests').addEventListener('click', showMatches);
+    $('close-path').addEventListener('click', () => $('path-detail').close());
+    $('use-24h').addEventListener('click', () => { state.duration = '24'; $('duration').value = '24'; resetFilters(); render(); });
+    $('refresh').addEventListener('click', () => { closePanels(); resetFilters(); render(); });
+    $('global-panel').addEventListener('toggle', () => { if (!$('global-panel').open) closePanels(); render(); });
+    $('routing-panel').addEventListener('toggle', () => { if (!$('routing-panel').open) closePanels(); render(); });
     $('prev').addEventListener('click', () => { state.page--; renderRequests(query()); });
     $('next').addEventListener('click', () => { state.page++; renderRequests(query()); });
     $('retry-example').addEventListener('click', () => { const request = query().requests.find(item => item.attempts.length > 1); if (request) showDetail(request.id); });
