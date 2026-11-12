@@ -64,6 +64,7 @@ type ModelEntry struct {
 	LabelOverride       string   `json:"labelOverride,omitempty"`
 	Supports1M          bool     `json:"supports1m,omitempty"`
 	ContextWindow       int      `json:"context_window,omitempty"`
+	MaxOutputTokens     int      `json:"max_output_tokens,omitempty"`
 	AnthropicFamilyTier string   `json:"anthropicFamilyTier,omitempty"`
 	IsFamilyDefault     bool     `json:"isFamilyDefault,omitempty"`
 	InputModalities     []string `json:"input_modalities,omitempty"`
@@ -238,7 +239,24 @@ func ModelsDetailHandler(envCfg *config.EnvConfig, cfgManager *config.ConfigMana
 			scheduler.ChannelKindImages,
 			scheduler.ChannelKindVectors,
 		} {
-			if body, _, ok := tryModelsRequest(c, cfgManager, channelScheduler, "GET", "/"+modelID, kind); ok {
+			if body, upstream, ok := tryModelsRequest(c, cfgManager, channelScheduler, "GET", "/"+modelID, kind); ok {
+				var model ModelEntry
+				if json.Unmarshal(body, &model) == nil && model.MaxOutputTokens == 0 {
+					if model.ID == "" {
+						model.ID = modelID
+					}
+					model = normalizeModelEntry(model, upstream, cfgManager.GetConfig().UpstreamModelCapabilities)
+					if model.MaxOutputTokens > 0 {
+						// 详情仍保留上游所有字段，只补缺失的输出上限。
+						var fields map[string]json.RawMessage
+						if json.Unmarshal(body, &fields) == nil && fields != nil {
+							fields["max_output_tokens"], _ = json.Marshal(model.MaxOutputTokens)
+							if enriched, err := json.Marshal(fields); err == nil {
+								body = enriched
+							}
+						}
+					}
+				}
 				c.Data(http.StatusOK, "application/json", body)
 				return
 			}
@@ -701,6 +719,9 @@ func normalizeModelEntry(model ModelEntry, upstream *config.UpstreamConfig, glob
 	if model.ContextWindow == 0 {
 		model.ContextWindow = resolved.Capability.ContextWindowTokens
 	}
+	if model.MaxOutputTokens == 0 {
+		model.MaxOutputTokens = resolved.Capability.MaxOutputTokens
+	}
 	if model.AnthropicFamilyTier == "" {
 		model.AnthropicFamilyTier = anthropicFamilyTierForModel(model.ID, resolved.ActualModel, resolved.Capability.DisplayName)
 	}
@@ -737,6 +758,9 @@ func mergeModelEntryMetadata(existing, incoming ModelEntry) ModelEntry {
 	existing.Supports1M = existing.Supports1M || incoming.Supports1M
 	if existing.ContextWindow == 0 {
 		existing.ContextWindow = incoming.ContextWindow
+	}
+	if existing.MaxOutputTokens == 0 {
+		existing.MaxOutputTokens = incoming.MaxOutputTokens
 	}
 	if existing.AnthropicFamilyTier == "" {
 		existing.AnthropicFamilyTier = incoming.AnthropicFamilyTier
