@@ -677,13 +677,45 @@ func (st *geminiToResponsesStreamState) generateCompletedEvent(originalRequestRa
 		outputs = append(outputs, m)
 	}
 
-	// 添加工具调用（如果有）
+	// 添加工具调用，同时发出 canonical item 事件；工具参数与终帧使用相同映射。
+	codexCtx := buildCodexToolContextFromRequest(originalRequestRawJSON)
 	for _, fc := range st.FunctionCalls {
-		outputs = append(outputs, map[string]interface{}{
-			"type":    "function_call",
-			"role":    "assistant",
-			"content": fc,
-		})
+		item := types.ResponsesItem{Type: "function_call", Status: "completed", CallID: fmt.Sprint(fc["call_id"]), Name: fmt.Sprint(fc["name"]), Arguments: fmt.Sprint(fc["arguments"])}
+		item.ID = "fc_" + item.CallID
+		response := &types.ResponsesResponse{Output: []types.ResponsesItem{item}}
+		codexCtx.RemapCustomToolCallsInResponse(response)
+		codexCtx.RemapNamespaceFunctionCallsInResponse(response)
+		item = response.Output[0]
+		if item.ID == "" {
+			item.ID = "fc_" + item.CallID
+		}
+		encoded, _ := JSONMarshal(item)
+		var mapped map[string]interface{}
+		_ = JSONUnmarshal(encoded, &mapped)
+		index := len(outputs)
+		emit := func(kind string, payload map[string]interface{}) {
+			st.Seq++
+			payload["type"] = kind
+			payload["sequence_number"] = st.Seq
+			payload["output_index"] = index
+			data, _ := JSONMarshal(payload)
+			out = append(out, emitResponsesEvent(kind, string(data)))
+		}
+		added := make(map[string]interface{}, len(mapped))
+		for k, v := range mapped {
+			added[k] = v
+		}
+		field, eventPrefix := "arguments", "response.function_call_arguments"
+		if item.Type == "custom_tool_call" {
+			field, eventPrefix = "input", "response.custom_tool_call_input"
+		}
+		full := mapped[field]
+		added[field] = ""
+		emit("response.output_item.added", map[string]interface{}{"item": added})
+		emit(eventPrefix+".delta", map[string]interface{}{"item_id": item.ID, "call_id": item.CallID, "delta": full})
+		emit(eventPrefix+".done", map[string]interface{}{"item_id": item.ID, "call_id": item.CallID, field: full})
+		emit("response.output_item.done", map[string]interface{}{"item": mapped})
+		outputs = append(outputs, mapped)
 	}
 
 	if len(outputs) > 0 {

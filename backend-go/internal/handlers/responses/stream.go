@@ -153,6 +153,9 @@ func handleStreamSuccess(
 				break
 			}
 			line := sl.text
+			if !needConvert {
+				line = converters.NormalizeOpenRouterReasoningSSELine(line)
+			}
 			bufferedLines = append(bufferedLines, line)
 			if strings.TrimSpace(line) == "" {
 				currentSSEEventName = ""
@@ -377,6 +380,9 @@ func handleStreamSuccess(
 
 	// processLine 处理单行数据（复用于缓冲行回放和后续读取），并返回转换后的 Responses 事件用于 watchdog 状态判断。
 	processLine := func(line string) []string {
+		if !needConvert {
+			line = converters.NormalizeOpenRouterReasoningSSELine(line)
+		}
 
 		if streamLoggingEnabled {
 			logBuffer.WriteString(line + "\n")

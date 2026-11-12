@@ -281,12 +281,11 @@ func TestConvertGeminiStreamToResponses_PreservesFunctionCallCallID(t *testing.T
 		t.Fatalf("expected 1 output item, got %d", len(output))
 	}
 	item := output[0].(map[string]interface{})
-	content := item["content"].(map[string]interface{})
-	if content["name"] != "get_weather" {
-		t.Fatalf("expected function name get_weather, got %#v", content["name"])
+	if item["name"] != "get_weather" {
+		t.Fatalf("expected function name get_weather, got %#v", item["name"])
 	}
-	if content["call_id"] != "get_weather" {
-		t.Fatalf("expected call_id get_weather, got %#v", content["call_id"])
+	if item["call_id"] != "get_weather" {
+		t.Fatalf("expected call_id get_weather, got %#v", item["call_id"])
 	}
 }
 

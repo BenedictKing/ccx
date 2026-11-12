@@ -501,7 +501,7 @@ func handleLocalCompactStream(
 				)
 			}
 		} else {
-			eventsToSend = []string{line + "\n"}
+			eventsToSend = []string{converters.NormalizeOpenRouterReasoningSSELine(line) + "\n"}
 		}
 
 		for _, event := range eventsToSend {
@@ -585,7 +585,7 @@ func handleLocalCompactV2Stream(
 				)
 			}
 		} else {
-			eventsToProcess = []string{line + "\n"}
+			eventsToProcess = []string{converters.NormalizeOpenRouterReasoningSSELine(line) + "\n"}
 		}
 
 		for _, event := range eventsToProcess {
@@ -659,6 +659,9 @@ func handleLocalCompactV2Stream(
 }
 
 func shouldSkipCompactStreamEvent(event string) bool {
+	if strings.Contains(event, "response.reasoning_text.") || strings.Contains(event, "response.reasoning_summary_") {
+		return true
+	}
 	// 跳过所有 reasoning 相关事件
 	if strings.Contains(event, `"type":"reasoning"`) {
 		return true

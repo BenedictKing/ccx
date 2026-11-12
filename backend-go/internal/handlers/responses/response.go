@@ -47,7 +47,7 @@ func handleSuccess(
 			}
 		}
 	}
-	if rawTools, ok := c.Get("codex_merged_raw_tools"); ok {
+	if rawTools, ok := c.Get("codex_merged_raw_tools"); ok && upstreamType != "responses" {
 		if injected, err := sjson.SetBytes(originalRequestJSON, "tools", rawTools); err == nil {
 			originalRequestJSON = injected
 		}

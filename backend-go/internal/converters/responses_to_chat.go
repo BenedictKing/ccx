@@ -26,6 +26,17 @@ import (
 // 返回:
 //   - []byte: Chat Completions 格式的请求 JSON
 func ConvertResponsesToOpenAIChatRequest(modelName string, inputRawJSON []byte, stream bool) []byte {
+	// 原始字节转换入口复用与 provider 相同的增量工具处理。
+	if strings.Contains(string(inputRawJSON), "additional_tools") {
+		var request map[string]interface{}
+		if json.Unmarshal(inputRawJSON, &request) == nil {
+			if _, _, changed := HoistCodexAdditionalTools(request); changed {
+				if normalized, err := json.Marshal(request); err == nil {
+					inputRawJSON = normalized
+				}
+			}
+		}
+	}
 	// 基础 Chat Completions 模板
 	out := `{"model":"","messages":[],"stream":false}`
 

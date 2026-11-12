@@ -137,6 +137,20 @@ func (p *ResponsesProvider) buildProviderRequestBody(c *gin.Context, requestPath
 		return responsesReq, bodyBytes, nil
 	}
 
+	var hoistedTools []interface{}
+	var hoisted bool
+	var rawRequest map[string]interface{}
+	if err := json.Unmarshal(bodyBytes, &rawRequest); err != nil {
+		return nil, nil, fmt.Errorf("解析 Responses 请求失败: %w", err)
+	}
+	hoistedTools, hoisted = hoistCodexAdditionalTools(c, rawRequest)
+	if hoisted {
+		normalized, err := utils.MarshalJSONNoEscape(rawRequest)
+		if err != nil {
+			return nil, nil, err
+		}
+		bodyBytes = normalized
+	}
 	var providerReq interface{}
 	converter := converters.NewConverter(upstream.ServiceType)
 
@@ -202,7 +216,11 @@ func (p *ResponsesProvider) buildProviderRequestBody(c *gin.Context, requestPath
 		if responsesReq.TransformerMetadata == nil {
 			responsesReq.TransformerMetadata = make(map[string]interface{})
 		}
-		responsesReq.TransformerMetadata["codex_tool_compat_enabled"] = upstream.IsCodexToolCompatEnabled()
+		responsesReq.TransformerMetadata["codex_tool_compat_enabled"] = upstream.IsCodexToolCompatEnabled() || hoisted
+		if hoisted {
+			responsesReq.TransformerMetadata["codex_tool_context"] = converters.BuildCodexToolContextFromRaw(hoistedTools)
+			responsesReq.TransformerMetadata["codex_merged_raw_tools"] = hoistedTools
+		}
 		responsesReq.RawTools = extractRawToolsFromRequest(bodyBytes)
 		convertedReq, err := converter.ToProviderRequest(sess, &responsesReq)
 		if err != nil {
@@ -642,6 +660,9 @@ func (p *ResponsesProvider) ConvertToResponsesResponse(
 		return nil, fmt.Errorf("解析响应失败: %w", err)
 	}
 	converter := converters.NewConverter(upstreamType)
+	if upstreamType == "responses" {
+		converters.NormalizeOpenRouterReasoningResponseBody(respMap)
+	}
 	return converter.FromProviderResponse(respMap, sessionID)
 }
 
@@ -1291,6 +1312,17 @@ func convertCodexToolsForPassthrough(reqMap map[string]interface{}) {
 
 	ctx := converters.BuildCodexToolContextFromRaw(rawTools)
 	reqMap["tool_choice"] = converters.ConvertToolChoiceForCodex(reqMap["tool_choice"], ctx)
+}
+
+// hoistCodexAdditionalTools 绑定协议归一化结果供流式和非流式响应还原。
+func hoistCodexAdditionalTools(c *gin.Context, reqMap map[string]interface{}) ([]interface{}, bool) {
+	raw, ctx, ok := converters.HoistCodexAdditionalTools(reqMap)
+	if ok && c != nil {
+		c.Set("codex_tool_context", ctx)
+		c.Set("codex_additional_tools_hoisted", true)
+		c.Set("codex_merged_raw_tools", raw)
+	}
+	return raw, ok
 }
 
 func normalizeToolChoiceAfterToolStrip(reqMap map[string]interface{}, keptTools []interface{}) {

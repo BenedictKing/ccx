@@ -241,6 +241,9 @@ func firstUnknownResponsesEventType(event string) (string, bool) {
 		"response.output_json.delta": {}, "response.content_part.added": {}, "response.content_part.delta": {}, "response.content_part.done": {}, "response.audio.delta": {}, "response.audio_transcript.delta": {},
 		"response.output_item.added": {}, "response.output_item.done": {}, "response.completed": {},
 		"response.error": {}, "response.failed": {}, "error": {}, "keepalive": {},
+		"response.reasoning_text.delta": {}, "response.reasoning_text.done": {},
+		"response.output_text.done": {}, "response.output_json.done": {}, "response.refusal.delta": {}, "response.refusal.done": {},
+		"response.audio.done": {}, "response.audio_transcript.done": {},
 	}
 	lines := strings.Split(event, "\n")
 	for _, line := range lines {

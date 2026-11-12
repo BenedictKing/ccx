@@ -61,7 +61,10 @@ func (c *OpenAIChatConverter) ToProviderRequest(sess *session.Session, req *type
 	var codexToolCtx CodexToolContext
 	rawTools := req.RawTools
 	if codexEnabled {
-		rawTools = MergeCodexToolSearchOutputTools(req.RawTools, sess, req.Input)
+		if merged, ok := req.TransformerMetadata["codex_merged_raw_tools"].([]interface{}); ok {
+			rawTools = merged
+		}
+		rawTools = MergeCodexToolSearchOutputTools(rawTools, sess, req.Input)
 		codexToolCtx = BuildCodexToolContextFromRaw(rawTools)
 		if len(rawTools) > 0 {
 			if req.TransformerMetadata == nil {

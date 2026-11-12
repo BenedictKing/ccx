@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/BenedictKing/ccx/internal/config"
+	"github.com/BenedictKing/ccx/internal/converters"
 	"github.com/BenedictKing/ccx/internal/handlers/common"
 	"github.com/BenedictKing/ccx/internal/providers"
 	"github.com/BenedictKing/ccx/internal/session"
@@ -71,6 +72,15 @@ func handleFoldedResponsesStreamSuccess(
 	}
 
 	emitter := newResponsesFoldHTTPEmitter(c, resp, sessionManager, originalReq)
+	var codexCtx *converters.CodexToolContext
+	if hoisted, _ := c.Get("codex_additional_tools_hoisted"); hoisted == true {
+		if value, ok := c.Get("codex_tool_context"); ok {
+			if ctx, ok := value.(converters.CodexToolContext); ok {
+				codexCtx = &ctx
+			}
+		}
+	}
+
 	openRound := func(body map[string]interface{}) (*http.Response, []byte, error) {
 		bodyBytes, err := utils.MarshalJSONNoEscape(body)
 		if err != nil {
@@ -98,7 +108,7 @@ func handleFoldedResponsesStreamSuccess(
 		return roundResp, bodyBytes, nil
 	}
 
-	result, err := runResponsesFold(baseBody, resp, openRound, emitter.emit)
+	result, err := runResponsesFold(baseBody, resp, openRound, emitter.emit, codexCtx)
 	if result.EOFRetries > 0 {
 		common.RequestLogf(c, "[Responses-UpstreamEOF-Retry] 上游未发送终止事件，已自动重试: retries=%d committed=%t", result.EOFRetries, emitter.committed)
 	}
@@ -124,7 +134,12 @@ func runResponsesFold(
 	firstResp *http.Response,
 	openRound responsesFoldRoundOpener,
 	emit responsesFoldEmitter,
+	codexContexts ...*converters.CodexToolContext,
 ) (responsesFoldResult, error) {
+	var codexCtx *converters.CodexToolContext
+	if len(codexContexts) > 0 {
+		codexCtx = codexContexts[0]
+	}
 	origInput := responsesFoldInputItems(baseBody["input"])
 	seq := 0
 	dsOutputIndex := 0
@@ -176,6 +191,7 @@ func runResponsesFold(
 				continue
 			}
 
+			converters.NormalizeOpenRouterReasoningEvent(frame.event)
 			eventType, _ := frame.event["type"].(string)
 			switch eventType {
 			case "response.created", "response.in_progress":
@@ -323,6 +339,7 @@ func runResponsesFold(
 		}
 
 		for _, entry := range bufferedOrder {
+			remapFoldCodexEntry(codexCtx, entry)
 			for _, event := range entry.events {
 				if _, ok := event["output_index"]; ok {
 					event["output_index"] = dsOutputIndex
@@ -342,6 +359,112 @@ func runResponsesFold(
 		}
 		return responsesFoldResult{AgentUsage: agentUsage, BilledUsage: summedUsage, EOFRetries: eofRetries}, nil
 	}
+}
+
+// remapFoldCodexEntry 把上游扁平 function_call 输出还原为 codex 期望的形态
+// （additional_tools 提升的逆变换）：custom 代理（functions__exec）→
+// custom_tool_call 事件序列；namespace function → 原始 name + namespace 字段。
+// fold 按 output_index 整项缓冲，轮末冲刷前 remap 完整 item，无需增量 delta 转换。
+func remapFoldCodexEntry(ctx *converters.CodexToolContext, entry *responsesFoldBufferedOutput) {
+	if ctx == nil || entry == nil || entry.item == nil {
+		return
+	}
+	itemType, _ := entry.item["type"].(string)
+	if itemType != "function_call" {
+		return
+	}
+	name, _ := entry.item["name"].(string)
+	callID, _ := entry.item["call_id"].(string)
+
+	// custom 代理 → custom_tool_call 序列（与 chat_to_responses 转换器路径同形态）
+	if ctx.IsCustomToolProxy(name) {
+		args, _ := entry.item["arguments"].(string)
+		customInput := converters.ReconstructCustomToolCallInput(*ctx, name, args)
+		originalName := ctx.OriginalCustomToolName(name)
+		itemID, _ := entry.item["id"].(string)
+		if itemID == "" {
+			itemID = "ctc_" + callID
+		}
+		remappedItem := map[string]interface{}{
+			"id":      itemID,
+			"type":    "custom_tool_call",
+			"status":  "completed",
+			"call_id": callID,
+			"name":    originalName,
+			"input":   customInput,
+		}
+		inputEvents := func(outputIndex interface{}) []map[string]interface{} {
+			return []map[string]interface{}{
+				{
+					"type":         "response.custom_tool_call_input.delta",
+					"item_id":      itemID,
+					"call_id":      callID,
+					"output_index": outputIndex,
+					"delta":        customInput,
+				},
+				{
+					"type":         "response.custom_tool_call_input.done",
+					"item_id":      itemID,
+					"call_id":      callID,
+					"output_index": outputIndex,
+					"input":        customInput,
+				},
+			}
+		}
+		events := make([]map[string]interface{}, 0, len(entry.events)+2)
+		inputEmitted := false
+		for _, event := range entry.events {
+			eventType, _ := event["type"].(string)
+			switch eventType {
+			case "response.output_item.added":
+				if added := mapFromInterface(event["item"]); added != nil {
+					added["type"] = "custom_tool_call"
+					added["name"] = originalName
+					delete(added, "arguments")
+					added["input"] = ""
+					event["item"] = added
+				}
+				events = append(events, event)
+			case "response.function_call_arguments.delta":
+				// 聚合后一次性下发，丢弃增量
+				continue
+			case "response.function_call_arguments.done":
+				events = append(events, inputEvents(event["output_index"])...)
+				inputEmitted = true
+			case "response.output_item.done":
+				if !inputEmitted {
+					events = append(events, inputEvents(event["output_index"])...)
+					inputEmitted = true
+				}
+				event["item"] = remappedItem
+				events = append(events, event)
+			default:
+				events = append(events, event)
+			}
+		}
+		entry.events = events
+		entry.item = remappedItem
+		return
+	}
+
+	// namespace function → 还原原始 name + namespace 字段
+	displayName, namespace := ctx.OpenAINameForFunctionTool(name)
+	if namespace == "" {
+		return
+	}
+	for _, event := range entry.events {
+		eventType, _ := event["type"].(string)
+		if eventType != "response.output_item.added" && eventType != "response.output_item.done" {
+			continue
+		}
+		if item := mapFromInterface(event["item"]); item != nil {
+			item["name"] = displayName
+			item["namespace"] = namespace
+			event["item"] = item
+		}
+	}
+	entry.item["name"] = displayName
+	entry.item["namespace"] = namespace
 }
 
 type responsesFoldHTTPEmitter struct {
