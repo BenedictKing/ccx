@@ -121,7 +121,7 @@ func TestMessagesHandler_NonStreamMatrix_AllFourUpstreams(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				w.Header().Set("Content-Type", "application/json")
+				w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 				w.WriteHeader(http.StatusOK)
 				_, _ = w.Write([]byte(tt.responseBody))
 			}))
@@ -138,6 +138,10 @@ func TestMessagesHandler_NonStreamMatrix_AllFourUpstreams(t *testing.T) {
 			w := performMessagesHandlerRequest(t, router, `{"model":"claude-3-5-sonnet","messages":[{"role":"user","content":[{"type":"text","text":"hello"}]}]}`)
 			if w.Code != http.StatusOK {
 				t.Fatalf("status = %d, want %d, body=%s", w.Code, http.StatusOK, w.Body.String())
+			}
+
+			if got := w.Header().Get("Content-Type"); got != "application/json; charset=utf-8" {
+				t.Fatalf("Content-Type = %q, want JSON despite upstream text/plain", got)
 			}
 
 			var resp struct {

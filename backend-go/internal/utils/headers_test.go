@@ -8,6 +8,37 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+func TestForwardResponseHeadersPreservesResponseContentType(t *testing.T) {
+	for _, upstreamType := range []string{"text/plain", "image/png", "application/json", ""} {
+		t.Run(upstreamType, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(w)
+			headers := http.Header{"Content-Type": {upstreamType}, "Request-Id": {"req-test"}, "Transfer-Encoding": {"chunked"}}
+			ForwardResponseHeaders(headers, w)
+			c.JSON(http.StatusOK, gin.H{"ok": true})
+			if got := w.Header().Get("Content-Type"); got != "application/json; charset=utf-8" {
+				t.Errorf("Content-Type = %q", got)
+			}
+			if got := w.Header().Get("Request-Id"); got != "req-test" {
+				t.Errorf("Request-Id = %q", got)
+			}
+			if got := w.Header().Get("Transfer-Encoding"); got != "" {
+				t.Errorf("Transfer-Encoding = %q", got)
+			}
+		})
+	}
+}
+
+func TestForwardContentType(t *testing.T) {
+	for _, contentType := range []string{"image/png", "application/json", "text/event-stream", ""} {
+		w := httptest.NewRecorder()
+		ForwardContentType(http.Header{"Content-Type": {contentType}}, w)
+		if got := w.Header().Get("Content-Type"); got != contentType {
+			t.Errorf("Content-Type = %q, want %q", got, contentType)
+		}
+	}
+}
+
 func TestPrepareUpstreamHeaders(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

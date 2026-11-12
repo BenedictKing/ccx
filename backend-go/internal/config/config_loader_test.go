@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -8,6 +9,60 @@ import (
 	"testing"
 	"time"
 )
+
+func TestWatcherSkipsSelfWritesButReloadsExternalChanges(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	if err := os.WriteFile(path, []byte(`{}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cm, err := NewConfigManager(path, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = cm.Close() })
+	changes := make(chan Config, 8)
+	cm.RegisterOnConfigChange(func(cfg Config) { changes <- cfg })
+	if err := cm.SaveConfig(); err != nil {
+		t.Fatal(err)
+	}
+	selfWritten, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 确保防抖协程处理一次信号，不依赖操作系统是否合并写入事件。
+	select {
+	case cm.reloadCh <- struct{}{}:
+	default:
+	}
+	select {
+	case <-changes:
+		t.Fatal("自身保存不应触发重载回调")
+	case <-time.After(4 * configReloadDebounce):
+	}
+
+	external := cm.GetConfig()
+	external.Upstream = []UpstreamConfig{{Name: "external", BaseURL: "https://example.com", APIKeys: []string{"test-key"}, ServiceType: "claude", Priority: 1}}
+	data, err := json.Marshal(external)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, content := range [][]byte{data, selfWritten} {
+		if err := os.WriteFile(path, content, 0600); err != nil {
+			t.Fatal(err)
+		}
+		select {
+		case cfg := <-changes:
+			if i == 0 && (len(cfg.Upstream) != 1 || cfg.Upstream[0].Name != "external") {
+				t.Fatalf("外部修改未加载: %+v", cfg.Upstream)
+			}
+			if i == 1 && len(cfg.Upstream) != 0 {
+				t.Fatalf("外部恢复旧内容被误判为自身保存: %+v", cfg.Upstream)
+			}
+		case <-time.After(3 * time.Second):
+			t.Fatalf("外部修改 %d 未触发重载", i)
+		}
+	}
+}
 
 // TestWatcher_DebouncesRapidWrites 验证 watcher 在 debounce 窗口内的多次写入合并为一次 loadConfig。
 // 通过 RegisterOnConfigChange 计数实际触发次数。

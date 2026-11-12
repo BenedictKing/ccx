@@ -568,12 +568,14 @@ func handleSuccess(c *gin.Context, resp *http.Response, envCfg *config.EnvConfig
 				return nil, fmt.Errorf("%w: image url to b64_json conversion failed: %v", common.ErrInvalidResponseBody, err)
 			}
 			bodyBytes = convertedBody
+			resp.Header.Set("Content-Type", "application/json")
 			resp.Header.Set("Content-Length", fmt.Sprintf("%d", len(bodyBytes)))
 		}
 	} else {
 		respMap = nil
 	}
 	utils.ForwardResponseHeaders(resp.Header, c.Writer)
+	utils.ForwardContentType(resp.Header, c.Writer)
 	c.Status(resp.StatusCode)
 	if _, err := c.Writer.Write(bodyBytes); err != nil {
 		return nil, err
@@ -724,6 +726,7 @@ func passthroughStreamingResponseWithLog(c *gin.Context, resp *http.Response, en
 	}
 
 	utils.ForwardResponseHeaders(resp.Header, c.Writer)
+	utils.ForwardContentType(resp.Header, c.Writer)
 	c.Status(resp.StatusCode)
 
 	flusher, ok := c.Writer.(http.Flusher)

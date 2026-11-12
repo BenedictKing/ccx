@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/http/httptrace"
+	"strconv"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -18,6 +20,34 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/klauspost/compress/zstd"
 )
+
+func TestPassthroughResponsesPreserveContentType(t *testing.T) {
+	for _, decode := range []bool{false, true} {
+		t.Run(strconv.FormatBool(decode), func(t *testing.T) {
+			const body = `{"upstream_field":"preserved"}`
+			w := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(w)
+			resp := &http.Response{StatusCode: http.StatusAccepted, Header: http.Header{"Content-Type": {"application/custom+json"}}, Body: io.NopCloser(strings.NewReader(body))}
+			defer resp.Body.Close()
+			var err error
+			if decode {
+				var target map[string]string
+				err = PassthroughJSONResponse(c, resp, &target)
+				if target["upstream_field"] != "preserved" {
+					t.Errorf("decoded target = %v", target)
+				}
+			} else {
+				err = PassthroughResponse(c, resp)
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if w.Code != http.StatusAccepted || w.Body.String() != body || w.Header().Get("Content-Type") != "application/custom+json" {
+				t.Fatalf("透传改变了响应: status=%d, type=%q, body=%s", w.Code, w.Header().Get("Content-Type"), w.Body.String())
+			}
+		})
+	}
+}
 
 func TestReadRequestBodyDecompressesZstd(t *testing.T) {
 	gin.SetMode(gin.TestMode)

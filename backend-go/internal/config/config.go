@@ -615,6 +615,8 @@ type ConfigManager struct {
 	closeOnce             sync.Once     // 确保 Close 只执行一次
 	backgroundWG          sync.WaitGroup
 	configChangeCallbacks []func(Config)
+	// selfWriteSum 由 mu 保护，记录最后一次自身保存的文件摘要。
+	selfWriteSum string
 }
 
 // failedKeyCacheKey 构造 FailedKeysCache 的复合键（apiType:apiKey）

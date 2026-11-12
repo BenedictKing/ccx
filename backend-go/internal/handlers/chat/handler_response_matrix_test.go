@@ -104,7 +104,7 @@ func TestChatHandler_NonStreamMatrix_OpenAIFormat(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				w.Header().Set("Content-Type", "application/json")
+				w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 				w.WriteHeader(http.StatusOK)
 				_, _ = w.Write([]byte(tt.responseBody))
 			}))
@@ -121,6 +121,10 @@ func TestChatHandler_NonStreamMatrix_OpenAIFormat(t *testing.T) {
 			w := performChatHandlerRequest(t, router, `{"model":"gpt-4o","messages":[{"role":"user","content":"hello"}]}`)
 			if w.Code != http.StatusOK {
 				t.Fatalf("status = %d, want %d, body=%s", w.Code, http.StatusOK, w.Body.String())
+			}
+
+			if got := w.Header().Get("Content-Type"); got != "application/json" {
+				t.Fatalf("Content-Type = %q, want JSON despite upstream text/plain", got)
 			}
 
 			var resp struct {

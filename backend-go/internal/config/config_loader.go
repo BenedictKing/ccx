@@ -2,6 +2,7 @@ package config
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -89,6 +90,8 @@ func (cm *ConfigManager) loadConfig() error {
 		cm.mu.Unlock()
 		return err
 	}
+	// 外部配置已载入，旧的自写摘要不再代表当前内存状态。
+	cm.selfWriteSum = ""
 
 	// 兼容旧配置：检查 FuzzyModeEnabled 字段是否存在
 	// 如果不存在，默认设为 true（新功能默认启用）
@@ -108,6 +111,9 @@ func (cm *ConfigManager) loadConfig() error {
 
 	// 兼容旧格式：检测是否需要迁移
 	needMigration := cm.migrateOldFormat()
+	if cm.normalizeChannelPriorities() {
+		needSaveDefaults = true
+	}
 
 	// 如果有默认值迁移或格式迁移，保存配置
 	if needSaveDefaults || needMigration {
@@ -570,7 +576,36 @@ func (cm *ConfigManager) validateChannelKeys() bool {
 	return modified
 }
 
-// saveConfigLocked 保存配置（已加锁）
+// normalizeChannelPriorities 将未配置的优先级按数组顺序排到显式优先级之后。
+// 六类渠道分别归一化，保留已有正数优先级；全未配置时按旧索引顺序分配 1..N。
+func (cm *ConfigManager) normalizeChannelPriorities() bool {
+	changed := false
+	normalize := func(channels []UpstreamConfig) {
+		maxPriority := 0
+		for _, ch := range channels {
+			if ch.Priority > maxPriority {
+				maxPriority = ch.Priority
+			}
+		}
+		for i := range channels {
+			if channels[i].Priority > 0 {
+				continue
+			}
+			maxPriority++
+			channels[i].Priority = maxPriority
+			changed = true
+		}
+	}
+	normalize(cm.config.Upstream)
+	normalize(cm.config.ResponsesUpstream)
+	normalize(cm.config.ChatUpstream)
+	normalize(cm.config.GeminiUpstream)
+	normalize(cm.config.ImagesUpstream)
+	normalize(cm.config.VectorsUpstream)
+	return changed
+}
+
+// saveConfigLocked 保存配置（已加锁）。
 func (cm *ConfigManager) saveConfigLocked(config Config) error {
 	// 备份当前配置
 	cm.backupConfig()
@@ -584,8 +619,28 @@ func (cm *ConfigManager) saveConfigLocked(config Config) error {
 		return err
 	}
 
+	if err := os.WriteFile(cm.configFile, data, 0600); err != nil { // 仅所有者可读写，保护敏感配置
+		return err
+	}
+	sum := sha256.Sum256(data)
+	cm.selfWriteSum = string(sum[:])
 	cm.config = config
-	return os.WriteFile(cm.configFile, data, 0600) // 仅所有者可读写，保护敏感配置
+	return nil
+}
+
+// skipReloadIfSelfWritten 仅跳过内存已经包含的自身保存结果。
+func (cm *ConfigManager) skipReloadIfSelfWritten() bool {
+	cm.mu.RLock()
+	defer cm.mu.RUnlock()
+	if cm.selfWriteSum == "" {
+		return false
+	}
+	data, err := os.ReadFile(cm.configFile)
+	if err != nil {
+		return false
+	}
+	sum := sha256.Sum256(data)
+	return string(sum[:]) == cm.selfWriteSum
 }
 
 // SaveConfig 保存配置
@@ -725,6 +780,9 @@ func (cm *ConfigManager) startWatcher() error {
 			case <-timerC:
 				timer = nil
 				timerC = nil
+				if cm.skipReloadIfSelfWritten() {
+					continue
+				}
 				if err := cm.loadConfig(); err != nil {
 					log.Printf("[Config-Watcher] 警告: 配置重载失败: %v", err)
 				} else {
