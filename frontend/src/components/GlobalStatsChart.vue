@@ -327,14 +327,14 @@ const modelColors = [
   '#06b6d4', '#ec4899', '#84cc16', '#f59e0b', '#6366f1'
 ]
 
-// Model list sorted by total request count
+// 模型顺序不随调用量排名变化，避免刷新时图例与颜色交换。
 const sortedModels = computed(() => {
   const models = historyData.value?.modelDataPoints
   if (!models) return []
   return Object.entries(models)
     .map(([name, points]) => ({ name, points, total: points.reduce((s: number, p: ModelHistoryDataPoint) => s + p.requestCount, 0) }))
     .filter(m => m.total > 0)
-    .sort((a, b) => b.total - a.total)
+    .sort((a, b) => a.name.localeCompare(b.name))
 })
 
 // Whether multi-model data exists (used to determine stacked mode)
@@ -779,7 +779,7 @@ const withAdaptiveInterval = async (duration: Duration): Promise<GlobalStatsHist
 const refreshData = async (isAutoRefresh = false) => {
   const requestId = ++refreshRequestId
   isRefreshing.value = true
-  if (!isAutoRefresh) {
+  if (!isAutoRefresh && !historyData.value) {
     isLoading.value = true
   }
   errorMessage.value = ''

@@ -1,6 +1,20 @@
 <template>
   <section class="routing-panel">
-    <h3 class="routing-heading">{{ t('routing.title') }}</h3>
+    <div class="routing-title">
+      <h3 class="routing-heading">{{ t('routing.title') }}</h3>
+      <span class="routing-loading" :aria-busy="loading"
+        ><v-progress-circular
+          :indeterminate="loading"
+          :size="16"
+          :width="2"
+          :style="{ visibility: loading ? 'visible' : 'hidden' }"
+      /></span>
+      <v-tooltip v-if="incomplete" :text="coverageNote" location="bottom">
+        <template #activator="{ props: tooltipProps }"
+          ><v-btn v-bind="tooltipProps" icon="mdi-information" variant="text" size="x-small" :aria-label="coverageNote"
+        /></template>
+      </v-tooltip>
+    </div>
     <div class="routing-content">
       <v-alert v-if="!supported" type="info" variant="tonal" density="compact">
         {{ t('routing.rangeUnsupported')
@@ -8,13 +22,12 @@
       </v-alert>
       <template v-else>
         <div class="routing-toolbar">
-          <p class="text-caption text-medium-emphasis">{{ t('routing.scope') }}</p>
           <v-btn-toggle v-model="basis" mandatory density="compact" variant="outlined" divided>
             <v-btn size="x-small" value="successful_requests">{{ t('routing.successBasis') }}</v-btn
             ><v-btn size="x-small" value="all_attempts">{{ t('routing.attemptBasis') }}</v-btn>
           </v-btn-toggle>
         </div>
-        <div class="routing-filters">
+        <div v-if="Object.keys(filters).length" class="routing-filters">
           <v-chip
             v-for="(value, field) in filters"
             :key="field"
@@ -26,102 +39,29 @@
           <v-btn v-if="Object.keys(filters).length" variant="text" size="x-small" @click="clearFilters">{{
             t('routing.clear')
           }}</v-btn>
-          <span v-else class="text-caption text-medium-emphasis">{{ t('routing.interactionHint') }}</span>
         </div>
         <v-alert v-if="error" type="error" variant="tonal" density="compact"
           >{{ error }} <v-btn variant="text" size="small" @click="load">{{ t('routing.retry') }}</v-btn></v-alert
         >
-        <v-progress-linear v-if="loading" indeterminate />
         <template v-if="data">
-          <p class="text-caption text-medium-emphasis">
-            {{ t('routing.window') }} {{ time(data.from) }} → {{ time(data.to) }}
-          </p>
           <p class="routing-summary text-caption">
             <span v-for="metric in summaryMetrics" :key="metric.key"
               >{{ t('routing.' + metric.key) }} <strong>{{ metric.value }}</strong></span
             >
           </p>
-          <p class="text-caption text-medium-emphasis">{{ t('routing.countNote') }}</p>
-          <p class="text-caption text-medium-emphasis">
-            {{
-              t(basis === 'successful_requests' ? 'routing.successNote' : 'routing.attemptNote', {
-                count: data.summary.matchedCount
-              })
-            }}
-          </p>
-          <p v-if="data.summary.noAttemptRequests" class="text-caption text-medium-emphasis">
-            {{ t('routing.noAttempt', { count: data.summary.noAttemptRequests }) }}
-          </p>
-          <p v-if="incomplete" class="text-caption text-medium-emphasis">
-            {{ t('routing.coverage', { time: time(data.coverage.startedAt) }) }}
-            {{ !data.coverage.persistent ? t('routing.memoryOnly') : '' }}
-            {{ data.coverage.droppedWrites || data.coverage.limited ? t('routing.incomplete') : '' }}
-          </p>
           <div v-if="!data.paths.length" class="routing-empty text-medium-emphasis">{{ t('routing.empty') }}</div>
-          <template v-else>
-            <div class="routing-flow">
-              <svg :viewBox="'0 0 960 ' + graph.height" role="group" :aria-label="t('routing.flowLabel')">
-                <text v-for="(field, index) in fields" :key="field" :x="20 + index * 330" y="18" class="column-title">
-                  {{ fieldTitle(field) }}
-                </text>
-                <g
-                  v-for="link in graph.links"
-                  :key="link.key"
-                  class="flow-link"
-                  role="button"
-                  tabindex="0"
-                  :aria-label="pathTitle(link.path)"
-                  @click="openPath(link.path)"
-                  @keydown.enter.prevent="openPath(link.path)"
-                  @keydown.space.prevent="openPath(link.path)"
-                >
-                  <title>{{ pathTitle(link.path) }} · {{ link.path.count }} · {{ share(link.path.share) }}</title>
-                  <path v-for="(ribbon, index) in link.ribbons" :key="index" :d="ribbon" :class="'tone-' + link.tone" />
-                </g>
-                <g
-                  v-for="node in graph.nodes"
-                  :key="node.field + ':' + node.value"
-                  class="flow-node"
-                  role="button"
-                  tabindex="0"
-                  :aria-label="fieldTitle(node.field) + ': ' + node.name"
-                  @click="toggleNode(node.field, node.value)"
-                  @keydown.enter.prevent="toggleNode(node.field, node.value)"
-                  @keydown.space.prevent="toggleNode(node.field, node.value)"
-                >
-                  <title>{{ node.name || t('routing.unknownModel') }} · {{ node.count }}</title>
-                  <rect
-                    :x="node.x - 3"
-                    :y="node.y - 19"
-                    :width="node.width + 6"
-                    :height="node.height + 38"
-                    class="node-hit"
-                  />
-                  <rect :x="node.x" :y="node.y" :width="node.width" :height="node.height" class="node-bar" />
-                  <text :x="node.x + 3" :y="node.y - 6">{{ shortName(node.name || t('routing.unknownModel')) }}</text>
-                  <text :x="node.x + 3" :y="node.y + node.height + 16" class="node-count">
-                    {{ node.count }} · {{ share((node.count / data.summary.matchedCount) * 100) }}
-                  </text>
-                </g>
-              </svg>
-            </div>
-            <div class="routing-mobile">
-              <button
-                v-for="path in data.paths.slice(0, 12)"
-                :key="routingPathKey(path)"
-                class="mobile-path"
-                @click="openPath(path)"
-              >
-                <strong>{{ path.requestedModel || t('routing.unknownModel') }}</strong
-                ><span
-                  >{{ path.channelName }}{{ path.channelDeleted ? t('routing.deleted') : '' }} →
-                  {{ path.sentModel || t('routing.unknownModel') }}</span
-                ><span>{{ path.count }} · {{ share(path.share) }}</span>
-              </button>
-            </div>
-          </template>
+          <ModelRoutingFlow
+            v-else
+            :key="scopeKey"
+            :paths="data.paths"
+            :total="data.summary.matchedCount"
+            @select="selectNode"
+            @path="openPath"
+          />
           <div class="routing-toolbar">
-            <span v-if="graph.hidden" class="text-caption">{{ t('routing.hiddenPaths', { count: graph.hidden }) }}</span
+            <span v-if="hiddenPathCount" class="text-caption">{{
+              t('routing.hiddenPaths', { count: hiddenPathCount })
+            }}</span
             ><span v-else></span
             ><v-btn size="small" variant="text" @click="openPath()">{{ t('routing.viewRequests') }}</v-btn>
           </div>
@@ -245,7 +185,8 @@ import type {
   RoutingRequestPage,
   StatsDuration
 } from '../services/routing-types'
-import { routingGraph, routingPathKey, type RoutingField } from '../utils/modelRouting'
+import ModelRoutingFlow from './ModelRoutingFlow.vue'
+import { routingPathKey, type RoutingField } from '../utils/modelRouting'
 const props = defineProps<{
   apiType: ChannelKind
   duration: StatsDuration
@@ -255,7 +196,6 @@ const props = defineProps<{
 const emit = defineEmits<{ 'update:duration': [value: StatsDuration] }>()
 const { t } = useI18n()
 const { smAndDown, width } = useDisplay()
-const fields: RoutingField[] = ['requestedModel', 'channelUid', 'sentModel']
 const basis = ref<RoutingBasis>('successful_requests')
 const filters = reactive<Partial<Record<RoutingField, string>>>({})
 const data = ref<RoutingDistribution | null>(null)
@@ -274,7 +214,8 @@ let generation = 0,
   currentCursor = ''
 let drawerQuery: RoutingQuery | undefined
 const supported = computed(() => ['1h', '6h', '24h', 'today'].includes(props.duration))
-const graph = computed(() => routingGraph(data.value?.paths ?? []))
+const hiddenPathCount = computed(() => Math.max(0, (data.value?.paths.length ?? 0) - 12))
+const scopeKey = computed(() => JSON.stringify([props.apiType, props.duration, basis.value, filters]))
 const incomplete = computed(
   () =>
     data.value &&
@@ -283,6 +224,16 @@ const incomplete = computed(
       data.value.coverage.droppedWrites > 0 ||
       data.value.coverage.limited)
 )
+const coverageNote = computed(() => {
+  if (!data.value) return ''
+  return [
+    t('routing.coverage', { time: time(data.value.coverage.startedAt) }),
+    !data.value.coverage.persistent ? t('routing.memoryOnly') : '',
+    data.value.coverage.droppedWrites || data.value.coverage.limited ? t('routing.incomplete') : ''
+  ]
+    .filter(Boolean)
+    .join(' ')
+})
 const summaryMetrics = computed(() =>
   data.value
     ? Object.entries(data.value.summary)
@@ -296,7 +247,6 @@ const summaryMetrics = computed(() =>
 )
 const time = (value: string) => new Date(value).toLocaleString()
 const share = (value: number) => value.toFixed(1) + '%'
-const shortName = (value: string) => (value.length > 28 ? value.slice(0, 26) + '…' : value)
 const fieldTitle = (field: RoutingField) => t('routing.' + field)
 const channelLabel = (value?: string) =>
   data.value?.paths.find(path => path.channelUid === value)?.channelName ?? selectedPath.value?.channelName ?? value
@@ -314,9 +264,19 @@ function clearFilters() {
 function removeFilter(field: RoutingField) {
   delete filters[field]
 }
-function toggleNode(field: RoutingField, value: string) {
-  if (filters[field] === value) delete filters[field]
-  else filters[field] = value
+function selectNode(selection: { field: RoutingField; value: string; channelUid?: string }) {
+  const { field, value, channelUid } = selection
+  if (field === 'sentModel' && channelUid) {
+    if (filters.sentModel === value && filters.channelUid === channelUid) delete filters.sentModel
+    else {
+      filters.channelUid = channelUid
+      filters.sentModel = value
+    }
+  } else {
+    if (filters[field] === value) delete filters[field]
+    else filters[field] = value
+    if (field === 'channelUid') delete filters.sentModel
+  }
 }
 async function load() {
   const id = ++generation
@@ -336,7 +296,6 @@ async function load() {
   } catch (err) {
     if (id === generation) {
       error.value = err instanceof Error ? err.message : String(err)
-      data.value = null
     }
   } finally {
     if (id === generation) loading.value = false
@@ -461,15 +420,22 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 7px;
-  width: 100%;
+  width: auto;
+  margin: 0;
   padding: 7px 0;
   text-align: left;
 }
-.flow-node:focus-visible,
-.flow-link:focus-visible,
-.mobile-path:focus-visible {
-  outline: 2px solid rgb(var(--v-theme-primary));
-  outline-offset: 3px;
+.routing-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.routing-loading {
+  display: inline-flex;
+  align-items: center;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
 }
 .routing-content > p,
 .routing-toolbar > p,
@@ -498,64 +464,6 @@ onBeforeUnmount(() => {
 }
 .routing-summary strong {
   padding-left: 4px;
-}
-.routing-flow {
-  max-height: 530px;
-  overflow: auto;
-}
-.routing-flow svg {
-  display: block;
-  width: 100%;
-  min-width: 700px;
-}
-.routing-flow text {
-  fill: rgb(var(--v-theme-on-surface));
-  font-size: 12px;
-  paint-order: stroke;
-  stroke: rgb(var(--v-theme-surface));
-  stroke-width: 3px;
-}
-.routing-flow .column-title,
-.routing-flow .node-count {
-  font-size: 11px;
-  opacity: 0.8;
-}
-.flow-link,
-.flow-node {
-  cursor: pointer;
-}
-.flow-link {
-  opacity: 0.65;
-}
-.flow-link:hover,
-.flow-link:focus {
-  opacity: 1;
-}
-.flow-link path {
-  fill: rgb(var(--v-theme-primary));
-  stroke: rgb(var(--v-theme-surface));
-  stroke-width: 1;
-}
-.flow-link .tone-1,
-.flow-link .tone-4 {
-  fill: rgb(var(--v-theme-secondary));
-}
-.flow-link .tone-2,
-.flow-link .tone-5 {
-  fill: rgb(var(--v-theme-info));
-}
-.node-hit {
-  fill: transparent;
-}
-.flow-node:hover .node-hit {
-  fill: rgba(var(--v-theme-primary), 0.08);
-}
-.node-bar {
-  fill: transparent;
-  stroke: rgba(var(--v-border-color), 0.5);
-}
-.routing-mobile {
-  display: none;
 }
 .mobile-path {
   display: grid;
@@ -602,14 +510,5 @@ onBeforeUnmount(() => {
   display: grid;
   gap: 5px;
   font-size: 12px;
-}
-@media (max-width: 700px) {
-  .routing-flow {
-    display: none;
-  }
-  .routing-mobile {
-    display: grid;
-    gap: 8px;
-  }
 }
 </style>

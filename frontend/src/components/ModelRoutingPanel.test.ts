@@ -59,6 +59,8 @@ function render(duration: '6h' | '7d' = '6h') {
         VIcon: Slot,
         VAlert: Slot,
         VProgressLinear: true,
+        VProgressCircular: true,
+        VTooltip: Slot,
         VBtnToggle: Slot,
         VBtn: Button,
         VChip: Slot,
@@ -113,7 +115,54 @@ describe('model routing query lifecycle', () => {
     await wrapper.setProps({ resetVersion: 1, refreshVersion: 1 })
     await nextTick()
     await flushPromises()
-    expect(wrapper.find('.routing-filters').text()).toContain('routing.interactionHint')
+    expect(wrapper.find('.routing-filters').exists()).toBe(false)
+    wrapper.unmount()
+  })
+  it('keeps the existing graph and reserves loading space while polling', async () => {
+    const initial = result('source')
+    let resolveRefresh!: (_data: RoutingDistribution) => void
+    vi.mocked(api.getModelRouting)
+      .mockResolvedValueOnce(initial)
+      .mockImplementationOnce(
+        () =>
+          new Promise(resolve => {
+            resolveRefresh = resolve
+          })
+      )
+    const wrapper = render()
+    await flushPromises()
+    const graph = wrapper.find('.model-routing-flow').element
+    const source = wrapper.find('.flow-source').element
+    const status = wrapper.find('.routing-loading').element
+    await wrapper.setProps({ refreshVersion: 1 })
+    expect(wrapper.find('.model-routing-flow').element).toBe(graph)
+    expect(wrapper.find('.flow-source').element).toBe(source)
+    expect(wrapper.find('.routing-loading').element).toBe(status)
+    expect(wrapper.find('.routing-loading').attributes('aria-busy')).toBe('true')
+    expect(wrapper.text()).not.toContain('routing.scope')
+    expect(wrapper.text()).not.toContain('routing.countNote')
+    expect(wrapper.text()).not.toContain('routing.window')
+    resolveRefresh({
+      ...initial,
+      summary: { ...initial.summary, requests: 2 },
+      paths: [{ ...initial.paths[0]!, count: 2 }]
+    })
+    await flushPromises()
+    expect(wrapper.find('.flow-source').element).toBe(source)
+    expect(wrapper.find('.routing-loading').attributes('aria-busy')).toBe('false')
+    expect(wrapper.find('.flow-source').text()).toContain('2')
+    wrapper.unmount()
+  })
+  it('filters a sent model within its channel without triggering the channel handler twice', async () => {
+    vi.mocked(api.getModelRouting).mockResolvedValue(result('source'))
+    const wrapper = render()
+    await flushPromises()
+    await wrapper.find('.flow-model').trigger('click')
+    await flushPromises()
+    expect(api.getModelRouting).toHaveBeenLastCalledWith(
+      'chat',
+      expect.objectContaining({ channelUid: 'channel', sentModel: 'actual' })
+    )
     wrapper.unmount()
   })
   it('refreshes an expired drawer window before querying requests again', async () => {
