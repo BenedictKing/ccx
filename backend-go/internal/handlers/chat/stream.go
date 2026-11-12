@@ -116,15 +116,13 @@ func preflightChatStream(resp *http.Response, upstreamType string, timeouts comm
 	const maxPreflightBytes = 1024 * 1024
 	hasFirstContent := false
 
-	flushRemainder := func() {
-		if remainder != "" {
-			result.buffered = append(result.buffered, []byte(remainder)...)
-			remainder = ""
-		}
+	clearRemainder := func() {
+		// chunk 已完整加入 buffered；remainder 只是其尾部，不能重复追加。
+		remainder = ""
 	}
 
 	// 启动 goroutine 读取 body chunk。preflight 放行后继续由同一个 channel 驱动正常流式转发，避免丢 chunk。
-	chunkChan, bodyErrChan := common.StartBodyChunkReader(resp.Body, 32*1024, 16)
+	chunkChan, bodyErrChan := common.StartBodyChunkReader(resp.Body, 32*1024, 16, common.RequestDone(resp))
 
 	// 阶段A：首个有效内容等待超时
 	var firstContentTimer *time.Timer
@@ -196,27 +194,27 @@ func preflightChatStream(resp *http.Response, upstreamType string, timeouts comm
 				// chunkChan 关闭：body 读取完成。
 				// 整个预检期间从未检测到语义内容（usage-only / role-only / 空流）：
 				// Header 未写，按空响应进入 failover（对齐 messages/responses 语义）。
-				flushRemainder()
+				clearRemainder()
 				if !hasFirstContent {
 					return result, chunkChan, bodyErrChan, common.ErrEmptyStreamResponse
 				}
 				return result, chunkChan, bodyErrChan, nil
 			}
 		case err := <-bodyErrChan:
-			flushRemainder()
+			clearRemainder()
 			return result, chunkChan, bodyErrChan, err
 		case <-firstContentChan:
 			// 阶段A超时：首个有效内容等待超时
 			if timeouts.FirstContentTimeoutMs > 0 {
-				flushRemainder()
+				clearRemainder()
 				return result, chunkChan, bodyErrChan, common.ErrStreamFirstContentTimeout
 			}
 			// 超时被禁用（0），保守放行
-			flushRemainder()
+			clearRemainder()
 			return result, chunkChan, bodyErrChan, nil
 		case <-inactivityChan:
 			// 阶段B超时：首字后断流
-			flushRemainder()
+			clearRemainder()
 			return result, chunkChan, bodyErrChan, common.ErrStreamStalled
 		}
 
@@ -241,7 +239,7 @@ func preflightChatStream(resp *http.Response, upstreamType string, timeouts comm
 			if strings.HasPrefix(line, "data:") {
 				jsonData := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
 				if reason, msg, recoverAt, isErr := common.DetectStreamDataError(jsonData); isErr {
-					flushRemainder()
+					clearRemainder()
 					if reason != "" {
 						return result, chunkChan, bodyErrChan, &common.ErrBlacklistKey{Reason: reason, Message: msg, RecoverAt: recoverAt}
 					}
@@ -253,7 +251,7 @@ func preflightChatStream(resp *http.Response, upstreamType string, timeouts comm
 			}
 			if malformed, name := detectMalformedChatStreamLines(lineSet, upstreamType, tracker, chatTracker); malformed {
 				result.malformedToolName = name
-				flushRemainder()
+				clearRemainder()
 				break
 			}
 
@@ -267,7 +265,7 @@ func preflightChatStream(resp *http.Response, upstreamType string, timeouts comm
 				}
 				enterPhaseB()
 				if timeouts.InactivityTimeoutMs <= 0 && !hasPendingToolCall() {
-					flushRemainder()
+					clearRemainder()
 					return result, chunkChan, bodyErrChan, nil
 				}
 			}
@@ -281,7 +279,7 @@ func preflightChatStream(resp *http.Response, upstreamType string, timeouts comm
 						observer.MarkStreamActivity(time.Now())
 					}
 				}
-				flushRemainder()
+				clearRemainder()
 				return result, chunkChan, bodyErrChan, nil
 			}
 			if hasFirstContent && hasDataActivity && observer != nil {
@@ -302,7 +300,7 @@ func preflightChatStream(resp *http.Response, upstreamType string, timeouts comm
 		resetInactivityTimer()
 	}
 
-	flushRemainder()
+	clearRemainder()
 	return result, chunkChan, bodyErrChan, nil
 }
 

@@ -132,7 +132,7 @@ func preflightGeminiStream(resp *http.Response, upstreamType string, timeouts co
 	}
 
 	// 启动 goroutine 读取 body chunk。preflight 放行后继续由同一个 channel 驱动正常流式转发，避免丢 chunk。
-	chunkChan, bodyErrChan = common.StartBodyChunkReader(resp.Body, 32*1024, 16)
+	chunkChan, bodyErrChan = common.StartBodyChunkReader(resp.Body, 32*1024, 16, common.RequestDone(resp))
 
 	// 阶段A：首个有效内容等待超时
 	var firstContentTimer *time.Timer
@@ -529,6 +529,7 @@ func streamGeminiToGemini(
 	progress *common.StreamProgressLogger,
 ) (*types.Usage, error) {
 	var totalUsage *types.Usage
+	eventHasData := false
 	inactivityTimeout := time.Duration(timeouts.InactivityTimeoutMs) * time.Millisecond
 
 	for {
@@ -538,6 +539,12 @@ func streamGeminiToGemini(
 			return nil, common.ErrStreamPostCommitStalled
 		}
 		if eof {
+			if eventHasData {
+				fmt.Fprint(c.Writer, "\n")
+				if flusher != nil {
+					flusher.Flush()
+				}
+			}
 			if err != nil {
 				progress.Finish("error")
 				return totalUsage, err
@@ -552,8 +559,8 @@ func streamGeminiToGemini(
 		}
 
 		// 直接转发 SSE 数据
-		if strings.HasPrefix(line, "data: ") {
-			jsonData := strings.TrimPrefix(line, "data: ")
+		if strings.HasPrefix(line, "data:") {
+			jsonData := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
 
 			// 尝试解析 usage
 			var chunk types.GeminiStreamChunk
@@ -566,10 +573,12 @@ func streamGeminiToGemini(
 				}
 			}
 
+			eventHasData = true
 			fmt.Fprintf(c.Writer, "%s\n", line)
 		} else if line != "" {
 			fmt.Fprintf(c.Writer, "%s\n", line)
 		} else {
+			eventHasData = false
 			fmt.Fprintf(c.Writer, "\n")
 		}
 
