@@ -265,9 +265,9 @@ func firstUnknownResponsesEventType(event string) (string, bool) {
 }
 
 type responsesStreamErrorInfo struct {
-	Type    string
-	Code    string
-	Message string
+	Type    string `json:"type"`
+	Code    string `json:"code"`
+	Message string `json:"message"`
 }
 
 func detectResponsesStreamError(event, sseEventName string) (responsesStreamErrorInfo, bool) {
@@ -340,41 +340,18 @@ func responsesErrorInfoFromMap(errObj map[string]interface{}) responsesStreamErr
 	}
 }
 
-func detectResponsesErrorBlacklist(info responsesStreamErrorInfo) (reason, message string) {
-	errType := info.Type
-	if errType == "" {
-		errType = info.Code
-	}
-	errObj := map[string]interface{}{
-		"type":    errType,
-		"code":    info.Code,
-		"message": info.Message,
-	}
-	payload, err := json.Marshal(map[string]interface{}{
-		"type":  "error",
-		"error": errObj,
-	})
-	if err != nil {
-		return "", ""
-	}
-	return common.DetectStreamBlacklistError("event: error\ndata: " + string(payload) + "\n\n")
+func (info responsesStreamErrorInfo) errorJSON() string {
+	payload, _ := json.Marshal(struct {
+		Error responsesStreamErrorInfo `json:"error"`
+	}{Error: info})
+	return string(payload)
 }
 
-func isRetryableResponsesError(info responsesStreamErrorInfo) bool {
-	code := strings.ToLower(strings.TrimSpace(info.Code))
-	errType := strings.ToLower(strings.TrimSpace(info.Type))
-	message := strings.ToLower(strings.TrimSpace(info.Message))
-
-	switch code {
-	case "server_is_overloaded", "slow_down", "rate_limit_exceeded", "rate_limit", "temporarily_unavailable",
-		"service_unavailable", "server_error", "internal_error", "timeout":
-		return true
+func detectResponsesErrorBlacklist(info responsesStreamErrorInfo) (reason, message string) {
+	if info.Type == "" {
+		info.Type = info.Code
 	}
-	switch errType {
-	case "service_unavailable_error", "server_error", "rate_limit_error", "timeout_error":
-		return true
-	}
-	return strings.Contains(message, "server") && strings.Contains(message, "overload")
+	return common.DetectStreamBlacklistError("event: error\ndata: " + info.errorJSON() + "\n\n")
 }
 
 func formatResponsesErrorDiagnostic(info responsesStreamErrorInfo) string {

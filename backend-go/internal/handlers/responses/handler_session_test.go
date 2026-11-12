@@ -1,7 +1,9 @@
 package responses
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -249,5 +251,125 @@ data: {"type":"response.failed","response":{"id":"resp_1","status":"failed","err
 	}
 	if w.Body.Len() != 0 {
 		t.Fatalf("preflight error should not commit response body, got %q", w.Body.String())
+	}
+}
+
+func TestResponsesErrorFailoverWithoutWhitelist(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	for _, eventType := range []string{"error", "response.error", "response.failed"} {
+		for _, blacklisted := range []bool{false, true} {
+			for _, folded := range []bool{false, true} {
+				name := fmt.Sprintf("%s/blacklist=%v/fold=%v", eventType, blacklisted, folded)
+				t.Run(name, func(t *testing.T) {
+					w := httptest.NewRecorder()
+					c, _ := gin.CreateTestContext(w)
+					c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+					code, message := "unrecognized_upstream_error", "unexpected upstream failure"
+					if blacklisted {
+						code, message = "invalid_api_key", "Invalid API key"
+					}
+					errObj := map[string]interface{}{"code": code, "message": message}
+					if blacklisted {
+						errObj["type"] = "invalid_request_error"
+					}
+					event := map[string]interface{}{"type": eventType, "error": errObj}
+					if eventType == "response.failed" {
+						delete(event, "error")
+						event["response"] = map[string]interface{}{"error": errObj, "status": "failed"}
+					}
+					payload, err := json.Marshal(event)
+					if err != nil {
+						t.Fatal(err)
+					}
+					resp := &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"text/event-stream"}}, Body: io.NopCloser(strings.NewReader("event: " + eventType + "\ndata: " + string(payload) + "\n\n"))}
+					defer resp.Body.Close()
+					if folded {
+						emitter := newResponsesFoldHTTPEmitter(c, resp, nil, &types.ResponsesRequest{Model: "gpt-5"})
+						err = emitter.emit(event)
+					} else {
+						_, err = handleStreamSuccess(c, resp, "responses", &config.EnvConfig{}, nil, time.Now(), &types.ResponsesRequest{Model: "gpt-5"}, nil, common.StreamPreflightTimeouts{}, false)
+					}
+					var blacklist *common.ErrBlacklistKey
+					if blacklisted {
+						var rejected *common.UpstreamRequestRejectedError
+						if !errors.As(err, &blacklist) || errors.As(err, &rejected) || errors.Is(err, common.ErrEmptyStreamResponse) {
+							t.Fatalf("want blacklist error, got %v", err)
+						}
+					} else if !errors.Is(err, common.ErrEmptyStreamResponse) || !strings.Contains(err.Error(), code) {
+						t.Fatalf("want failover with diagnostic, got %v", err)
+					}
+					if c.Writer.Written() || w.Body.Len() != 0 {
+						t.Fatal("preflight error committed response")
+					}
+				})
+			}
+		}
+	}
+}
+
+func TestResponsesRequestRejectionIsTerminal(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	for _, eventType := range []string{"error", "response.error", "response.failed"} {
+		for _, code := range []string{"invalid_request_error", "context_length_exceeded"} {
+			for _, field := range []string{"type", "code"} {
+				for _, folded := range []bool{false, true} {
+					name := fmt.Sprintf("%s/%s/%s/fold=%v", eventType, field, code, folded)
+					t.Run(name, func(t *testing.T) {
+						w := httptest.NewRecorder()
+						c, _ := gin.CreateTestContext(w)
+						c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+						message := "request rejected"
+						errObj := map[string]interface{}{field: code, "message": message}
+						event := map[string]interface{}{"type": eventType, "error": errObj}
+						if eventType == "response.failed" {
+							delete(event, "error")
+							event["response"] = map[string]interface{}{"error": errObj, "status": "failed"}
+						}
+						payload, err := json.Marshal(event)
+						if err != nil {
+							t.Fatal(err)
+						}
+						resp := &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"text/event-stream"}}, Body: io.NopCloser(strings.NewReader("event: " + eventType + "\ndata: " + string(payload) + "\n\n"))}
+						defer resp.Body.Close()
+						if folded {
+							emitter := newResponsesFoldHTTPEmitter(c, resp, nil, &types.ResponsesRequest{Model: "gpt-5"})
+							err = emitter.emit(event)
+						} else {
+							_, err = handleStreamSuccess(c, resp, "responses", &config.EnvConfig{}, nil, time.Now(), &types.ResponsesRequest{Model: "gpt-5"}, nil, common.StreamPreflightTimeouts{}, false)
+						}
+						var rejected *common.UpstreamRequestRejectedError
+						var blacklist *common.ErrBlacklistKey
+						if !errors.As(err, &rejected) || errors.Is(err, common.ErrEmptyStreamResponse) || errors.As(err, &blacklist) {
+							t.Fatalf("want terminal request rejection, got %v", err)
+						}
+						if rejected.Message != message || (field == "type" && rejected.Type != code) || (field == "code" && rejected.Code != code) {
+							t.Fatalf("request rejection lost error fields: %#v", rejected)
+						}
+						if c.Writer.Written() || w.Body.Len() != 0 {
+							t.Fatal("preflight error committed response")
+						}
+					})
+				}
+			}
+		}
+	}
+}
+
+func TestFoldCommittedErrorDoesNotTriggerFailover(t *testing.T) {
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	emitter := newResponsesFoldHTTPEmitter(c, &http.Response{Header: make(http.Header)}, nil, nil)
+	if err := emitter.emit(map[string]interface{}{"type": "response.output_text.delta", "delta": "hello"}); err != nil {
+		t.Fatal(err)
+	}
+	if !emitter.committed {
+		t.Fatal("expected committed response")
+	}
+	if err := emitter.emit(map[string]interface{}{"type": "response.error", "error": map[string]interface{}{"message": "unexpected upstream failure"}}); err != nil {
+		t.Fatalf("committed error should be forwarded: %v", err)
+	}
+	if !strings.Contains(w.Body.String(), "response.error") {
+		t.Fatal("missing forwarded error")
 	}
 }

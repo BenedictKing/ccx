@@ -388,11 +388,11 @@ func (e *responsesFoldHTTPEmitter) emit(event map[string]interface{}) error {
 		if r, m := detectResponsesErrorBlacklist(upstreamErr); r != "" {
 			return &common.ErrBlacklistKey{Reason: r, Message: m, RecoverAt: utils.ExtractQuotaRecoverAt(m)}
 		}
-		diagnostic := formatResponsesErrorDiagnostic(upstreamErr)
-		if isRetryableResponsesError(upstreamErr) {
-			return fmt.Errorf("%w: %s", common.ErrEmptyStreamResponse, diagnostic)
+		if rejected := common.RequestSideStreamError(upstreamErr.errorJSON()); rejected != nil {
+			return rejected
 		}
-		return fmt.Errorf("upstream Responses error: %s", diagnostic)
+		diagnostic := formatResponsesErrorDiagnostic(upstreamErr)
+		return fmt.Errorf("%w: %s", common.ErrEmptyStreamResponse, diagnostic)
 	}
 
 	e.preflightEvents = append(e.preflightEvents, eventString)
