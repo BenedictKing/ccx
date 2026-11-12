@@ -2,6 +2,7 @@ package responses
 
 import (
 	"bytes"
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -206,6 +207,9 @@ func TestFirstUnknownResponsesEventType_AllowsResponsesLifecycleAndErrorTypes(t 
 	eventTypes := []string{
 		"response.created",
 		"response.in_progress",
+		"response.content_part.added",
+		"response.content_part.delta",
+		"response.content_part.done",
 		"keepalive",
 		"response.error",
 		"response.failed",
@@ -218,5 +222,32 @@ func TestFirstUnknownResponsesEventType_AllowsResponsesLifecycleAndErrorTypes(t 
 				t.Fatalf("firstUnknownResponsesEventType() = %q, true; want known type", got)
 			}
 		})
+	}
+}
+
+func TestContentPartSemanticContent(t *testing.T) {
+	for _, eventType := range []string{"response.content_part.added", "response.content_part.delta", "response.content_part.done"} {
+		for _, part := range []struct {
+			name  string
+			value interface{}
+			want  bool
+		}{
+			{"output text", map[string]interface{}{"type": "output_text", "text": "hello"}, true},
+			{"text", map[string]interface{}{"type": "text", "text": "hello"}, true},
+			{"empty", map[string]interface{}{"type": "output_text", "text": ""}, false},
+			{"blank", map[string]interface{}{"type": "text", "text": " \t\n"}, false},
+			{"non string", map[string]interface{}{"type": "text", "text": true}, false},
+			{"missing", nil, false},
+		} {
+			t.Run(eventType+"/"+part.name, func(t *testing.T) {
+				payload, err := json.Marshal(map[string]interface{}{"type": eventType, "part": part.value})
+				if err != nil {
+					t.Fatal(err)
+				}
+				if got := common.HasResponsesSemanticContent("data: " + string(payload) + "\n\n"); got != part.want {
+					t.Fatalf("semantic = %v, want %v", got, part.want)
+				}
+			})
+		}
 	}
 }

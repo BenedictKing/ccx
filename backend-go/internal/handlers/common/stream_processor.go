@@ -363,6 +363,9 @@ func HasClaudeSemanticContent(event string) bool {
 func responseItemCarriesSemanticContent(item map[string]interface{}) bool {
 	itemType, _ := item["type"].(string)
 	switch itemType {
+	case "output_text", "text":
+		text, _ := item["text"].(string)
+		return strings.TrimSpace(text) != ""
 	case "compaction", "compaction_summary":
 		encryptedContent, _ := item["encrypted_content"].(string)
 		return strings.TrimSpace(encryptedContent) != ""
@@ -396,6 +399,11 @@ func HasResponsesSemanticContent(event string) bool {
 		case "response.output_item.added", "response.output_item.done":
 			item, _ := data["item"].(map[string]interface{})
 			if responseItemCarriesSemanticContent(item) {
+				return true
+			}
+		case "response.content_part.added", "response.content_part.delta", "response.content_part.done":
+			part, _ := data["part"].(map[string]interface{})
+			if responseItemCarriesSemanticContent(part) {
 				return true
 			}
 		case "response.completed":
@@ -447,6 +455,9 @@ func HasOpenAIChatSemanticContent(event string) bool {
 			if content, _ := delta["content"].(string); !IsEffectivelyEmptyStreamText(content) {
 				return true
 			}
+			if refusal, _ := delta["refusal"].(string); strings.TrimSpace(refusal) != "" {
+				return true
+			}
 			reasoning, _ := delta["reasoning_content"].(string)
 			if reasoning == "" {
 				reasoning, _ = delta["reasoning"].(string)
@@ -458,6 +469,10 @@ func HasOpenAIChatSemanticContent(event string) bool {
 				return true
 			}
 			if calls, ok := delta["tool_calls"].([]interface{}); ok && len(calls) > 0 {
+				return true
+			}
+			// 非空音频对象是可交付内容，避免纯音频流被误判为空响应。
+			if audio, ok := delta["audio"].(map[string]interface{}); ok && len(audio) > 0 {
 				return true
 			}
 		}
