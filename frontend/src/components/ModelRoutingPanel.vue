@@ -9,11 +9,6 @@
           :width="2"
           :style="{ visibility: loading ? 'visible' : 'hidden' }"
       /></span>
-      <v-tooltip v-if="incomplete" :text="coverageNote" location="bottom" content-class="ccx-tooltip" :open-delay="150">
-        <template #activator="{ props: tooltipProps }"
-          ><v-btn v-bind="tooltipProps" icon="mdi-information" variant="text" size="x-small" :aria-label="coverageNote"
-        /></template>
-      </v-tooltip>
       <v-btn-toggle
         v-if="supported"
         v-model="basis"
@@ -214,24 +209,6 @@ let generation = 0,
 let drawerQuery: RoutingQuery | undefined
 const supported = computed(() => ['1h', '6h', '24h', 'today'].includes(props.duration))
 const hiddenPathCount = computed(() => Math.max(0, (data.value?.paths.length ?? 0) - 12))
-const incomplete = computed(
-  () =>
-    data.value &&
-    (new Date(data.value.coverage.startedAt) > new Date(data.value.from) ||
-      !data.value.coverage.persistent ||
-      data.value.coverage.droppedWrites > 0 ||
-      data.value.coverage.limited)
-)
-const coverageNote = computed(() => {
-  if (!data.value) return ''
-  return [
-    t('routing.coverage', { time: time(data.value.coverage.startedAt) }),
-    !data.value.coverage.persistent ? t('routing.memoryOnly') : '',
-    data.value.coverage.droppedWrites || data.value.coverage.limited ? t('routing.incomplete') : ''
-  ]
-    .filter(Boolean)
-    .join(' ')
-})
 const time = (value: string) => new Date(value).toLocaleString()
 const share = (value: number) => value.toFixed(1) + '%'
 const fieldTitle = (field: RoutingField) => t('routing.' + field)
