@@ -407,6 +407,12 @@
                     </template>
                     <v-list-item-title>{{ t('app.actions.ping') }}</v-list-item-title>
                   </v-list-item>
+                  <v-list-item v-if="channelType !== 'images' && channelType !== 'vectors'" @click="$emit('testCapability', element.index)">
+                    <template #prepend>
+                      <v-icon size="small" color="success">mdi-test-tube</v-icon>
+                    </template>
+                    <v-list-item-title>{{ t('addChannel.testCapability') }}</v-list-item-title>
+                  </v-list-item>
                   <v-list-item @click="copyChannelInfo(element)">
                     <template #prepend>
                       <v-icon size="small">mdi-content-copy</v-icon>
@@ -588,6 +594,12 @@
                   </template>
                   <v-list-item-title>{{ t('orchestration.edit') }}</v-list-item-title>
                 </v-list-item>
+                <v-list-item v-if="channelType !== 'images' && channelType !== 'vectors'" @click="$emit('testCapability', channel.index)">
+                  <template #prepend>
+                    <v-icon size="small" color="success">mdi-test-tube</v-icon>
+                  </template>
+                  <v-list-item-title>{{ t('addChannel.testCapability') }}</v-list-item-title>
+                </v-list-item>
                 <v-list-item @click="copyChannelInfo(channel)">
                   <template #prepend>
                     <v-icon size="small">mdi-content-copy</v-icon>
@@ -622,6 +634,7 @@
       :channel-index="logsChannelIndex"
       :channel-name="logsChannelName"
       :channel-type="channelType"
+      @retest-model="handleRetestModel"
     />
     <SchedulerDiagnoseDialog
       v-model="showSchedulerDiagnoseDialog"
@@ -633,7 +646,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, defineAsyncComponent, nextTick } from 'vue'
 import draggable from 'vuedraggable'
-import { api, type Channel, type ChannelMetrics, type ChannelStatus, type TimeWindowStats, type ChannelRecentActivity, type SchedulerStatsResponse } from '../services/api'
+import { api, type Channel, type ChannelMetrics, type ChannelStatus, type TimeWindowStats, type ChannelRecentActivity, type ChannelLogRetestRequest, type SchedulerStatsResponse } from '../services/api'
 import { getChannelTypeApi } from '../utils/channelTypeApi'
 import { useI18n } from '../i18n'
 import { useGlobalTick } from '../composables/useGlobalTick'
@@ -660,6 +673,8 @@ const emit = defineEmits<{
   (_e: 'edit', _channel: Channel): void
   (_e: 'delete', _channelId: number): void
   (_e: 'ping', _channelId: number): void
+  (_e: 'testCapability', _channelId: number): void
+  (_e: 'retestModel', _request: ChannelLogRetestRequest): void
   (_e: 'refresh'): void
   (_e: 'error', _message: string): void
   (_e: 'success', _message: string): void
@@ -698,6 +713,10 @@ const openLogsDialog = (ch: Channel) => {
   logsChannelIndex.value = ch.index
   logsChannelName.value = ch.name
   showLogsDialog.value = true
+}
+const handleRetestModel = (request: ChannelLogRetestRequest) => {
+  showLogsDialog.value = false
+  emit('retestModel', request)
 }
 
 // Validity period for latency test results (5 minutes)

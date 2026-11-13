@@ -160,6 +160,7 @@ type CapabilityTestJob struct {
 	TargetProtocols     []string                      `json:"targetProtocols,omitempty"`
 	TimeoutMilliseconds int                           `json:"timeoutMilliseconds,omitempty"`
 	EffectiveRPM        int                           `json:"effectiveRPM,omitempty"`
+	ReasoningEffort     string                        `json:"reasoningEffort,omitempty"`
 	CancelFunc          context.CancelFunc            `json:"-"`
 }
 
@@ -286,13 +287,16 @@ func buildCapabilityJobLookupKey(cacheKey, channelKind string, channelID int) st
 	return fmt.Sprintf("%s:%s:%d", cacheKey, channelKind, channelID)
 }
 
-func buildCapabilityExecutionLookupKey(identityKey, channelKind string, protocols []string, models []string, modelMappingHash string) string {
+func buildCapabilityExecutionLookupKey(identityKey, channelKind string, protocols []string, models []string, modelMappingHash string, reasoningEfforts ...string) string {
 	sortedProtocols := append([]string(nil), protocols...)
 	sort.Strings(sortedProtocols)
 	normalizedModels := normalizeCapabilityModels(models)
 	key := fmt.Sprintf("%s:%s:%s:%s", identityKey, channelKind, strings.Join(sortedProtocols, ","), strings.Join(normalizedModels, ","))
 	if modelMappingHash != "" {
 		key += ":" + modelMappingHash
+	}
+	if len(reasoningEfforts) > 0 && strings.TrimSpace(reasoningEfforts[0]) != "" {
+		key += ":effort=" + strings.TrimSpace(reasoningEfforts[0])
 	}
 	return key
 }

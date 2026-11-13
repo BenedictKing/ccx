@@ -248,7 +248,7 @@ export function useAppController() {
     getCapabilitySnapshotJobId, buildCapabilityJobFromSnapshot,
     collectActiveJobIds, isCapabilityJobTerminal, stopCapabilityPolling,
     stopAllCapabilityPolling, startCapabilityPolling, updateCapabilityJob,
-    getCapabilityPreviousJobId, testChannelCapability, handleTestCapabilityProtocol,
+    getCapabilityPreviousJobId, testChannelCapability, retestCapabilityModel, handleTestCapabilityProtocol,
     handleTestCapabilityProtocolWithModels, handleCancelCapabilityTest,
     handleRetryCapabilityModel, handleCopyToTab,
   } = useCapabilityTestManager(channelStore, dialogStore, showToast, t, refreshChannels)
@@ -941,6 +941,7 @@ export function useAppController() {
     updateCapabilityJob,
     getCapabilityPreviousJobId,
     testChannelCapability,
+    retestCapabilityModel,
     handleTestCapabilityProtocol,
     handleTestCapabilityProtocolWithModels,
     handleCancelCapabilityTest,

@@ -37,6 +37,7 @@ import {
   RotateCcw,
   Sparkles,
   Trash2,
+  Zap,
 } from 'lucide-vue-next'
 import ActivityChart from './ActivityChart.vue'
 
@@ -47,12 +48,14 @@ const props = withDefaults(defineProps<{
   priority?: number
   inactive?: boolean
   expanded?: boolean
+  supportsCapability?: boolean
   canMoveTop?: boolean
   canMoveBottom?: boolean
 }>(), {
   priority: 0,
   inactive: false,
   expanded: false,
+  supportsCapability: true,
   canMoveTop: false,
   canMoveBottom: false,
 })
@@ -61,6 +64,7 @@ const emit = defineEmits<{
   edit: []
   delete: []
   logs: []
+  capability: []
   status: []
   resume: []
   promote: []
@@ -437,6 +441,10 @@ function handleCardClick(event: MouseEvent) {
             <DropdownMenuItem @click="emit('edit')">
               <Edit3 class="h-4 w-4" />
               {{ t('orchestration.edit') }}
+            </DropdownMenuItem>
+            <DropdownMenuItem v-if="supportsCapability" @click="emit('capability')">
+              <Zap class="h-4 w-4" />
+              {{ t('addChannel.testCapability') }}
             </DropdownMenuItem>
             <DropdownMenuItem @click="copyChannelInfo">
               <Copy class="h-4 w-4" />

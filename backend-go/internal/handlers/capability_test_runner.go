@@ -64,7 +64,7 @@ func buildRoundRobinQueue(protocolModels map[string][]string, protocols []string
 	return queue
 }
 
-func runCapabilityTestJob(ctx context.Context, jobID, channelKind string, channelID int, channel config.UpstreamConfig, protocols []string, timeout time.Duration, effectiveRPM int, cacheKey, lookupKey, identityKey, executionKey, dispatcherKey string, previousResults map[string]map[string]ModelTestResult, userModels []string, sourceTab string, cfgManager *config.ConfigManager, channelLogStore *metrics.ChannelLogStore) {
+func runCapabilityTestJob(ctx context.Context, jobID, channelKind string, channelID int, channel config.UpstreamConfig, protocols []string, timeout time.Duration, effectiveRPM int, cacheKey, lookupKey, identityKey, executionKey, dispatcherKey string, previousResults map[string]map[string]ModelTestResult, userModels []string, sourceTab, reasoningEffort string, cfgManager *config.ConfigManager, channelLogStore *metrics.ChannelLogStore) {
 	// 检查是否在 queued 期间已被取消
 	if ctx.Err() != nil {
 		if lookupKey != "" {
@@ -135,7 +135,7 @@ func runCapabilityTestJob(ctx context.Context, jobID, channelKind string, channe
 
 	var results []ProtocolTestResult
 	if len(nativeProtocols) > 0 {
-		results = runRoundRobinTests(ctx, &channel, nativeProtocols, timeout, effectiveRPM, jobID, previousResults, userModels, cfgManager, channelID, channelKind, apiKey, dispatcherKey, channelLogStore)
+		results = runRoundRobinTests(ctx, &channel, nativeProtocols, timeout, effectiveRPM, jobID, previousResults, userModels, cfgManager, channelID, channelKind, apiKey, dispatcherKey, channelLogStore, reasoningEffort)
 	}
 
 	// 等待重定向协程结果：优先直接等待；若任务被取消，给 2s 宽限后立即返回，
@@ -263,7 +263,7 @@ func runCapabilityTestJob(ctx context.Context, jobID, channelKind string, channe
 		job.ChannelName = channel.Name
 		job.SourceType = channel.ServiceType
 		job.IdentityKey = identityKey
-		job.ExecutionKey = buildCapabilityExecutionLookupKey(identityKey, channelKind, protocols, userModels, "")
+		job.ExecutionKey = buildCapabilityExecutionLookupKey(identityKey, channelKind, protocols, userModels, "", reasoningEffort)
 		job.CompatibleProtocols = append([]string(nil), compatible...)
 		job.RedirectTests = append([]RedirectModelResult(nil), redirectResults...)
 		job.TotalDuration = totalDuration
@@ -308,7 +308,12 @@ func runCapabilityTestJob(ctx context.Context, jobID, channelKind string, channe
 // runRoundRobinTests 核心编排器，串行按 round-robin 顺序逐个调度
 // 所有模型都会被测试，不会在首次成功后跳过后续模型
 // previousResults 可选：上次测试中成功的结果，跳过这些模型
-func runRoundRobinTests(ctx context.Context, channel *config.UpstreamConfig, protocols []string, perModelTimeout time.Duration, effectiveRPM int, jobID string, previousResults map[string]map[string]ModelTestResult, userModels []string, cfgManager *config.ConfigManager, channelID int, channelKind, apiKey, dispatcherKey string, channelLogStore *metrics.ChannelLogStore) []ProtocolTestResult {
+func runRoundRobinTests(ctx context.Context, channel *config.UpstreamConfig, protocols []string, perModelTimeout time.Duration, effectiveRPM int, jobID string, previousResults map[string]map[string]ModelTestResult, userModels []string, cfgManager *config.ConfigManager, channelID int, channelKind, apiKey, dispatcherKey string, channelLogStore *metrics.ChannelLogStore, reasoningEfforts ...string) []ProtocolTestResult {
+	reasoningEffort := ""
+	if len(reasoningEfforts) > 0 {
+		reasoningEffort = reasoningEfforts[0]
+	}
+
 	// 1. 收集各协议模型列表，初始化 job 状态
 	protocolModels := make(map[string][]string)
 	protocolTimedOut := make(map[string]bool) // true = 全局超时强制终止
@@ -477,7 +482,7 @@ func runRoundRobinTests(ctx context.Context, channel *config.UpstreamConfig, pro
 		}
 
 		// executeModelTest（单模型测试）
-		modelResult := executeModelTest(globalCtx, channel, item.protocol, item.model, perModelTimeout, jobID, cfgManager, channelID, channelKind, apiKey, channelLogStore)
+		modelResult := executeModelTestWithReasoningEffort(globalCtx, channel, item.protocol, item.model, perModelTimeout, jobID, cfgManager, channelID, channelKind, apiKey, channelLogStore, reasoningEffort)
 		result := results[item.protocol]
 		result.ModelResults[item.index] = modelResult
 		protocolEndTime[item.protocol] = time.Now() // 每次模型完成时更新协议结束时间
@@ -645,6 +650,10 @@ func isCapabilityJobCancelled(jobID string) bool {
 // executeModelTest 单模型测试（不调用 AcquireSendSlot，由编排器负责限流）
 // 原生协议测试直接用原始模型名发请求，不走 ModelMapping 重定向
 func executeModelTest(ctx context.Context, channel *config.UpstreamConfig, protocol, model string, timeout time.Duration, jobID string, cfgManager *config.ConfigManager, channelID int, channelKind, apiKey string, channelLogStore *metrics.ChannelLogStore) ModelTestResult {
+	return executeModelTestWithReasoningEffort(ctx, channel, protocol, model, timeout, jobID, cfgManager, channelID, channelKind, apiKey, channelLogStore, "")
+}
+
+func executeModelTestWithReasoningEffort(ctx context.Context, channel *config.UpstreamConfig, protocol, model string, timeout time.Duration, jobID string, cfgManager *config.ConfigManager, channelID int, channelKind, apiKey string, channelLogStore *metrics.ChannelLogStore, reasoningEffort string) ModelTestResult {
 	startedAt := time.Now()
 
 	modelResult := ModelTestResult{
@@ -652,7 +661,7 @@ func executeModelTest(ctx context.Context, channel *config.UpstreamConfig, proto
 		StartedAt: startedAt.Format(time.RFC3339Nano),
 	}
 
-	req, err := buildTestRequestWithModel(protocol, channel, model, cfgManager)
+	req, err := buildTestRequestWithModelAndReasoningEffort(protocol, channel, model, reasoningEffort, cfgManager)
 	if err != nil {
 		errMsg := fmt.Sprintf("build_request_failed: %v", err)
 		modelResult.Error = &errMsg

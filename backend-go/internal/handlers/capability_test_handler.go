@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/BenedictKing/ccx/internal/config"
@@ -21,7 +22,9 @@ type CapabilityTestRequest struct {
 	Timeout         int      `json:"timeout"`       // 毫秒
 	PreviousJobID   string   `json:"previousJobId"` // 可选：上次测试的 jobId，用于复用成功结果
 	RPM             int      `json:"rpm"`
-	SourceTab       string   `json:"sourceTab"` // 可选：当前 Tab 的协议类型（用于跨协议测试）
+	SourceTab       string   `json:"sourceTab"`       // 可选：当前 Tab 的协议类型（用于跨协议测试）
+	ReasoningEffort string   `json:"reasoningEffort"` // 可选：复测时沿用原请求的推理强度
+	Force           bool     `json:"force"`           // 可选：跳过缓存，强制重新测试
 }
 
 const defaultCapabilityTestRPM = 30
@@ -143,17 +146,18 @@ func TestChannelCapability(cfgManager *config.ConfigManager, channelLogStore *me
 
 		modelMappingHash := hashModelMapping(channel.ModelMapping)
 		normalizedModels := normalizeCapabilityModels(req.Models)
+		reasoningEffort := strings.TrimSpace(req.ReasoningEffort)
 		cacheModels := normalizedModels
 		if len(cacheModels) == 0 {
 			cacheModels = capabilityDefaultModelCacheKey(protocols, channel)
 		}
 		dispatcherKey := metrics.GenerateMetricsIdentityKey(baseURL, apiKey, channel.ServiceType)
 		identityKey := buildCapabilityIdentityKey(channel, modelMappingHash)
-		cacheKey := buildCapabilityCacheKey(baseURL, apiKey, channel.ServiceType, protocols, cacheModels, modelMappingHash)
-		executionLookupKey := buildCapabilityExecutionLookupKey(identityKey, channelKind, protocols, cacheModels, "")
+		cacheKey := buildCapabilityCacheKey(baseURL, apiKey, channel.ServiceType, protocols, cacheModels, modelMappingHash, reasoningEffort)
+		executionLookupKey := buildCapabilityExecutionLookupKey(identityKey, channelKind, protocols, cacheModels, "", reasoningEffort)
 		lookupKey := buildCapabilityJobLookupKey(cacheKey, channelKind, id)
 
-		if cached, ok := getCapabilityCache(cacheKey); ok {
+		if cached, ok := getCapabilityCache(cacheKey); ok && !req.Force {
 			log.Printf("[CapabilityTest-Cache] 渠道 %s (ID:%d) 命中缓存，创建已完成任务", channel.Name, id)
 			cached.ChannelID = id
 			cached.ChannelName = channel.Name
@@ -191,6 +195,7 @@ func TestChannelCapability(cfgManager *config.ConfigManager, channelLogStore *me
 		job.IsResumed = reused
 		job.IdentityKey = identityKey
 		job.ExecutionKey = executionLookupKey
+		job.ReasoningEffort = reasoningEffort
 
 		// 检测到 cancelled job，恢复进度
 		if reused && job.Lifecycle == CapabilityLifecycleCancelled {
@@ -253,7 +258,7 @@ func TestChannelCapability(cfgManager *config.ConfigManager, channelLogStore *me
 			}
 
 			capabilityJobs.start(job.JobID, false, func(ctx context.Context) {
-				runCapabilityTestJob(ctx, job.JobID, channelKind, id, *channel, protocols, timeout, effectiveRPM, cacheKey, lookupKey, identityKey, executionLookupKey, dispatcherKey, previousResults, normalizedModels, req.SourceTab, cfgManager, channelLogStore)
+				runCapabilityTestJob(ctx, job.JobID, channelKind, id, *channel, protocols, timeout, effectiveRPM, cacheKey, lookupKey, identityKey, executionLookupKey, dispatcherKey, previousResults, normalizedModels, req.SourceTab, reasoningEffort, cfgManager, channelLogStore)
 			})
 
 			c.JSON(http.StatusOK, gin.H{"jobId": updatedJob.JobID, "resumed": true, "job": updatedJob})
@@ -275,7 +280,7 @@ func TestChannelCapability(cfgManager *config.ConfigManager, channelLogStore *me
 
 		// 提取上次成功的结果用于复用（从 previousJobID）
 		var previousResults map[string]map[string]ModelTestResult
-		if req.PreviousJobID != "" {
+		if req.PreviousJobID != "" && !req.Force {
 			if prevJob, ok := capabilityJobs.get(req.PreviousJobID); ok && prevJob.ChannelKind == channelKind && prevJob.IdentityKey == identityKey {
 				previousResults = make(map[string]map[string]ModelTestResult)
 				for _, test := range prevJob.Tests {
@@ -309,7 +314,7 @@ func TestChannelCapability(cfgManager *config.ConfigManager, channelLogStore *me
 		}
 
 		capabilityJobs.start(job.JobID, false, func(ctx context.Context) {
-			runCapabilityTestJob(ctx, job.JobID, channelKind, id, *channel, protocols, timeout, effectiveRPM, cacheKey, lookupKey, identityKey, executionLookupKey, dispatcherKey, previousResults, normalizedModels, req.SourceTab, cfgManager, channelLogStore)
+			runCapabilityTestJob(ctx, job.JobID, channelKind, id, *channel, protocols, timeout, effectiveRPM, cacheKey, lookupKey, identityKey, executionLookupKey, dispatcherKey, previousResults, normalizedModels, req.SourceTab, reasoningEffort, cfgManager, channelLogStore)
 		})
 
 		c.JSON(http.StatusOK, gin.H{"jobId": job.JobID, "resumed": false, "job": job})

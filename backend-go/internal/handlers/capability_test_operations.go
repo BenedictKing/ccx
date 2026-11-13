@@ -258,7 +258,7 @@ func RetryCapabilityTestModel(cfgManager *config.ConfigManager, channelLogStore 
 				return
 			}
 
-			modelResult := executeRetryModelTest(retryCtx, channel, req.Protocol, req.Model, timeout, jobID, cfgManager, id, channelKind, apiKey, channelLogStore)
+			modelResult := executeRetryModelTest(retryCtx, channel, req.Protocol, req.Model, timeout, jobID, cfgManager, id, channelKind, apiKey, channelLogStore, job.ReasoningEffort)
 
 			// 更新协议测试时间戳；协议/任务整体状态由统一重算逻辑维护
 			capabilityJobs.update(jobID, func(j *CapabilityTestJob) {
@@ -279,9 +279,9 @@ func RetryCapabilityTestModel(cfgManager *config.ConfigManager, channelLogStore 
 	}
 }
 
-func executeRetryModelTest(ctx context.Context, channel *config.UpstreamConfig, protocol, model string, timeout time.Duration, jobID string, cfgManager *config.ConfigManager, channelID int, channelKind, apiKey string, channelLogStore *metrics.ChannelLogStore) ModelTestResult {
+func executeRetryModelTest(ctx context.Context, channel *config.UpstreamConfig, protocol, model string, timeout time.Duration, jobID string, cfgManager *config.ConfigManager, channelID int, channelKind, apiKey string, channelLogStore *metrics.ChannelLogStore, reasoningEffort string) ModelTestResult {
 	if !strings.Contains(protocol, "->") {
-		return executeModelTest(ctx, channel, protocol, model, timeout, jobID, cfgManager, channelID, channelKind, apiKey, channelLogStore)
+		return executeModelTestWithReasoningEffort(ctx, channel, protocol, model, timeout, jobID, cfgManager, channelID, channelKind, apiKey, channelLogStore, reasoningEffort)
 	}
 
 	parts := strings.SplitN(protocol, "->", 2)

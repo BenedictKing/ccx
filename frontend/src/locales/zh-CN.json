@@ -538,6 +538,7 @@
   "channelLogs.empty": "暂无日志记录",
   "channelLogs.copyEntry": "复制此条日志",
   "channelLogs.copiedEntry": "已复制日志",
+  "channelLogs.retestModel": "复测模型 {model}（标准测试请求）",
   "channelLogs.retry": "重试",
   "channelLogs.sourceCapabilityTest": "能力测试",
   "channelLogs.selectionReason": "调度",

@@ -30,6 +30,27 @@
             <v-list-item :class="['log-item', { 'bg-error-subtle': log.status === 'failed' }]" @click="toggleExpand(i)">
               <template #append>
                 <v-tooltip
+                  v-if="canRetestModel(log)"
+                  :text="t('channelLogs.retestModel', { model: log.model })"
+                  location="left"
+                  content-class="ccx-tooltip"
+                >
+                  <template #activator="{ props: tooltipProps }">
+                    <v-btn
+                      v-bind="tooltipProps"
+                      icon
+                      size="x-small"
+                      variant="flat"
+                      color="secondary"
+                      class="log-copy-btn mr-1"
+                      :aria-label="t('channelLogs.retestModel', { model: log.model })"
+                      @click.stop="retestModel(log)"
+                    >
+                      <v-icon size="16">mdi-test-tube</v-icon>
+                    </v-btn>
+                  </template>
+                </v-tooltip>
+                <v-tooltip
                   :text="copiedLogKey === getLogCopyKey(log, i) ? t('channelLogs.copiedEntry') : t('channelLogs.copyEntry')"
                   location="left"
                   content-class="ccx-tooltip"
@@ -179,7 +200,7 @@
 
 <script setup lang="ts">
 import { ref, watch, onMounted, onUnmounted } from 'vue'
-import { api, type ChannelLogEntry } from '../services/api'
+import { api, type ChannelLogEntry, type ChannelLogRetestRequest } from '../services/api'
 import { useI18n } from '../i18n'
 import { useGlobalTick } from '../composables/useGlobalTick'
 
@@ -192,6 +213,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (_e: 'update:modelValue', _v: boolean): void
+  (_e: 'retestModel', _request: ChannelLogRetestRequest): void
 }>()
 const { t } = useI18n()
 
@@ -264,6 +286,29 @@ const toggleExpand = (i: number) => {
 
 const hasLogDetails = (log: ChannelLogEntry): boolean => {
   return Boolean(log.errorInfo?.trim() || log.selectionTraceSummary?.trim())
+}
+
+const getRetestProtocol = (log: ChannelLogEntry): ChannelLogRetestRequest['protocol'] | null => {
+  const protocol = (log.interfaceType || props.channelType).toLowerCase()
+  if (protocol === 'messages' || protocol === 'chat' || protocol === 'responses' || protocol === 'gemini') {
+    return protocol
+  }
+  return null
+}
+
+const canRetestModel = (log: ChannelLogEntry): boolean => {
+  return !log.success && Boolean(log.model.trim()) && getRetestProtocol(log) !== null
+}
+
+const retestModel = (log: ChannelLogEntry) => {
+  const protocol = getRetestProtocol(log)
+  if (!protocol) return
+  emit('retestModel', {
+    channelId: props.channelIndex,
+    protocol,
+    model: log.model,
+    reasoningEffort: normalizedReasoningEffort(log.actualReasoningEffort) || normalizedReasoningEffort(log.originalReasoningEffort) || undefined
+  })
 }
 
 const statusColor = (code: number): string => {

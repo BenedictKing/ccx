@@ -124,7 +124,7 @@ vi.mock('@/components/console/ChannelCard.vue', () => ({
       channel: { type: Object, required: true },
       expanded: { type: Boolean, default: false },
     },
-    emits: ['toggle', 'delete'],
+    emits: ['toggle', 'delete', 'capability'],
     setup(props, { emit }) {
       return () => {
         const channel = props.channel as { index: number; name: string }
@@ -132,6 +132,7 @@ vi.mock('@/components/console/ChannelCard.vue', () => ({
           h('span', channel.name),
           h('button', { type: 'button', onClick: () => emit('toggle') }, props.expanded ? 'collapse' : 'expand'),
           h('button', { type: 'button', onClick: () => emit('delete') }, 'delete'),
+          h('button', { type: 'button', onClick: () => emit('capability') }, 'addChannel.testCapability'),
         ])
       }
     },
@@ -144,6 +145,10 @@ vi.mock('@/components/console/ChannelEditDialog.vue', () => ({
 
 vi.mock('@/components/console/ChannelLogsDialog.vue', () => ({
   default: defineComponent({ setup: () => () => h('div') }),
+}))
+
+vi.mock('@/components/console/CapabilityTestDialog.vue', () => ({
+  default: defineComponent({ setup: () => () => h('div', 'capability.title') }),
 }))
 
 vi.mock('@/components/console/CircuitBreakerDialog.vue', () => ({
@@ -206,20 +211,17 @@ describe('ChannelManager', () => {
     expect(chartUpdateData).not.toHaveBeenCalled()
   })
 
-  it('does not render capability test entry points', async () => {
+  it('opens the capability test dialog from a channel', async () => {
     apiGet.mockResolvedValue(createStatsResponse())
     mountChannelManager()
     await nextTick()
     await Promise.resolve()
 
-    expect(root.textContent).not.toContain('addChannel.testCapability')
-    expect(root.textContent).not.toContain('capability.startTest')
+    expect(root.textContent).toContain('addChannel.testCapability')
     expect(root.textContent).not.toContain('capability.title')
-    // 能力测试弹窗不再挂载
-    const dialogs = [...root.querySelectorAll('*')].filter(el =>
-      el.textContent?.includes('capability.')
-    )
-    expect(dialogs).toHaveLength(0)
+    clickButton('addChannel.testCapability')
+    await nextTick()
+    expect(root.textContent).toContain('capability.title')
   })
 
   it('deletes the last active channel', async () => {

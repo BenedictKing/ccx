@@ -1,7 +1,7 @@
 // Capability test 状态管理逻辑，从 App.vue 抽出。
 // 原始代码原样搬运，仅加函数包装。
 import { ref, watch } from "vue"
-import { api, type CapabilityTestJob, type CapabilityProtocolJobResult, type CapabilityModelJobResult, type CapabilitySnapshot, type Channel, type CapabilityTestJobStartResponse, ApiError } from "../services/api"
+import { api, type CapabilityTestJob, type CapabilityProtocolJobResult, type CapabilityModelJobResult, type CapabilitySnapshot, type Channel, type CapabilityTestJobStartResponse, type ChannelLogRetestRequest, ApiError } from "../services/api"
 
 type CapabilityChannelKind = "messages" | "chat" | "responses" | "gemini"
 
@@ -540,7 +540,7 @@ const testChannelCapability = async (channelId: number) => {
   }
 }
 
-const handleTestCapabilityProtocol = async (protocol: string, models?: string[]) => {
+const handleTestCapabilityProtocol = async (protocol: string, models?: string[], options?: { reasoningEffort?: string; force?: boolean }) => {
   if (!isCapabilityChannelKind(channelStore.activeTab) || !isCapabilityProtocol(protocol)) {
     return
   }
@@ -548,7 +548,7 @@ const handleTestCapabilityProtocol = async (protocol: string, models?: string[])
 
   const channelType = capabilityTestChannelType.value
   const channelId = capabilityTestChannelId.value
-  const previousJobId = getCapabilityPreviousJobId(protocol)
+  const previousJobId = options?.force ? undefined : getCapabilityPreviousJobId(protocol)
   const currentJob = capabilityTestJob.value ?? buildCapabilityIdleJob(channelId, capabilityTestChannelName.value, channelType)
   capabilityTestJob.value = mergeCapabilityJob(currentJob, {
     ...currentJob,
@@ -569,7 +569,9 @@ const handleTestCapabilityProtocol = async (protocol: string, models?: string[])
         previousJobId,
         rpm: capabilityTestRpm.value,
         sourceTab: capabilityTestSourceTab.value,
-        models
+        models,
+        reasoningEffort: options?.reasoningEffort,
+        force: options?.force
       }
     )
     capabilityTestJobId.value = startResp.jobId
@@ -590,6 +592,15 @@ const handleTestCapabilityProtocol = async (protocol: string, models?: string[])
 }
 
 const handleTestCapabilityProtocolWithModels = handleTestCapabilityProtocol
+
+const retestCapabilityModel = async (request: ChannelLogRetestRequest) => {
+  await testChannelCapability(request.channelId)
+  if (capabilityTestChannelId.value !== request.channelId) return
+  await handleTestCapabilityProtocol(request.protocol, [request.model], {
+    reasoningEffort: request.reasoningEffort,
+    force: true
+  })
+}
 
 const handleCancelCapabilityTest = async () => {
   if (!capabilityTestJob.value) return
@@ -750,7 +761,7 @@ const handleCopyToTab = async (targetProtocol: string, serviceProtocol = targetP
     getCapabilitySnapshotJobId, buildCapabilityJobFromSnapshot,
     collectActiveJobIds, isCapabilityJobTerminal, stopCapabilityPolling,
     stopAllCapabilityPolling, startCapabilityPolling, updateCapabilityJob,
-    getCapabilityPreviousJobId, testChannelCapability, handleTestCapabilityProtocol,
+    getCapabilityPreviousJobId, testChannelCapability, retestCapabilityModel, handleTestCapabilityProtocol,
     handleTestCapabilityProtocolWithModels, handleCancelCapabilityTest,
     handleRetryCapabilityModel, handleCopyToTab,
   }

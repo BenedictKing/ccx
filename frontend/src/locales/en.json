@@ -538,6 +538,7 @@
   "channelLogs.empty": "No logs yet",
   "channelLogs.copyEntry": "Copy this log",
   "channelLogs.copiedEntry": "Log copied",
+  "channelLogs.retestModel": "Retest {model} (standard probe)",
   "channelLogs.retry": "Retry",
   "channelLogs.sourceCapabilityTest": "Capability Test",
   "channelLogs.selectionReason": "Selection",

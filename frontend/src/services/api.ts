@@ -311,7 +311,7 @@ export class ApiService {
     id: number,
     options: StartCapabilityTestOptions = {}
   ): Promise<CapabilityTestJobStartResponse> {
-    const body: { targetProtocols: string[]; timeout: number; previousJobId?: string; rpm?: number; sourceTab?: string; models?: string[] } = {
+    const body: { targetProtocols: string[]; timeout: number; previousJobId?: string; rpm?: number; sourceTab?: string; models?: string[]; reasoningEffort?: string; force?: boolean } = {
       targetProtocols: options.targetProtocols?.length ? options.targetProtocols : ['messages', 'responses', 'chat', 'gemini'],
       timeout: 10000,
       rpm: options.rpm
@@ -324,6 +324,12 @@ export class ApiService {
     }
     if (options.models?.length) {
       body.models = options.models
+    }
+    if (options.reasoningEffort) {
+      body.reasoningEffort = options.reasoningEffort
+    }
+    if (options.force) {
+      body.force = true
     }
     return this.request(`/${type}/channels/${id}/capability-test`, {
       method: 'POST',

@@ -368,6 +368,8 @@ export interface StartCapabilityTestOptions {
   rpm?: number
   sourceTab?: string
   models?: string[]
+  reasoningEffort?: string
+  force?: boolean
 }
 
 export type CapabilityLifecycle = 'pending' | 'active' | 'done' | 'cancelled'
@@ -449,6 +451,7 @@ export interface CapabilityTestJob {
   cacheHit?: boolean
   targetProtocols?: string[]
   timeoutMilliseconds?: number
+  reasoningEffort?: string
   snapshotUpdatedAt?: string
 }
 
@@ -657,6 +660,13 @@ export interface ChannelLogEntry {
   parentThreadId?: string    // Codex parent thread id
   agentConfidence?: string   // exact | heuristic
   sessionId?: string         // 扁平化会话标识（用于驾驶舱关联）
+}
+
+export interface ChannelLogRetestRequest {
+  channelId: number
+  protocol: 'messages' | 'chat' | 'responses' | 'gemini'
+  model: string
+  reasoningEffort?: string
 }
 
 export interface ChannelLogsResponse {

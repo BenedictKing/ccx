@@ -537,6 +537,7 @@
   "channelLogs.autoRefreshing": "Sedang auto refresh",
   "channelLogs.empty": "Belum ada log",
   "channelLogs.copyEntry": "Salin log ini",
+  "channelLogs.retestModel": "Uji ulang {model} (permintaan pengujian standar)",
   "channelLogs.copiedEntry": "Log disalin",
   "channelLogs.retry": "Retry",
   "channelLogs.sourceCapabilityTest": "Tes Kemampuan",

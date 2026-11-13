@@ -51,7 +51,7 @@ var (
 	capabilityResponsesProvider providers.Provider = &providers.ResponsesProvider{}
 )
 
-func buildCapabilityCacheKey(baseURL string, apiKey string, serviceType string, protocols []string, models []string, modelMappingHash string) string {
+func buildCapabilityCacheKey(baseURL string, apiKey string, serviceType string, protocols []string, models []string, modelMappingHash string, reasoningEfforts ...string) string {
 	sorted := make([]string, len(protocols))
 	copy(sorted, protocols)
 	sort.Strings(sorted)
@@ -61,6 +61,9 @@ func buildCapabilityCacheKey(baseURL string, apiKey string, serviceType string, 
 	key := fmt.Sprintf("%s:%s:%s", metricsKey, strings.Join(sorted, ","), strings.Join(normalizedModels, ","))
 	if modelMappingHash != "" {
 		key += ":" + modelMappingHash
+	}
+	if len(reasoningEfforts) > 0 && strings.TrimSpace(reasoningEfforts[0]) != "" {
+		key += ":effort=" + strings.TrimSpace(reasoningEfforts[0])
 	}
 	return key
 }
@@ -202,6 +205,10 @@ func capabilityTestBaseURL(channel *config.UpstreamConfig) string {
 }
 
 func buildTestRequestWithModel(protocol string, channel *config.UpstreamConfig, model string, cfgManagers ...*config.ConfigManager) (*http.Request, error) {
+	return buildTestRequestWithModelAndReasoningEffort(protocol, channel, model, "", cfgManagers...)
+}
+
+func buildTestRequestWithModelAndReasoningEffort(protocol string, channel *config.UpstreamConfig, model, reasoningEffort string, cfgManagers ...*config.ConfigManager) (*http.Request, error) {
 	cfgManager := firstCapabilityProbeConfigManager(cfgManagers)
 	globalCapabilities := capabilityProbeGlobalCapabilities(cfgManager)
 	baseURL := capabilityTestBaseURL(channel)
@@ -216,6 +223,11 @@ func buildTestRequestWithModel(protocol string, channel *config.UpstreamConfig, 
 		apiKey = channel.DisabledAPIKeys[0].Key
 	} else {
 		return nil, fmt.Errorf("no_api_key")
+	}
+
+	probeReasoningEffort := capabilityProbeReasoningEffort(model, channel, globalCapabilities)
+	if override := strings.TrimSpace(reasoningEffort); override != "" {
+		probeReasoningEffort = override
 	}
 
 	var (
@@ -241,7 +253,7 @@ func buildTestRequestWithModel(protocol string, channel *config.UpstreamConfig, 
 		case "messages":
 			requestURL = buildCapabilityTestURL(baseURL, "/v1", "/messages")
 			body = buildMessagesProbeBody(model, globalCapabilities, channel)
-			body = applyRequiredThinkingToCapabilityProbeBody(body, model, channel, globalCapabilities)
+			body = applyRequiredThinkingToCapabilityProbeBody(body, model, channel, globalCapabilities, reasoningEffort)
 			if channel.NormalizeSystemRoleToTopLevel {
 				body = providers.NormalizeSystemRoleToTopLevel(body)
 			}
@@ -256,7 +268,7 @@ func buildTestRequestWithModel(protocol string, channel *config.UpstreamConfig, 
 				},
 				"max_tokens":       capabilityProbeMaxTokens,
 				"stream":           true,
-				"reasoning_effort": capabilityProbeReasoningEffort(model, channel, globalCapabilities),
+				"reasoning_effort": probeReasoningEffort,
 			})
 
 			// PLACEHOLDER_REQUEST_BUILD_2
@@ -276,7 +288,7 @@ func buildTestRequestWithModel(protocol string, channel *config.UpstreamConfig, 
 				"generationConfig": map[string]interface{}{
 					"maxOutputTokens": capabilityProbeMaxTokens,
 					"thinkingConfig": map[string]interface{}{
-						"thinkingLevel": capabilityProbeReasoningEffort(model, channel, globalCapabilities),
+						"thinkingLevel": probeReasoningEffort,
 					},
 				},
 			})
@@ -291,7 +303,7 @@ func buildTestRequestWithModel(protocol string, channel *config.UpstreamConfig, 
 				"max_output_tokens": capabilityProbeMaxTokens,
 				"stream":            true,
 				"reasoning": map[string]interface{}{
-					"effort": capabilityProbeReasoningEffort(model, channel, globalCapabilities),
+					"effort": probeReasoningEffort,
 				},
 			})
 
@@ -374,8 +386,11 @@ func capabilityProbeReasoningEffort(model string, channel *config.UpstreamConfig
 	return "low"
 }
 
-func applyRequiredThinkingToCapabilityProbeBody(body []byte, model string, channel *config.UpstreamConfig, global map[string]config.UpstreamModelCapability) []byte {
+func applyRequiredThinkingToCapabilityProbeBody(body []byte, model string, channel *config.UpstreamConfig, global map[string]config.UpstreamModelCapability, reasoningEfforts ...string) []byte {
 	effort := capabilityProbeRequiredThinkingEffort(model, channel, global)
+	if len(reasoningEfforts) > 0 && strings.TrimSpace(reasoningEfforts[0]) != "" {
+		effort = strings.TrimSpace(reasoningEfforts[0])
+	}
 	if effort == "" {
 		return body
 	}
