@@ -70,11 +70,6 @@ func (p *ResponsesProvider) ConvertBodyToProviderRequest(
 		upstream.TextVerbosity != "" || upstream.FastMode
 	if native && !rewrite && !strings.HasSuffix(requestPath, "/v1/messages") && json.Valid(bodyBytes) {
 		resetCodexToolContext(c)
-		normalizedBody, err := repairNativeResponsesToolHistory(bodyBytes)
-		if err != nil {
-			return nil, bodyBytes, fmt.Errorf("修复 Responses 工具历史失败: %w", err)
-		}
-		reqBody, reqBodyForURL = normalizedBody, normalizedBody
 	} else {
 		providerReq, urlBody, err := p.buildProviderRequestBody(c, requestPath, bodyBytes, upstream)
 		if err != nil {
@@ -85,6 +80,13 @@ func (p *ResponsesProvider) ConvertBodyToProviderRequest(
 		if err != nil {
 			return nil, bodyBytes, fmt.Errorf("序列化请求失败: %w", err)
 		}
+	}
+	if native && !strings.HasSuffix(requestPath, "/v1/messages") {
+		normalizedBody, err := repairNativeResponsesToolHistory(reqBody)
+		if err != nil {
+			return nil, bodyBytes, fmt.Errorf("修复 Responses 工具历史失败: %w", err)
+		}
+		reqBody = normalizedBody
 	}
 
 	targetURL, err := p.buildRequestURL(upstream, reqBodyForURL)
