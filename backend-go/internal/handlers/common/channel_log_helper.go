@@ -137,6 +137,7 @@ func CompleteLog(
 	success bool,
 	errorInfo string,
 	isRetry bool,
+	usage ...*types.Usage,
 ) {
 	if channelLogStore == nil || metricsKey == "" || requestID == "" {
 		return
@@ -149,6 +150,10 @@ func CompleteLog(
 
 	status := getStatusFromResult(success, errorInfo)
 	now := time.Now()
+	var requestUsage *types.Usage
+	if len(usage) > 0 {
+		requestUsage = usage[0]
+	}
 	updateStatus, actualMetricsKey := channelLogStore.Update(metricsKey, requestID, func(log *metrics.ChannelLog) {
 		log.StatusCode = statusCode
 		log.Success = success
@@ -157,11 +162,12 @@ func CompleteLog(
 		log.CompletedAt = &now
 		log.DurationMs = now.Sub(log.StartTime).Milliseconds()
 		log.Status = status
+		applyChannelLogUsage(log, requestUsage, now)
 	})
 
 	// 仅在确认是环形缓冲淘汰时补写终态日志；若渠道已删除则不补写，避免污染其他渠道。
 	if updateStatus == metrics.UpdateMissingEvicted && actualMetricsKey != "" {
-		channelLogStore.Record(actualMetricsKey, &metrics.ChannelLog{
+		terminalLog := &metrics.ChannelLog{
 			RequestID:   requestID,
 			Timestamp:   now,
 			StatusCode:  statusCode,
@@ -172,7 +178,29 @@ func CompleteLog(
 			StartTime:   now,
 			CompletedAt: &now,
 			DurationMs:  0,
-		})
+		}
+		applyChannelLogUsage(terminalLog, requestUsage, now)
+		channelLogStore.Record(actualMetricsKey, terminalLog)
+	}
+}
+
+func applyChannelLogUsage(log *metrics.ChannelLog, usage *types.Usage, completedAt time.Time) {
+	if log == nil || usage == nil {
+		return
+	}
+	inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens := metrics.ExtractUsageTokens(usage)
+	log.InputTokens = int(inputTokens)
+	log.OutputTokens = int(outputTokens)
+	log.CacheCreationTokens = int(cacheCreationTokens)
+	log.CacheReadTokens = int(cacheReadTokens)
+	log.ContextTokens = int(inputTokens + cacheCreationTokens + cacheReadTokens)
+
+	if outputTokens <= 0 || log.FirstByteAt == nil {
+		return
+	}
+	generationDuration := completedAt.Sub(*log.FirstByteAt)
+	if generationDuration > 0 {
+		log.TokensPerSecond = float64(outputTokens) / generationDuration.Seconds()
 	}
 }
 

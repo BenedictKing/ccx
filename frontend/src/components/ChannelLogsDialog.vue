@@ -164,6 +164,20 @@
                   </span>
                 </template>
                 <span v-else class="text-medium-emphasis log-meta">{{ formatDurationSeconds(log.durationMs) }}</span>
+                <span
+                  v-if="log.contextTokens"
+                  class="text-medium-emphasis log-meta"
+                  :title="t('channelLogs.contextTokensDetail', { input: formatTokenCount(log.inputTokens || 0), cacheCreation: formatTokenCount(log.cacheCreationTokens || 0), cacheRead: formatTokenCount(log.cacheReadTokens || 0) })"
+                >
+                  {{ t('channelLogs.contextTokens') }} {{ formatTokenCount(log.contextTokens) }}
+                </span>
+                <span
+                  v-if="log.tokensPerSecond"
+                  class="text-medium-emphasis log-meta"
+                  :title="t('channelLogs.tpsDetail', { output: formatTokenCount(log.outputTokens || 0) })"
+                >
+                  {{ formatTokensPerSecond(log.tokensPerSecond) }} TPS
+                </span>
                 <v-chip v-if="log.selectionReason" size="small" color="secondary" variant="tonal" :title="log.selectionReason">
                   {{ t('channelLogs.selectionReason') }} {{ log.selectionReason }}
                 </v-chip>
@@ -367,6 +381,12 @@ const calculateDurations = (log: ChannelLogEntry) => {
 const formatDurationSeconds = (durationMs: number): string => {
   const seconds = durationMs / 1000
   return `${Number.parseFloat(seconds.toPrecision(3))}s`
+}
+
+const formatTokenCount = (value: number): string => value.toLocaleString()
+
+const formatTokensPerSecond = (value: number): string => {
+  return value >= 100 ? value.toFixed(0) : value.toFixed(1)
 }
 
 const formatReasoningEffort = (effort: string): string => {

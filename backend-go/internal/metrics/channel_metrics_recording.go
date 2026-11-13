@@ -25,7 +25,7 @@ func (m *MetricsManager) recordSuccessWithUsageLocked(baseURL, apiKey, serviceTy
 	metrics.SuccessCount++
 	metrics.LastSuccessAt = &now
 
-	inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens := extractUsageTokens(usage)
+	inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens := ExtractUsageTokens(usage)
 
 	m.appendToHistoryKeyWithUsage(metrics, now, true, FailureClassNone, inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens, models...)
 	m.handleBreakerSuccessLocked(metrics, now)
@@ -180,7 +180,7 @@ func (m *MetricsManager) RecordRequestFinalizeOutcome(baseURL, apiKey, serviceTy
 		metrics.LastSuccessAt = &now
 		m.handleBreakerSuccessLocked(metrics, now)
 
-		inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens := extractUsageTokens(usage)
+		inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens := ExtractUsageTokens(usage)
 		record.InputTokens = inputTokens
 		record.OutputTokens = outputTokens
 		record.CacheCreationInputTokens = cacheCreationTokens

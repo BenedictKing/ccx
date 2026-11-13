@@ -185,6 +185,14 @@ function formatDurationSeconds(durationMs: number) {
   return `${Number.parseFloat(seconds.toPrecision(3))}s`
 }
 
+function formatTokenCount(value: number) {
+  return value.toLocaleString()
+}
+
+function formatTokensPerSecond(value: number) {
+  return value >= 100 ? value.toFixed(0) : value.toFixed(1)
+}
+
 function formatReasoningEffort(effort: string) {
   const value = effort.trim()
   return value.length > 24 ? `${value.slice(0, 21)}...` : value
@@ -408,6 +416,20 @@ onBeforeUnmount(() => {
                       </span>
                     </template>
                     <span v-else class="text-muted-foreground">{{ formatDurationSeconds(log.durationMs) }}</span>
+                    <span
+                      v-if="log.contextTokens"
+                      class="text-muted-foreground"
+                      :title="t('channelLogs.contextTokensDetail', { input: formatTokenCount(log.inputTokens || 0), cacheCreation: formatTokenCount(log.cacheCreationTokens || 0), cacheRead: formatTokenCount(log.cacheReadTokens || 0) })"
+                    >
+                      {{ t('channelLogs.contextTokens') }} {{ formatTokenCount(log.contextTokens) }}
+                    </span>
+                    <span
+                      v-if="log.tokensPerSecond"
+                      class="text-muted-foreground"
+                      :title="t('channelLogs.tpsDetail', { output: formatTokenCount(log.outputTokens || 0) })"
+                    >
+                      {{ formatTokensPerSecond(log.tokensPerSecond) }} TPS
+                    </span>
                   </div>
 
                   <div v-if="expandedIndex === index && log.errorInfo" class="mt-2 border border-destructive/20 bg-destructive/10 p-2 text-xs text-destructive">

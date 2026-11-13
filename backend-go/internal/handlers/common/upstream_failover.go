@@ -658,7 +658,7 @@ func TryUpstreamWithAllKeys(
 					channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, kind)
 					RequestLogf(c, "[%s-Cancel] 请求已取消，停止渠道 failover", apiType)
 					// 完成日志记录（客户端取消）
-					completeRoutingLog(c, channelLogStore, metricsKey, logRequestID, http.StatusOK, false, "client canceled", isRetryAttempt)
+					completeRoutingLog(c, channelLogStore, metricsKey, logRequestID, http.StatusOK, false, "client canceled", isRetryAttempt, usage)
 				} else if errors.As(err, &rejected) {
 					// 上游以流内错误对象明确拒绝本次请求（invalid_request / 上下文超长等
 					// 请求侧确定性错误）：与 HTTP 4xx 的「非 failover 错误」分支同一语义，
@@ -666,7 +666,7 @@ func TryUpstreamWithAllKeys(
 					// 惩罚（不标记 Key/URL 失败、不计模型级熔断），直接返回真实错误。
 					metricsManager.RecordRequestFinalizeFailureWithClass(currentBaseURL, apiKey, metricsServiceType, requestID, metrics.FailureClassNonRetryable)
 					channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, kind)
-					completeRoutingLog(c, channelLogStore, metricsKey, logRequestID, http.StatusBadRequest, false, rejected.Error(), isRetryAttempt)
+					completeRoutingLog(c, channelLogStore, metricsKey, logRequestID, http.StatusBadRequest, false, rejected.Error(), isRetryAttempt, usage)
 					RequestLogf(c, "[%s-RequestRejected] 上游以流内错误拒绝请求 (Key: %s): %s", apiType, utils.MaskAPIKey(apiKey), rejected.Error())
 					// 预检阶段 SSE 头未写：先按客户端协议写出错误体再返回，兑现
 					// handled=true 的「已向客户端写回响应」契约，避免终态错误空 200。
@@ -686,7 +686,7 @@ func TryUpstreamWithAllKeys(
 							metricsManager.ReleaseProbe(currentBaseURL, apiKey, metricsServiceType)
 							delete(probeAcquired, retryKey)
 						}
-						completeRoutingLog(c, channelLogStore, metricsKey, logRequestID, http.StatusOK, false, err.Error(), isRetryAttempt)
+						completeRoutingLog(c, channelLogStore, metricsKey, logRequestID, http.StatusOK, false, err.Error(), isRetryAttempt, usage)
 						RequestLogf(c, "[%s-EmptyResponse-Retry] 上游短空响应 (Key: %s, 耗时: %dms)，同渠道同 Key 重试一次",
 							apiType, utils.MaskAPIKey(apiKey), elapsed.Milliseconds())
 						continue
@@ -701,7 +701,7 @@ func TryUpstreamWithAllKeys(
 						markURLFailure(currentBaseURL)
 					}
 					// 记录渠道日志
-					completeRoutingLog(c, channelLogStore, metricsKey, logRequestID, http.StatusOK, false, err.Error(), isRetryAttempt)
+					completeRoutingLog(c, channelLogStore, metricsKey, logRequestID, http.StatusOK, false, err.Error(), isRetryAttempt, usage)
 					RequestLogf(c, "[%s-InvalidResponse] 上游返回无效响应 (Key: %s): %v，尝试下一个密钥", apiType, utils.MaskAPIKey(apiKey), err)
 					continue
 				} else if blErr, ok := err.(*ErrBlacklistKey); ok {
@@ -721,7 +721,7 @@ func TryUpstreamWithAllKeys(
 					if markURLFailure != nil {
 						markURLFailure(currentBaseURL)
 					}
-					completeRoutingLog(c, channelLogStore, metricsKey, logRequestID, http.StatusOK, false, fmt.Sprintf("key blacklisted: %s - %s", blErr.Reason, blErr.Message), isRetryAttempt)
+					completeRoutingLog(c, channelLogStore, metricsKey, logRequestID, http.StatusOK, false, fmt.Sprintf("key blacklisted: %s - %s", blErr.Reason, blErr.Message), isRetryAttempt, usage)
 					RequestLogf(c, "[%s-Blacklist] SSE 流内错误触发拉黑 (Key: %s, 原因: %s)，尝试下一个密钥", apiType, utils.MaskAPIKey(apiKey), blErr.Reason)
 					continue
 				} else {
@@ -732,7 +732,7 @@ func TryUpstreamWithAllKeys(
 					metricsManager.RecordRequestFinalizeFailureWithClass(currentBaseURL, apiKey, metricsServiceType, requestID, metrics.FailureClassRetryable)
 					channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, kind)
 					// 记录渠道日志
-					completeRoutingLog(c, channelLogStore, metricsKey, logRequestID, http.StatusOK, false, err.Error(), isRetryAttempt)
+					completeRoutingLog(c, channelLogStore, metricsKey, logRequestID, http.StatusOK, false, err.Error(), isRetryAttempt, usage)
 					RequestLogf(c, "[%s-Key] 警告: 响应处理失败: %v", apiType, err)
 				}
 				return true, "", 0, nil, usage, err
@@ -748,7 +748,7 @@ func TryUpstreamWithAllKeys(
 				delete(probeAcquired, probeKey)
 			}
 			// 记录渠道日志
-			completeRoutingLog(c, channelLogStore, metricsKey, logRequestID, http.StatusOK, true, "", isRetryAttempt)
+			completeRoutingLog(c, channelLogStore, metricsKey, logRequestID, http.StatusOK, true, "", isRetryAttempt, usage)
 			return true, apiKey, originalIdx, nil, usage, nil
 		}
 

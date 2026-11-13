@@ -15,6 +15,7 @@ import (
 
 	"github.com/BenedictKing/ccx/internal/config"
 	"github.com/BenedictKing/ccx/internal/metrics"
+	"github.com/BenedictKing/ccx/internal/types"
 	"github.com/gin-gonic/gin"
 	"github.com/tidwall/gjson"
 )
@@ -181,7 +182,7 @@ func startRoutingAttempt(c *gin.Context, req *http.Request, upstream *config.Ups
 	tracker.lastAttemptID = attemptID
 	tracker.store.StartAttempt(tracker.id, metrics.RoutingAttempt{Transport: transport, Auxiliary: auxiliary, AttemptID: attemptID, EffectiveModel: effectiveModel, MappedModel: mapped, SentModel: sent, ChannelUID: upstream.ChannelUID, ChannelName: upstream.Name, ServiceType: upstream.ServiceType, ConfigRevision: hex.EncodeToString(revision[:8]), MappingOutcome: outcome, MappingSource: source, MappingTarget: mapped, MatchType: match, TransformReason: transform, TransformSteps: steps, ModelChanged: sent != tracker.model, SelectionTraceSummary: c.GetString("ccxRoutingSelectionSummary"), SelectionReason: reason})
 }
-func completeRoutingLog(c *gin.Context, store *metrics.ChannelLogStore, key, id string, code int, success bool, info string, retry bool) {
+func completeRoutingLog(c *gin.Context, store *metrics.ChannelLogStore, key, id string, code int, success bool, info string, retry bool, usage ...*types.Usage) {
 	if tracker := routingTracker(c); tracker != nil {
 		status := metrics.RoutingStatusFailed
 		if success {
@@ -192,7 +193,7 @@ func completeRoutingLog(c *gin.Context, store *metrics.ChannelLogStore, key, id 
 		tracker.lastStatus = status
 		tracker.store.FinishAttempt(tracker.id, id, status, code)
 	}
-	CompleteLog(store, key, id, code, success, info, retry)
+	CompleteLog(store, key, id, code, success, info, retry, usage...)
 }
 
 // ObserveAuxiliaryAttempt 将网关内部 compact 调用保留在明细，排除默认代理分母。

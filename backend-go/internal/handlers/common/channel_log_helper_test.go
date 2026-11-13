@@ -3,8 +3,10 @@ package common
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/BenedictKing/ccx/internal/metrics"
+	"github.com/BenedictKing/ccx/internal/types"
 )
 
 func TestRecordChannelLog_TruncatesAndMasks(t *testing.T) {
@@ -185,5 +187,50 @@ func TestCompleteLog_NormalizesEmptyStreamErrorInfo(t *testing.T) {
 	}
 	if !strings.Contains(logs[0].ErrorInfo, "检测到空流") {
 		t.Fatalf("errorInfo = %q, want diagnostic preserved", logs[0].ErrorInfo)
+	}
+}
+
+func TestApplyChannelLogUsage(t *testing.T) {
+	firstByteAt := time.Date(2026, 11, 13, 12, 0, 0, 0, time.UTC)
+	logEntry := &metrics.ChannelLog{FirstByteAt: &firstByteAt}
+	usage := &types.Usage{
+		InputTokens:                100,
+		OutputTokens:               40,
+		PromptTokensTotal:          180,
+		CacheReadInputTokens:       80,
+		CacheCreation5mInputTokens: 20,
+	}
+
+	applyChannelLogUsage(logEntry, usage, firstByteAt.Add(2*time.Second))
+
+	if logEntry.InputTokens != 100 {
+		t.Fatalf("inputTokens = %d, want 100", logEntry.InputTokens)
+	}
+	if logEntry.OutputTokens != 40 {
+		t.Fatalf("outputTokens = %d, want 40", logEntry.OutputTokens)
+	}
+	if logEntry.CacheCreationTokens != 20 {
+		t.Fatalf("cacheCreationTokens = %d, want 20", logEntry.CacheCreationTokens)
+	}
+	if logEntry.CacheReadTokens != 80 {
+		t.Fatalf("cacheReadTokens = %d, want 80", logEntry.CacheReadTokens)
+	}
+	if logEntry.ContextTokens != 200 {
+		t.Fatalf("contextTokens = %d, want 200", logEntry.ContextTokens)
+	}
+	if logEntry.TokensPerSecond != 20 {
+		t.Fatalf("tokensPerSecond = %v, want 20", logEntry.TokensPerSecond)
+	}
+}
+
+func TestApplyChannelLogUsage_WithoutFirstByteOmitsTPS(t *testing.T) {
+	logEntry := &metrics.ChannelLog{}
+	applyChannelLogUsage(logEntry, &types.Usage{InputTokens: 10, OutputTokens: 40}, time.Now())
+
+	if logEntry.ContextTokens != 10 {
+		t.Fatalf("contextTokens = %d, want 10", logEntry.ContextTokens)
+	}
+	if logEntry.TokensPerSecond != 0 {
+		t.Fatalf("tokensPerSecond = %v, want omitted", logEntry.TokensPerSecond)
 	}
 }

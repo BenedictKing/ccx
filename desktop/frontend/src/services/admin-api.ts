@@ -655,6 +655,12 @@ export interface ChannelLogEntry {
   actualReasoningEffort?: string
   statusCode: number
   durationMs: number
+  inputTokens?: number
+  outputTokens?: number
+  cacheCreationTokens?: number
+  cacheReadTokens?: number
+  contextTokens?: number
+  tokensPerSecond?: number
   success: boolean
   keyMask: string
   baseUrl: string

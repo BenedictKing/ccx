@@ -706,7 +706,8 @@ func isBreakerRelevantFailure(success bool, failureClass FailureClass) bool {
 	return normalizeFailureClass(success, failureClass).IsBreakerRelevant()
 }
 
-func extractUsageTokens(usage *types.Usage) (int64, int64, int64, int64) {
+// ExtractUsageTokens 按网关统计口径归一化输入、输出与缓存 token。
+func ExtractUsageTokens(usage *types.Usage) (int64, int64, int64, int64) {
 	if usage == nil {
 		return 0, 0, 0, 0
 	}

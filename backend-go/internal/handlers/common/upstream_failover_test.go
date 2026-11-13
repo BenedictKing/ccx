@@ -390,7 +390,7 @@ func TestTryUpstreamWithAllKeysRecordsSelectionTrace(t *testing.T) {
 		nil,
 		func(c *gin.Context, resp *http.Response, upstreamCopy *config.UpstreamConfig, apiKey string, actualRequestBody []byte) (*types.Usage, error) {
 			_ = resp.Body.Close()
-			return nil, nil
+			return &types.Usage{InputTokens: 10, OutputTokens: 20}, nil
 		},
 		"gpt-trace",
 		"",
@@ -434,6 +434,12 @@ func TestTryUpstreamWithAllKeysRecordsSelectionTrace(t *testing.T) {
 	}
 	if !strings.Contains(logs[0].SelectionTraceSummary, "selected=0:trace-messages/priority_order") {
 		t.Fatalf("selectionTraceSummary = %q, want selected channel summary", logs[0].SelectionTraceSummary)
+	}
+	if logs[0].ContextTokens != 10 || logs[0].OutputTokens != 20 {
+		t.Fatalf("log usage context/output = %d/%d, want 10/20", logs[0].ContextTokens, logs[0].OutputTokens)
+	}
+	if logs[0].TokensPerSecond <= 0 {
+		t.Fatalf("tokensPerSecond = %v, want positive value from real request lifecycle", logs[0].TokensPerSecond)
 	}
 }
 

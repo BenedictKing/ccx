@@ -20,6 +20,12 @@ type ChannelLog struct {
 	ActualReasoningEffort   string    `json:"actualReasoningEffort,omitempty"`   // 实际发往上游的思考强度
 	StatusCode              int       `json:"statusCode"`
 	DurationMs              int64     `json:"durationMs"`
+	InputTokens             int       `json:"inputTokens,omitempty"`
+	OutputTokens            int       `json:"outputTokens,omitempty"`
+	CacheCreationTokens     int       `json:"cacheCreationTokens,omitempty"`
+	CacheReadTokens         int       `json:"cacheReadTokens,omitempty"`
+	ContextTokens           int       `json:"contextTokens,omitempty"`
+	TokensPerSecond         float64   `json:"tokensPerSecond,omitempty"`
 	Success                 bool      `json:"success"`
 	KeyMask                 string    `json:"keyMask"`
 	BaseURL                 string    `json:"baseUrl"`
