@@ -54,17 +54,18 @@ type CandidateFilterFunc func(
 
 // SelectionOptions 描述一次渠道选择所需的上下文。
 type SelectionOptions struct {
-	UserID             string
-	FailedChannels     map[int]bool
-	Kind               ChannelKind
-	Model              string
-	RoutePrefix        string
-	ChannelName        string
-	ContextRequirement *ContextRequirement
-	HasImageContent    bool
-	AgentRole          string // "main" | "subagent" — 角色感知 override 查找与亲和隔离
-	CandidateFilter    CandidateFilterFunc
-	DryRun             bool // 只诊断选择结果，不更新 lastSelectedChannel 或 override TTL
+	UserID                string
+	FailedChannels        map[int]bool
+	Kind                  ChannelKind
+	Model                 string
+	RoutePrefix           string
+	ChannelName           string
+	ContextRequirement    *ContextRequirement
+	HasImageContent       bool
+	PreserveTraceAffinity bool   // 加密续轮不因自动优先级切换渠道；显式覆盖与可用性检查仍生效
+	AgentRole             string // "main" | "subagent" — 角色感知 override 查找与亲和隔离
+	CandidateFilter       CandidateFilterFunc
+	DryRun                bool // 只诊断选择结果，不更新 lastSelectedChannel 或 override TTL
 }
 
 func (s *ChannelScheduler) selectionResult(kind ChannelKind, upstream *config.UpstreamConfig, channelIndex int, reason string) *SelectionResult {

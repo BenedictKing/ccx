@@ -201,13 +201,14 @@ func selectResponsesWebSocketChannel(
 	common.ApplyAgentModelProfile(contextRequirement, model, cfg)
 
 	return channelScheduler.SelectChannelWithOptions(c.Request.Context(), scheduler.SelectionOptions{
-		UserID:             userID,
-		Kind:               scheduler.ChannelKindResponses,
-		Model:              model,
-		RoutePrefix:        c.Param("routePrefix"),
-		ChannelName:        c.GetHeader("X-Channel"),
-		ContextRequirement: contextRequirement,
-		AgentRole:          agentRole,
+		UserID:                userID,
+		Kind:                  scheduler.ChannelKindResponses,
+		Model:                 model,
+		RoutePrefix:           c.Param("routePrefix"),
+		ChannelName:           c.GetHeader("X-Channel"),
+		ContextRequirement:    contextRequirement,
+		PreserveTraceAffinity: common.HasResponsesEncryptedContent(payload),
+		AgentRole:             agentRole,
 	})
 }
 

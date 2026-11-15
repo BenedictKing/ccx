@@ -109,8 +109,10 @@ func HandleMultiChannelFailoverWithSelectionFilter(
 	var lastError error
 	var lastFailoverError *FailoverError
 	hasImageContent := false
+	preserveTraceAffinity := false
 	if body := GetEffectiveRequestBody(c, nil); len(body) > 0 {
 		hasImageContent = HasImageContent(c, body)
+		preserveTraceAffinity = kind == scheduler.ChannelKindResponses && HasResponsesEncryptedContent(body)
 	}
 
 	maxChannelAttempts := channelScheduler.GetActiveChannelCount(kind)
@@ -152,16 +154,17 @@ func HandleMultiChannelFailoverWithSelectionFilter(
 			}
 
 			selection, err := channelScheduler.SelectChannelWithOptions(c.Request.Context(), scheduler.SelectionOptions{
-				UserID:             userID,
-				FailedChannels:     failedChannels,
-				Kind:               kind,
-				Model:              target,
-				RoutePrefix:        c.Param("routePrefix"),
-				ChannelName:        c.GetHeader("X-Channel"),
-				ContextRequirement: contextRequirement,
-				HasImageContent:    hasImageContent,
-				AgentRole:          agentRole,
-				CandidateFilter:    filter,
+				UserID:                userID,
+				FailedChannels:        failedChannels,
+				Kind:                  kind,
+				Model:                 target,
+				RoutePrefix:           c.Param("routePrefix"),
+				ChannelName:           c.GetHeader("X-Channel"),
+				ContextRequirement:    contextRequirement,
+				HasImageContent:       hasImageContent,
+				PreserveTraceAffinity: preserveTraceAffinity,
+				AgentRole:             agentRole,
+				CandidateFilter:       filter,
 			})
 			if err != nil {
 				lastError = err

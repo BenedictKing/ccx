@@ -285,8 +285,8 @@ func (s *ChannelScheduler) SelectChannelWithOptions(ctx context.Context, opts Se
 						trace.skipChannel(ch, "trace_affinity", "inactive_status", ch.Status)
 						continue
 					}
-					// 如果存在更高优先级且健康的候选渠道，允许优先级覆盖亲和性
-					if bestPriority >= 0 && ch.Priority > bestPriority {
+					// 加密续轮优先复用已成功渠道，避免跨上游重放无法解密的状态。
+					if !opts.PreserveTraceAffinity && bestPriority >= 0 && ch.Priority > bestPriority {
 						prefix := kindSchedulerLogPrefix(kind)
 						log.Printf("[%s-Affinity] 跳过亲和渠道 [%d] %s: 存在更高优先级可用渠道 (亲和优先级: %d, 最优优先级: %d, user: %s)", prefix, preferredIdx, ch.Name, ch.Priority, bestPriority, maskUserID(userID))
 						trace.skipChannel(ch, "trace_affinity", "better_priority_available", fmt.Sprintf("affinity=%d best=%d", ch.Priority, bestPriority))
