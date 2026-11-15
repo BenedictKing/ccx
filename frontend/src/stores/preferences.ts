@@ -25,7 +25,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
   // UI 语言（默认取运行时配置，persistedstate 有值时会自动覆盖）
   const uiLanguage = ref<SupportedLocale>(getRuntimeLocale())
 
-  // 全局统计面板展开状态
+  // 全局统计面板展开状态（仅当前页面有效，刷新后默认收起）
   const showGlobalStats = ref(false)
 
   // 是否已看过新用户指引（首次登录自动弹出一次）
@@ -128,6 +128,8 @@ export const usePreferencesStore = defineStore('preferences', () => {
   // 持久化配置
   persist: {
     key: 'ccx-preferences',
+    // 排除展开状态，同时忽略旧缓存中保存的展开值
+    omit: ['showGlobalStats'],
     // 使用条件判断避免在非浏览器环境（SSR、Node 测试）中崩溃
     storage: typeof window !== 'undefined' ? localStorage : undefined,
   },
