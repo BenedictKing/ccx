@@ -37,6 +37,8 @@ type persistedConversation struct {
 	SubagentChannel      int        `json:"subagentChannel,omitempty"`
 	CreatedAt            time.Time  `json:"createdAt"`
 	LastActiveAt         time.Time  `json:"lastActiveAt"`
+
+	SuccessfulChannels map[string]ChannelEntry `json:"successfulChannels,omitempty"`
 }
 
 type persistedState struct {
@@ -106,6 +108,7 @@ func savePersistedState(path string, conversations map[string]*Conversation) err
 			SubagentCount:        conv.SubagentCount,
 			MainChannel:          conv.MainChannel,
 			SubagentChannel:      conv.SubagentChannel,
+			SuccessfulChannels:   conv.SuccessfulChannels,
 			CreatedAt:            conv.CreatedAt,
 			LastActiveAt:         conv.LastActiveAt,
 		})

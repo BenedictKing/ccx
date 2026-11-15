@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"log"
+	"maps"
 	"sort"
 	"strings"
 	"sync"
@@ -43,6 +44,9 @@ type Conversation struct {
 	SubagentCount   int  `json:"subagentCount,omitempty"`
 	MainChannel     int  `json:"mainChannel,omitempty"`
 	SubagentChannel int  `json:"subagentChannel,omitempty"`
+
+	// 成功渠道独立于流式进行中状态，用于恢复加密续轮的来源亲和。
+	SuccessfulChannels map[string]ChannelEntry `json:"-"`
 }
 
 func (conv *Conversation) recomputeTitle() {
@@ -177,6 +181,12 @@ func (ct *ConversationTracker) TrackWithStatusAndMessages(kind, userID, model st
 	conv.ChannelName = channelName
 	conv.LastModel = model
 	conv.Status = status
+	if kind == "responses" && status == "active" {
+		if conv.SuccessfulChannels == nil {
+			conv.SuccessfulChannels = make(map[string]ChannelEntry)
+		}
+		conv.SuccessfulChannels[affinityRole(agentRole)] = ChannelEntry{ChannelIndex: channelIndex, ChannelName: channelName}
+	}
 
 	// 角色观测：subagent 单独累计，主对话记录主渠道
 	if agentRole == "subagent" {
@@ -376,6 +386,25 @@ func (ct *ConversationTracker) GetConversationByUser(kind, userID string) (*Conv
 	return conv, ok
 }
 
+// GetSuccessfulChannel 返回成功渠道的值快照，避免读取进行中请求覆盖的 CurrentChannel。
+func (ct *ConversationTracker) GetSuccessfulChannel(kind, userID, agentRole string) (ChannelEntry, bool) {
+	ct.mu.RLock()
+	defer ct.mu.RUnlock()
+	conv := ct.conversations[ct.userMapping[kind+":"+userID]]
+	if conv == nil {
+		return ChannelEntry{}, false
+	}
+	channel, ok := conv.SuccessfulChannels[affinityRole(agentRole)]
+	return channel, ok
+}
+
+func affinityRole(agentRole string) string {
+	if agentRole == "subagent" {
+		return "subagent"
+	}
+	return "main"
+}
+
 func (ct *ConversationTracker) Stop() {
 	ct.stopOnce.Do(func() {
 		close(ct.stopCh)
@@ -444,6 +473,7 @@ func (ct *ConversationTracker) loadFromDisk() {
 			SubagentCount:        item.SubagentCount,
 			MainChannel:          item.MainChannel,
 			SubagentChannel:      item.SubagentChannel,
+			SuccessfulChannels:   maps.Clone(item.SuccessfulChannels),
 			CreatedAt:            item.CreatedAt,
 			LastActiveAt:         item.LastActiveAt,
 			Status:               "idle",
@@ -484,6 +514,7 @@ func (ct *ConversationTracker) flushToDisk() {
 	snapshot := make(map[string]*Conversation, len(ct.conversations))
 	for id, conv := range ct.conversations {
 		c := *conv
+		c.SuccessfulChannels = maps.Clone(conv.SuccessfulChannels)
 		if len(conv.Models) > 0 {
 			c.Models = make([]string, len(conv.Models))
 			copy(c.Models, conv.Models)

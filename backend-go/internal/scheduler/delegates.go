@@ -44,6 +44,10 @@ func (s *ChannelScheduler) SetTraceAffinityForRequirement(userID string, channel
 	if userID != "" {
 		compositeKey := traceAffinityKey(kind, userID, requirement)
 		s.traceAffinity.SetPreferredChannel(compositeKey, channelIndex)
+		if kind == ChannelKindResponses && requirement != nil {
+			// 加密续轮使用不带上下文桶的最近成功渠道；普通请求继续使用原有分桶。
+			s.traceAffinity.SetPreferredChannel(traceAffinityKey(kind, userID, nil), channelIndex)
+		}
 	}
 }
 

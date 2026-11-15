@@ -273,8 +273,7 @@ func (s *ChannelScheduler) SelectChannelWithOptions(ctx context.Context, opts Se
 
 	// 1. 检查 Trace 亲和性（促销渠道失败时或无促销渠道时）
 	if userID != "" {
-		compositeKey := traceAffinityKey(kind, affinityUserID, opts.ContextRequirement)
-		if preferredIdx, ok := s.traceAffinity.GetPreferredChannel(compositeKey); ok {
+		if preferredIdx, ok := s.preferredTraceChannel(opts, affinityUserID, activeChannels); ok {
 			bestPriority := s.findBestAvailableChannelPriority(activeChannels, failedChannels, kind, model)
 			for _, ch := range activeChannels {
 				if ch.Index == preferredIdx && !failedChannels[preferredIdx] {
@@ -883,6 +882,27 @@ func formatOverrideSequenceHead(sequence []conversation.ChannelEntry, limit int)
 		parts = append(parts, fmt.Sprintf("+%d", len(sequence)-limit))
 	}
 	return "[" + strings.Join(parts, ",") + "]"
+}
+
+// preferredTraceChannel 对加密续轮优先恢复成功渠道，普通亲和仍按上下文桶和 TTL 隔离。
+func (s *ChannelScheduler) preferredTraceChannel(opts SelectionOptions, affinityUserID string, channels []ChannelInfo) (int, bool) {
+	if opts.Kind == ChannelKindResponses && opts.PreserveTraceAffinity {
+		if s.conversationTracker != nil {
+			if channel, ok := s.conversationTracker.GetSuccessfulChannel(string(opts.Kind), opts.UserID, opts.AgentRole); ok {
+				// 渠道重排后按名称恢复，避免旧索引指向另一个上游；过滤掉的来源仍走正常 failover。
+				for _, candidate := range channels {
+					if candidate.Name == channel.ChannelName {
+						return candidate.Index, true
+					}
+				}
+				return -1, true
+			}
+		}
+		if preferred, ok := s.traceAffinity.GetPreferredChannel(traceAffinityKey(opts.Kind, affinityUserID, nil)); ok {
+			return preferred, true
+		}
+	}
+	return s.traceAffinity.GetPreferredChannel(traceAffinityKey(opts.Kind, affinityUserID, opts.ContextRequirement))
 }
 
 func traceAffinityKey(kind ChannelKind, userID string, requirement *ContextRequirement) string {
