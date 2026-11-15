@@ -233,7 +233,7 @@ export function useAppController() {
 
   // ============== 能力测试 ==============
   const {
-    showCapabilityTestDialog, capabilityTestChannelName, capabilityTestChannelId,
+    showCapabilityTestDialog, capabilityTestChannelName, capabilityTestChannel, capabilityTestChannelId,
     capabilityTestChannelType, capabilityTestSourceTab, capabilityTestDialogRef,
     capabilityTestJobId, capabilityPollers, capabilityTestJob, capabilityTestRpm,
     capabilityTestPreviousJobId, capabilityRetryPendingUntil,
@@ -898,6 +898,7 @@ export function useAppController() {
     pingChannel,
     showCapabilityTestDialog,
     capabilityTestChannelName,
+    capabilityTestChannel,
     capabilityTestChannelId,
     capabilityTestChannelType,
     capabilityTestSourceTab,

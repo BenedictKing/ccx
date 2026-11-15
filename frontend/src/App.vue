@@ -410,6 +410,7 @@
       ref="capabilityTestDialogRef"
       v-model="showCapabilityTestDialog"
       :channel-name="capabilityTestChannelName"
+      :channel="capabilityTestChannel"
       :current-tab="channelStore.activeTab"
       :capability-job="capabilityTestJob"
       :capability-rpm="capabilityTestRpm"
@@ -749,6 +750,7 @@ const {
   pingChannel,
   showCapabilityTestDialog,
   capabilityTestChannelName,
+  capabilityTestChannel,
   capabilityTestDialogRef,
   capabilityTestJob,
   capabilityTestRpm,

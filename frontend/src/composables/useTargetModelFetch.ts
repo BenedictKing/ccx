@@ -41,6 +41,7 @@ export function useTargetModelFetch(options: TargetModelFetchOptions) {
   const fetchingModels = ref(false)
   const fetchModelsError = ref('')
   const keyModelsStatus = ref<Map<string, KeyModelsStatus>>(new Map())
+  let fetchGeneration = 0
 
   const normalizeTargetModelNames = (models: string[]) => {
     const byLowercaseModel = new Map<string, string>()
@@ -61,6 +62,8 @@ export function useTargetModelFetch(options: TargetModelFetchOptions) {
   }
 
   const resetTargetModelOptions = () => {
+    fetchGeneration++
+    fetchingModels.value = false
     upstreamTargetModels.value = []
     targetModelOptions.value = []
   }
@@ -103,6 +106,7 @@ export function useTargetModelFetch(options: TargetModelFetchOptions) {
 
     fetchingModels.value = true
     fetchModelsError.value = ''
+    const generation = fetchGeneration
 
     const modelsApiType = resolveModelsApiType()
     const requestOverrides = {
@@ -142,6 +146,7 @@ export function useTargetModelFetch(options: TargetModelFetchOptions) {
             break
         }
 
+        if (generation !== fetchGeneration) return []
         keyModelsStatus.value.set(apiKey, {
           loading: false,
           success: true,
@@ -150,6 +155,7 @@ export function useTargetModelFetch(options: TargetModelFetchOptions) {
         })
         return response.data
       } catch (error) {
+        if (generation !== fetchGeneration) return []
         let errorMsg = options.t('addChannel.unknownError')
         let statusCode = 0
         if (error instanceof ApiError) {
@@ -170,6 +176,7 @@ export function useTargetModelFetch(options: TargetModelFetchOptions) {
 
     try {
       const results = await Promise.all(keyPromises)
+      if (generation !== fetchGeneration) return
       mergeUpstreamTargetModelOptions(results.flatMap(models => models.map(m => m.id)))
 
       const allFailed = candidateKeys.every(key => {
@@ -180,7 +187,7 @@ export function useTargetModelFetch(options: TargetModelFetchOptions) {
         fetchModelsError.value = options.t('addChannel.allApiKeysModelsFailed')
       }
     } finally {
-      fetchingModels.value = false
+      if (generation === fetchGeneration) fetchingModels.value = false
     }
   }
 

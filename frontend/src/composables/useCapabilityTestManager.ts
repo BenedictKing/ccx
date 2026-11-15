@@ -15,6 +15,7 @@ export function useCapabilityTestManager(
 
 const showCapabilityTestDialog = ref(false)
 const capabilityTestChannelName = ref('')
+const capabilityTestChannel = ref<Channel | null>(null)
 const capabilityTestChannelId = ref<number | null>(null)
 const capabilityTestChannelType = ref<CapabilityChannelKind>('messages')
 const capabilityTestSourceTab = ref<CapabilityChannelKind>('messages')
@@ -498,6 +499,7 @@ const testChannelCapability = async (channelId: number) => {
   const channelType = channelStore.activeTab  // API 路径由渠道配置位置决定
   const sourceTab = channelStore.activeTab  // 当前查看的 Tab 协议类型
   capabilityTestChannelName.value = channel.name || t('capability.channelFallback', { id: channelId })
+  capabilityTestChannel.value = channel
   capabilityTestChannelId.value = channelId
   capabilityTestChannelType.value = channelType
   capabilityTestSourceTab.value = sourceTab
@@ -746,7 +748,7 @@ const handleCopyToTab = async (targetProtocol: string, serviceProtocol = targetP
 }
 
   return {
-    showCapabilityTestDialog, capabilityTestChannelName, capabilityTestChannelId,
+    showCapabilityTestDialog, capabilityTestChannelName, capabilityTestChannel, capabilityTestChannelId,
     capabilityTestChannelType, capabilityTestSourceTab, capabilityTestDialogRef,
     capabilityTestJobId, capabilityPollers, capabilityTestJob, capabilityTestRpm,
     capabilityTestPreviousJobId, capabilityRetryPendingUntil,

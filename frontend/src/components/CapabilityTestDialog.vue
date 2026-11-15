@@ -24,16 +24,38 @@
       <v-divider />
 
       <v-card-text class="pa-4">
-        <v-text-field
+        <v-combobox
           v-if="job"
           v-model="customModel"
+          :items="targetModelOptions"
+          item-title="title"
+          item-value="value"
+          :return-object="false"
           :label="t('capability.customModel')"
+          :hint="t('capability.customModelHint')"
+          :loading="fetchingModels"
+          :error-messages="fetchModelsError"
+          :no-data-text="t('addChannel.modelListEmptyHint')"
+          :menu-props="{ attach: 'body', zIndex: 2500 }"
           variant="outlined"
           density="compact"
-          hide-details
+          hide-details="auto"
+          persistent-hint
           clearable
           class="mb-3"
-        />
+          @focus="ensureTargetModelsLoaded"
+        >
+          <template #append>
+            <v-btn
+              icon="mdi-refresh"
+              size="small"
+              variant="text"
+              :aria-label="t('capability.refreshModels')"
+              :disabled="fetchingModels || !channel"
+              @click="refreshModels"
+            />
+          </template>
+        </v-combobox>
         <div v-if="state === 'initializing'" class="d-flex flex-column align-center py-8">
           <v-progress-circular indeterminate size="48" color="primary" />
           <p class="text-body-1 mt-4 text-medium-emphasis">{{ t('capability.loadingTitle') }}</p>
@@ -127,7 +149,7 @@
                     :disabled="isTestProtocolButtonDisabled(test)"
                     @click="handleTestProtocol(test.protocol)"
                   >
-                    {{ t('capability.startTest') }}
+                    {{ t(customModel?.trim() ? 'capability.testSelectedModel' : 'capability.startTest') }}
                   </v-btn>
                   <template v-if="!isProtocolFailed(test)">
                     <div class="d-flex align-center ga-1">
@@ -226,7 +248,7 @@
                         :disabled="isTestProtocolButtonDisabled(test)"
                         @click="handleTestProtocol(test.protocol)"
                       >
-                        {{ t('capability.startTest') }}
+                        {{ t(customModel?.trim() ? 'capability.testSelectedModel' : 'capability.startTest') }}
                       </v-btn>
                       <v-btn
                         v-if="test.success && !isCurrentTabProtocol(test.protocol)"
@@ -332,17 +354,21 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
+import { api } from '../services/api'
 import type {
   CapabilityTestJob,
-  CapabilityProtocolJobResult
+  CapabilityProtocolJobResult,
+  Channel
 } from '../services/api'
 import { useI18n } from '../i18n'
+import { useTargetModelFetch } from '../composables/useTargetModelFetch'
 import CapabilityModelResults from './CapabilityModelResults.vue'
 
 interface Props {
   modelValue: boolean
   channelName: string
+  channel?: Channel | null
   currentTab: string
   capabilityJob: CapabilityTestJob | null
   capabilityRpm: number
@@ -355,7 +381,7 @@ const emit = defineEmits<{
   'copyToTab': [targetProtocol: string, serviceProtocol?: string]
   'cancel': []
   'retryModel': [protocol: string, model: string]
-  'testProtocol': [protocol: string, models?: string[]]
+  'testProtocol': [protocol: string, models?: string[], options?: { force: boolean }]
 }>()
 
 const { t } = useI18n()
@@ -363,6 +389,56 @@ const { t } = useI18n()
 const errorMessage = ref('')
 const cancelling = ref(false)
 const customModel = ref<string | null>('')
+const modelsForm = reactive({
+  apiKeys: [] as string[],
+  authHeader: 'auto' as NonNullable<Channel['authHeader']>,
+  baseUrl: '',
+  customHeaders: {} as Record<string, string>,
+  insecureSkipVerify: false,
+  proxyUrl: '',
+  serviceType: 'claude' as Channel['serviceType'],
+})
+const {
+  targetModelOptions, fetchingModels, fetchModelsError, keyModelsStatus,
+  resetTargetModelOptions, fetchTargetModels, ensureTargetModelsLoaded,
+} = useTargetModelFetch({
+  apiService: api,
+  channel: computed(() => props.channel),
+  channelType: computed(() => {
+    const kind = props.capabilityJob?.channelKind
+    return kind === 'chat' || kind === 'responses' || kind === 'gemini' ? kind : 'messages'
+  }),
+  defaultServiceType: () => props.channel?.serviceType ?? 'claude',
+  form: modelsForm,
+  isEditing: computed(() => true),
+  t,
+  visibleDisabledKeys: computed(() => props.channel?.disabledApiKeys ?? []),
+})
+
+const refreshModels = () => {
+  resetTargetModelOptions()
+  keyModelsStatus.value.clear()
+  return fetchTargetModels()
+}
+
+watch(() => [props.modelValue, props.channel] as const, ([open, channel]) => {
+  if (!open) return
+  customModel.value = ''
+  resetTargetModelOptions()
+  keyModelsStatus.value.clear()
+  fetchModelsError.value = ''
+  if (!channel) return
+  Object.assign(modelsForm, {
+    apiKeys: [...channel.apiKeys],
+    authHeader: channel.authHeader || 'auto',
+    baseUrl: channel.baseUrl || channel.baseUrls?.[0] || '',
+    customHeaders: { ...channel.customHeaders },
+    insecureSkipVerify: channel.insecureSkipVerify ?? false,
+    proxyUrl: channel.proxyUrl ?? '',
+    serviceType: channel.serviceType,
+  })
+  void fetchTargetModels()
+}, { immediate: true })
 const DEFAULT_CAPABILITY_TEST_RPM = 30
 const rpmValue = ref(DEFAULT_CAPABILITY_TEST_RPM)
 
@@ -641,7 +717,11 @@ const isTestProtocolButtonDisabled = (test: CapabilityProtocolJobResult): boolea
 
 const handleTestProtocol = (protocol: string) => {
   const model = customModel.value?.trim()
-  emit('testProtocol', protocol, model ? [model] : undefined)
+  if (model) {
+    emit('testProtocol', protocol, [model], { force: true })
+  } else {
+    emit('testProtocol', protocol, undefined)
+  }
 }
 
 const handleRpmBlur = () => {
