@@ -368,20 +368,27 @@ func TestRunRedirectVerification_SharedActualModel(t *testing.T) {
 	}
 }
 
-func TestFilterCapabilityProbeModels(t *testing.T) {
+func TestSelectCapabilityProbeModels(t *testing.T) {
 	probeModels := []string{"claude-opus-4-7", "claude-opus-4-6", "claude-sonnet-4-6"}
-	filtered := filterCapabilityProbeModels(probeModels, []string{"claude-opus-4-7"})
-
-	if len(filtered) != 1 {
-		t.Fatalf("filtered len = %d, want 1: %#v", len(filtered), filtered)
+	customModels := []string{"private-b", "private-a"}
+	selected := selectCapabilityProbeModels(probeModels, customModels)
+	if len(selected) != len(customModels) {
+		t.Fatalf("selected len = %d, want %d: %#v", len(selected), len(customModels), selected)
 	}
-	if filtered[0] != "claude-opus-4-7" {
-		t.Fatalf("filtered[0] = %q, want claude-opus-4-7", filtered[0])
+	for i, want := range customModels {
+		if selected[i] != want {
+			t.Fatalf("selected[%d] = %q, want %q", i, selected[i], want)
+		}
 	}
 
-	unfiltered := filterCapabilityProbeModels(probeModels, nil)
-	if len(unfiltered) != len(probeModels) {
-		t.Fatalf("unfiltered len = %d, want %d", len(unfiltered), len(probeModels))
+	defaults := selectCapabilityProbeModels(probeModels, nil)
+	if len(defaults) != len(probeModels) {
+		t.Fatalf("defaults len = %d, want %d", len(defaults), len(probeModels))
+	}
+	for i, want := range probeModels {
+		if defaults[i] != want {
+			t.Fatalf("defaults[%d] = %q, want %q", i, defaults[i], want)
+		}
 	}
 }
 

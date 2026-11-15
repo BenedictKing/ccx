@@ -173,7 +173,7 @@ func runCapabilityTestJob(ctx context.Context, jobID, channelKind string, channe
 
 		// 获取本次探测模型，按顺序生成模型结果
 		probeModels, _ := getCapabilityProbeModels(sourceTab)
-		probeModels = filterCapabilityProbeModels(probeModels, userModels)
+		probeModels = selectCapabilityProbeModels(probeModels, userModels)
 		var modelResults []ModelTestResult
 		successCount := 0
 		totalLatency := int64(0)

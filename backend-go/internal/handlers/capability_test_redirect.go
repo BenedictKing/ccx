@@ -35,7 +35,7 @@ func runRedirectVerification(ctx context.Context, channel *config.UpstreamConfig
 		return nil
 	}
 
-	probeModels = filterCapabilityProbeModels(probeModels, userModels)
+	probeModels = selectCapabilityProbeModels(probeModels, userModels)
 
 	testedActualModels := make(map[string]bool)
 	for _, m := range probeModels {
@@ -222,21 +222,12 @@ func countRedirectSuccesses(results []RedirectModelResult) int {
 	return n
 }
 
-func filterCapabilityProbeModels(probeModels []string, userModels []string) []string {
-	if len(userModels) == 0 {
-		return probeModels
+// selectCapabilityProbeModels 优先使用自选模型，允许测试默认列表以外的模型。
+func selectCapabilityProbeModels(probeModels []string, userModels []string) []string {
+	if len(userModels) > 0 {
+		return userModels
 	}
-	userSet := make(map[string]bool, len(userModels))
-	for _, model := range userModels {
-		userSet[model] = true
-	}
-	filtered := make([]string, 0, len(userModels))
-	for _, model := range probeModels {
-		if userSet[model] {
-			filtered = append(filtered, model)
-		}
-	}
-	return filtered
+	return probeModels
 }
 
 // executeRedirectModelTest 单个重定向模型测试：用 actualModel 构建请求，probeModel 记录到结果

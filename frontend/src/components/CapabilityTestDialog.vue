@@ -362,7 +362,7 @@ const { t } = useI18n()
 
 const errorMessage = ref('')
 const cancelling = ref(false)
-const customModel = ref('')
+const customModel = ref<string | null>('')
 const DEFAULT_CAPABILITY_TEST_RPM = 30
 const rpmValue = ref(DEFAULT_CAPABILITY_TEST_RPM)
 
@@ -640,7 +640,7 @@ const isTestProtocolButtonDisabled = (test: CapabilityProtocolJobResult): boolea
 }
 
 const handleTestProtocol = (protocol: string) => {
-  const model = customModel.value.trim()
+  const model = customModel.value?.trim()
   emit('testProtocol', protocol, model ? [model] : undefined)
 }
 
