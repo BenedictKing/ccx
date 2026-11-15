@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"io"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -28,23 +29,15 @@ func TestGetCapabilityProbeModels_ContainsCodexAutoReview(t *testing.T) {
 	}
 }
 
-func TestGetCapabilityProbeModels_ContainsGPT56Models(t *testing.T) {
+func TestGetCapabilityProbeModels_DefaultGPTModels(t *testing.T) {
+	want := []string{"gpt-6.1-sol", "gpt-6.1-terra", "gpt-6-astra", "gpt-5.6-sol", "codex-auto-review"}
 	for _, protocol := range []string{"chat", "responses"} {
 		models, err := getCapabilityProbeModels(protocol)
 		if err != nil {
 			t.Fatalf("protocol=%s unexpected error: %v", protocol, err)
 		}
-		for _, want := range []string{"gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"} {
-			found := false
-			for _, model := range models {
-				if model == want {
-					found = true
-					break
-				}
-			}
-			if !found {
-				t.Fatalf("protocol=%s probe models should contain %s, got %v", protocol, want, models)
-			}
+		if !reflect.DeepEqual(models, want) {
+			t.Fatalf("protocol=%s probe models=%v, want %v", protocol, models, want)
 		}
 	}
 }
@@ -82,9 +75,9 @@ func TestGetCapabilityProbeModel(t *testing.T) {
 		wantErr  bool
 	}{
 		{protocol: "messages", want: "claude-fable-5"},
-		{protocol: "chat", want: "gpt-5.5"},
+		{protocol: "chat", want: "gpt-6.1-sol"},
 		{protocol: "gemini", want: "gemini-3.5-flash"},
-		{protocol: "responses", want: "gpt-5.5"},
+		{protocol: "responses", want: "gpt-6.1-sol"},
 		{protocol: "unknown", wantErr: true},
 	}
 
@@ -125,7 +118,7 @@ func TestBuildTestRequest_UsesCentralizedProbeModels(t *testing.T) {
 		{
 			protocol:      "chat",
 			expectedURL:   "https://api.example.com/v1/chat/completions",
-			expectedModel: "gpt-5.5",
+			expectedModel: "gpt-6.1-sol",
 		},
 		{
 			protocol:      "gemini",
@@ -136,7 +129,7 @@ func TestBuildTestRequest_UsesCentralizedProbeModels(t *testing.T) {
 		{
 			protocol:      "responses",
 			expectedURL:   "https://api.example.com/v1/responses",
-			expectedModel: "gpt-5.5",
+			expectedModel: "gpt-6.1-sol",
 		},
 	}
 

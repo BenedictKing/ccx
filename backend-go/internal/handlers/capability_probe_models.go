@@ -12,9 +12,9 @@ const (
 	capabilityProbeModelClaudeFable5 = "claude-fable-5"
 	capabilityProbeModelClaudeOpus48 = "claude-opus-4-8"
 	capabilityProbeModelMessages     = capabilityProbeModelClaudeFable5 + "," + capabilityProbeModelClaudeOpus48 + ",claude-opus-4-7,claude-opus-4-6,claude-sonnet-4-6,claude-sonnet-4-5-20250929,claude-haiku-4-5-20251001"
-	capabilityProbeModelChat         = "gpt-5.5,gpt-5.4,gpt-5.6-sol,gpt-5.6-terra,gpt-5.6-luna,gpt-5.4-mini,codex-auto-review"
+	capabilityProbeModelChat         = "gpt-6.1-sol,gpt-6.1-terra,gpt-6-astra,gpt-5.6-sol,codex-auto-review"
 	capabilityProbeModelGemini       = "gemini-3.5-flash,gemini-3.1-pro-preview,gemini-3-pro-preview,gemini-3-flash-preview,gemini-3.1-flash-lite"
-	capabilityProbeModelResponses    = "gpt-5.5,gpt-5.4,gpt-5.6-sol,gpt-5.6-terra,gpt-5.6-luna,gpt-5.4-mini,codex-auto-review"
+	capabilityProbeModelResponses    = capabilityProbeModelChat
 )
 
 var capabilityProbeModels = map[string]string{

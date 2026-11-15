@@ -799,7 +799,7 @@ func TestRunRedirectVerification_CodexAutoReviewDedup(t *testing.T) {
 	}))
 	defer server.Close()
 
-	// codex-auto-review 和 gpt-5.4-mini 映射到同一实际模型
+	// codex-auto-review 和 gpt-6.1-terra 映射到同一实际模型
 	channel := &config.UpstreamConfig{
 		Name:        "gpt-channel-dedup",
 		ServiceType: "openai",
@@ -807,15 +807,15 @@ func TestRunRedirectVerification_CodexAutoReviewDedup(t *testing.T) {
 		APIKeys:     []string{"test-key"},
 		ModelMapping: map[string]string{
 			"codex-auto-review": "deepseek-v4-flash",
-			"gpt-5.4-mini":      "deepseek-v4-flash",
-			"gpt-5.5":           "deepseek-v4",
+			"gpt-6.1-terra":     "deepseek-v4-flash",
+			"gpt-6.1-sol":       "deepseek-v4",
 		},
 	}
 
 	job := newCapabilityTestJob(1, channel.Name, "responses", channel.ServiceType, []string{"responses->chat"}, 5*time.Second, 600)
 	capabilityJobs.create(job)
 
-	results := runRedirectVerification(context.Background(), channel, "responses", "responses", 5*time.Second, 600, job.JobID, nil, 1, "test-key", "test-codex-dedup", nil, []string{"codex-auto-review", "gpt-5.4-mini", "gpt-5.5"})
+	results := runRedirectVerification(context.Background(), channel, "responses", "responses", 5*time.Second, 600, job.JobID, nil, 1, "test-key", "test-codex-dedup", nil, []string{"codex-auto-review", "gpt-6.1-terra", "gpt-6.1-sol"})
 
 	// deepseek-v4-flash 只应测试一次（去重），deepseek-v4 测试一次
 	if len(results) != 2 {
