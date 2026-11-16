@@ -102,6 +102,10 @@
             {{ t('app.tabs.messages') }}
           </router-link>
           <span class="api-type-text separator">/</span>
+          <router-link to="/channels/responses" class="api-type-text" :class="{ active: route.path === '/channels/responses' }">
+            {{ t('app.tabs.responses') }}
+          </router-link>
+          <span class="api-type-text separator">/</span>
           <router-link to="/channels/chat" class="api-type-text" :class="{ active: route.path === '/channels/chat' }">
             {{ t('app.tabs.chat') }}
           </router-link>
@@ -112,10 +116,6 @@
           <span class="api-type-text separator">/</span>
           <router-link to="/channels/vectors" class="api-type-text" :class="{ active: route.path === '/channels/vectors' }">
             {{ t('app.tabs.vectors') }}
-          </router-link>
-          <span class="api-type-text separator">/</span>
-          <router-link to="/channels/responses" class="api-type-text" :class="{ active: route.path === '/channels/responses' }">
-            {{ t('app.tabs.responses') }}
           </router-link>
           <span class="api-type-text separator">/</span>
           <router-link to="/channels/gemini" class="api-type-text" :class="{ active: route.path === '/channels/gemini' }">

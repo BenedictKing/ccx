@@ -58,10 +58,10 @@ export function useAppController() {
   // API 类型 Tab 选项（移动端下拉菜单使用）
   const apiTabOptions = [
     { value: 'messages', labelKey: 'app.tabs.messages', route: '/channels/messages', icon: 'mdi-code-braces' },
+    { value: 'responses', labelKey: 'app.tabs.responses', route: '/channels/responses', icon: 'mdi-console' },
     { value: 'chat', labelKey: 'app.tabs.chat', route: '/channels/chat', icon: 'mdi-chat-processing-outline' },
     { value: 'images', labelKey: 'app.tabs.images', route: '/channels/images', icon: 'mdi-image-outline' },
     { value: 'vectors', labelKey: 'app.tabs.vectors', route: '/channels/vectors', icon: 'mdi-vector-point' },
-    { value: 'responses', labelKey: 'app.tabs.responses', route: '/channels/responses', icon: 'mdi-console' },
     { value: 'gemini', labelKey: 'app.tabs.gemini', route: '/channels/gemini', icon: 'mdi-google' },
     { value: 'conversations', labelKey: 'app.tabs.conversations', route: '/conversations', icon: 'mdi-view-dashboard-outline' },
     { value: 'site-onboarding', labelKey: 'app.tabs.siteOnboarding', route: '/site-onboarding', icon: 'mdi-web' },

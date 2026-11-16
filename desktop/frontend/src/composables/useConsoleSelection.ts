@@ -4,8 +4,8 @@ import type { ManagedChannelType } from '@/utils/channel-type-api'
 export type ConsoleSelection = `/channels/${ManagedChannelType}`
 
 const STORAGE_KEY = 'ccx-desktop-console-selection'
-// 与 WebUI 顶部导航保持一致：Messages / Chat / Images / Vectors / Responses / Gemini
-const CHANNEL_TYPES: ManagedChannelType[] = ['messages', 'chat', 'images', 'vectors', 'responses', 'gemini']
+// 与 WebUI 顶部导航保持一致：Messages / Responses / Chat / Images / Vectors / Gemini
+const CHANNEL_TYPES: ManagedChannelType[] = ['messages', 'responses', 'chat', 'images', 'vectors', 'gemini']
 
 export const DEFAULT_CONSOLE_SELECTION: ConsoleSelection = '/channels/messages'
 
