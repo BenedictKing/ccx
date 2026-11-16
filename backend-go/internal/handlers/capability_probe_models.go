@@ -5,13 +5,13 @@ import (
 	"strings"
 )
 
-// ⚠️ 修改此处时必须同步修改前端 frontend/src/App.vue 的 capabilityPlaceholderModels
+// ⚠️ 修改此处时必须同步修改前端 capabilityPlaceholderModels / PLACEHOLDER_MODELS
 // 支持多个候选模型，用逗号分隔，按优先级从高到低排列
 // 测试时会按顺序分批启动，并汇总所有候选模型的结果
 const (
 	capabilityProbeModelClaudeFable5 = "claude-fable-5"
 	capabilityProbeModelClaudeOpus48 = "claude-opus-4-8"
-	capabilityProbeModelMessages     = capabilityProbeModelClaudeFable5 + "," + capabilityProbeModelClaudeOpus48 + ",claude-opus-4-7,claude-opus-4-6,claude-sonnet-4-6,claude-sonnet-4-5-20250929,claude-haiku-4-5-20251001"
+	capabilityProbeModelMessages     = "claude-fable-5-2,claude-opus-5-5,claude-sonnet-5-5,claude-haiku-5-5"
 	capabilityProbeModelChat         = "gpt-6.1-sol,gpt-6.1-terra,gpt-6-astra,gpt-6-luna,gpt-5.6-sol,codex-auto-review"
 	capabilityProbeModelGemini       = "gemini-3.5-flash,gemini-3.1-pro-preview,gemini-3-pro-preview,gemini-3-flash-preview,gemini-3.1-flash-lite"
 	capabilityProbeModelResponses    = capabilityProbeModelChat

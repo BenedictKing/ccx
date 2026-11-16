@@ -192,7 +192,7 @@ func TestGetCapabilitySnapshot_PreservesSameSourceRedirectProtocol(t *testing.T)
 				APIKeys:     []string{"sk-test"},
 				ServiceType: "claude",
 				ModelMapping: map[string]string{
-					"claude-sonnet-4-6": "claude-sonnet-4-6-upstream",
+					"claude-sonnet-5-5": "claude-sonnet-5-5-upstream",
 				},
 			},
 		},
@@ -237,13 +237,13 @@ func TestGetCapabilitySnapshot_PreservesSameSourceRedirectProtocol(t *testing.T)
 	}
 	mapped := false
 	for _, result := range test.ModelResults {
-		if result.Model == "claude-sonnet-4-6" && result.ActualModel == "claude-sonnet-4-6-upstream" {
+		if result.Model == "claude-sonnet-5-5" && result.ActualModel == "claude-sonnet-5-5-upstream" {
 			mapped = true
 			break
 		}
 	}
 	if !mapped {
-		t.Fatalf("expected mapped claude-sonnet-4-6 model in messages->messages results: %#v", test.ModelResults)
+		t.Fatalf("expected mapped claude-sonnet-5-5 model in messages->messages results: %#v", test.ModelResults)
 	}
 }
 
@@ -257,7 +257,7 @@ func TestGetCapabilitySnapshot_IsolatedByModelMapping(t *testing.T) {
 		APIKeys:     []string{"sk-test"},
 		ServiceType: "claude",
 		ModelMapping: map[string]string{
-			"claude-sonnet-4-6": "old-target",
+			"claude-sonnet-5-5": "old-target",
 		},
 	}
 	oldJob := newCapabilityTestJob(0, "old-redirect", "messages", "claude", []string{"messages->messages"}, time.Second, 10)
@@ -274,7 +274,7 @@ func TestGetCapabilitySnapshot_IsolatedByModelMapping(t *testing.T) {
 		AttemptedModels: 1,
 		SuccessCount:    1,
 		ModelResults: []CapabilityModelJobResult{{
-			Model:       "claude-sonnet-4-6",
+			Model:       "claude-sonnet-5-5",
 			ActualModel: "old-target",
 			Status:      CapabilityModelStatusSuccess,
 			Lifecycle:   CapabilityLifecycleDone,
@@ -292,7 +292,7 @@ func TestGetCapabilitySnapshot_IsolatedByModelMapping(t *testing.T) {
 				APIKeys:     []string{"sk-test"},
 				ServiceType: "claude",
 				ModelMapping: map[string]string{
-					"claude-sonnet-4-6": "new-target",
+					"claude-sonnet-5-5": "new-target",
 				},
 			},
 		},
@@ -337,14 +337,14 @@ func TestGetCapabilitySnapshot_IsolatedByModelMapping(t *testing.T) {
 		t.Fatalf("expected messages->messages in snapshot tests: %#v", snapshot.Tests)
 	}
 	for _, result := range test.ModelResults {
-		if result.Model == "claude-sonnet-4-6" {
+		if result.Model == "claude-sonnet-5-5" {
 			if result.ActualModel != "new-target" {
 				t.Fatalf("actualModel=%q, want new-target", result.ActualModel)
 			}
 			return
 		}
 	}
-	t.Fatalf("expected claude-sonnet-4-6 in snapshot results: %#v", test.ModelResults)
+	t.Fatalf("expected claude-sonnet-5-5 in snapshot results: %#v", test.ModelResults)
 }
 
 func TestGetCapabilitySnapshot_IncludesCrossProtocolWithoutModelMapping(t *testing.T) {

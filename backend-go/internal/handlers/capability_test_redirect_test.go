@@ -18,7 +18,7 @@ func TestExpandCapabilityProtocolsForChannel_IncludesSameProtocolWhenModelMappin
 	channel := &config.UpstreamConfig{
 		ServiceType: "claude",
 		ModelMapping: map[string]string{
-			"claude-sonnet-4-6": "glm-5.1-pro",
+			"claude-sonnet-5-5": "glm-5.1-pro",
 		},
 	}
 
@@ -161,9 +161,9 @@ func TestRunRedirectVerification_SharedActualModel(t *testing.T) {
 		Name:        "test-channel",
 		ServiceType: "claude",
 		ModelMapping: map[string]string{
-			"claude-sonnet-4-6":          "glm-5.1-pro",
-			"claude-sonnet-4-5-20250929": "glm-5.1-pro", // 重定向到同一个模型
-			"claude-haiku-4-5-20251001":  "glm-5.1",
+			"claude-sonnet-5-5": "glm-5.1-pro",
+			"claude-opus-5-5":   "glm-5.1-pro", // 重定向到同一个模型
+			"claude-haiku-5-5":  "glm-5.1",
 		},
 	}
 
@@ -246,7 +246,7 @@ func TestRunRedirectVerification_SharedActualModel(t *testing.T) {
 	// 模拟测试结果（只测试 2 个不同的 actualModel）
 	results := []RedirectModelResult{
 		{
-			ProbeModel:         "claude-sonnet-4-6",
+			ProbeModel:         "claude-sonnet-5-5",
 			ActualModel:        "glm-5.1-pro",
 			Success:            true,
 			Latency:            2498,
@@ -255,7 +255,7 @@ func TestRunRedirectVerification_SharedActualModel(t *testing.T) {
 			TestedAt:           time.Now().Format(time.RFC3339Nano),
 		},
 		{
-			ProbeModel:         "claude-haiku-4-5-20251001",
+			ProbeModel:         "claude-haiku-5-5",
 			ActualModel:        "glm-5.1",
 			Success:            true,
 			Latency:            1515,
@@ -369,7 +369,7 @@ func TestRunRedirectVerification_SharedActualModel(t *testing.T) {
 }
 
 func TestSelectCapabilityProbeModels(t *testing.T) {
-	probeModels := []string{"claude-opus-4-7", "claude-opus-4-6", "claude-sonnet-4-6"}
+	probeModels := []string{"claude-opus-4-7", "claude-opus-4-6", "claude-sonnet-5-5"}
 	customModels := []string{"private-b", "private-a"}
 	selected := selectCapabilityProbeModels(probeModels, customModels)
 	if len(selected) != len(customModels) {
@@ -409,7 +409,7 @@ func TestUpdateCapabilityJobModelResultsByActualModel_UpdatesSharedModelsImmedia
 				ModelResults: []CapabilityModelJobResult{
 					{Model: "claude-opus-4-7", ActualModel: "gpt-5.5", Status: CapabilityModelStatusQueued, Lifecycle: CapabilityLifecyclePending, Outcome: CapabilityOutcomeUnknown},
 					{Model: "claude-opus-4-6", ActualModel: "gpt-5.5", Status: CapabilityModelStatusQueued, Lifecycle: CapabilityLifecyclePending, Outcome: CapabilityOutcomeUnknown},
-					{Model: "claude-sonnet-4-6", ActualModel: "gpt-5.4", Status: CapabilityModelStatusQueued, Lifecycle: CapabilityLifecyclePending, Outcome: CapabilityOutcomeUnknown},
+					{Model: "claude-sonnet-5-5", ActualModel: "gpt-5.4", Status: CapabilityModelStatusQueued, Lifecycle: CapabilityLifecyclePending, Outcome: CapabilityOutcomeUnknown},
 				},
 				TestedAt: now,
 			},
@@ -541,8 +541,8 @@ func TestVirtualProtocolSnapshot_InitialState(t *testing.T) {
 		Name:        "test-channel",
 		ServiceType: "openai",
 		ModelMapping: map[string]string{
-			"claude-sonnet-4-6":         "gpt-5.5",
-			"claude-haiku-4-5-20251001": "gpt-5.4-mini",
+			"claude-sonnet-5-5": "gpt-5.5",
+			"claude-haiku-5-5":  "gpt-5.4-mini",
 		},
 		APIKeys: []string{"test-key"},
 	}
@@ -673,7 +673,7 @@ func TestUpdateCapabilityJobModelResult_VirtualProtocol(t *testing.T) {
 		Status:   CapabilityProtocolStatusQueued,
 		ModelResults: []CapabilityModelJobResult{
 			{
-				Model:       "claude-sonnet-4-6",
+				Model:       "claude-sonnet-5-5",
 				ActualModel: "gpt-5.5",
 				Status:      CapabilityModelStatusQueued,
 			},
@@ -681,8 +681,8 @@ func TestUpdateCapabilityJobModelResult_VirtualProtocol(t *testing.T) {
 	}}, job.Tests...)
 
 	// 更新为 running
-	updateCapabilityJobModelResult(job, virtualProtocol, "claude-sonnet-4-6", CapabilityModelStatusRunning, ModelTestResult{
-		Model:       "claude-sonnet-4-6",
+	updateCapabilityJobModelResult(job, virtualProtocol, "claude-sonnet-5-5", CapabilityModelStatusRunning, ModelTestResult{
+		Model:       "claude-sonnet-5-5",
 		ActualModel: "gpt-5.5",
 		StartedAt:   time.Now().Format(time.RFC3339Nano),
 	})
@@ -695,8 +695,8 @@ func TestUpdateCapabilityJobModelResult_VirtualProtocol(t *testing.T) {
 	}
 
 	// 更新为 success
-	updateCapabilityJobModelResult(job, virtualProtocol, "claude-sonnet-4-6", CapabilityModelStatusSuccess, ModelTestResult{
-		Model:              "claude-sonnet-4-6",
+	updateCapabilityJobModelResult(job, virtualProtocol, "claude-sonnet-5-5", CapabilityModelStatusSuccess, ModelTestResult{
+		Model:              "claude-sonnet-5-5",
 		ActualModel:        "gpt-5.5",
 		Success:            true,
 		Latency:            2000,

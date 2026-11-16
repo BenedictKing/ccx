@@ -29,6 +29,17 @@ func TestGetCapabilityProbeModels_ContainsCodexAutoReview(t *testing.T) {
 	}
 }
 
+func TestGetCapabilityProbeModels_DefaultClaudeModels(t *testing.T) {
+	want := []string{"claude-fable-5-2", "claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"}
+	models, err := getCapabilityProbeModels("messages")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !reflect.DeepEqual(models, want) {
+		t.Fatalf("messages probe models=%v, want %v", models, want)
+	}
+}
+
 func TestGetCapabilityProbeModels_DefaultGPTModels(t *testing.T) {
 	want := []string{"gpt-6.1-sol", "gpt-6.1-terra", "gpt-6-astra", "gpt-6-luna", "gpt-5.6-sol", "codex-auto-review"}
 	for _, protocol := range []string{"chat", "responses"} {
@@ -74,7 +85,7 @@ func TestGetCapabilityProbeModel(t *testing.T) {
 		want     string
 		wantErr  bool
 	}{
-		{protocol: "messages", want: "claude-fable-5"},
+		{protocol: "messages", want: "claude-fable-5-2"},
 		{protocol: "chat", want: "gpt-6.1-sol"},
 		{protocol: "gemini", want: "gemini-3.5-flash"},
 		{protocol: "responses", want: "gpt-6.1-sol"},
@@ -113,7 +124,7 @@ func TestBuildTestRequest_UsesCentralizedProbeModels(t *testing.T) {
 		{
 			protocol:      "messages",
 			expectedURL:   "https://api.example.com/v1/messages",
-			expectedModel: "claude-fable-5",
+			expectedModel: "claude-fable-5-2",
 		},
 		{
 			protocol:      "chat",
