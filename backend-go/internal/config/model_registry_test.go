@@ -34,6 +34,31 @@ func TestResolveAgentModelProfile_GPT56BedrockBuiltins(t *testing.T) {
 	}
 }
 
+func TestResolveAgentModelProfile_LatestBuiltins(t *testing.T) {
+	for _, tt := range []struct {
+		model, display string
+		context        int
+	}{
+		{"gpt-6.2-sol", "GPT-6.2 Sol", 500000},
+		{"gpt-6.2-astra", "GPT-6.2 Astra", 272000},
+		{"claude-fable-5-2", "Claude Fable 5.2", 1000000},
+		{"claude-mythos-5-2", "Claude Mythos 5.2", 1000000},
+		{"claude-opus-5-5", "Claude Opus 5.5", 1000000},
+		{"claude-sonnet-5-5", "Claude Sonnet 5.5", 1000000},
+		{"claude-haiku-5-5", "Claude Haiku 5.5", 1000000},
+	} {
+		t.Run(tt.model, func(t *testing.T) {
+			profile := ResolveAgentModelProfile(tt.model, nil)
+			if !profile.Known || profile.Profile.DisplayName != tt.display {
+				t.Fatalf("profile = %+v, want display %q", profile, tt.display)
+			}
+			if profile.Profile.ContextWindowTokens != tt.context {
+				t.Fatalf("ContextWindowTokens = %d, want %d", profile.Profile.ContextWindowTokens, tt.context)
+			}
+		})
+	}
+}
+
 func TestResolveAgentModelProfile_ClaudeBuiltins(t *testing.T) {
 	profile := ResolveAgentModelProfile("claude-sonnet-4-6", nil)
 	if !profile.Known {

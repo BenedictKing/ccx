@@ -2,7 +2,10 @@
 // 规则顺序：先新后旧、先精确后宽松；同家族新版本在前，带 codex/pro/max 等精确后缀优先于通用名。
 const modelPriorityPatterns: RegExp[] = [
   // Anthropic Claude
+  /fable-5[.-]2/i,
+  /mythos-5[.-]2/i,
   /fable-5/i,
+  /mythos-5/i,
   /opus-5/i,
   /opus-4-8/i,
   /opus-4-7/i,
@@ -17,12 +20,19 @@ const modelPriorityPatterns: RegExp[] = [
   /sonnet-4-5/i,
   /haiku-4-5/i,
 
-  // OpenAI GPT-5 系列
+  // OpenAI GPT 系列
+  /gpt-6\.2-sol/i,
+  /gpt-6\.2-astra/i,
   /gpt-6\.1-sol/i,
+  /gpt-6\.1-terra/i,
   /gpt-6-astra/i,
   /gpt-6-sol/i,
   /gpt-6-luna/i,
   /gpt-6/i,
+  /gpt-5\.6-sol/i,
+  /gpt-5\.6-terra/i,
+  /gpt-5\.6-luna/i,
+  /gpt-5\.6/i,
   /gpt-5\.5-pro/i,
   /gpt-5\.5/i,
   /gpt-5\.4-pro/i,

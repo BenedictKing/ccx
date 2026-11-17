@@ -142,6 +142,28 @@ func (c ContextRoutingConfig) EffectiveUnknownSafeWindowTokens() int {
 // BuiltinAgentModelProfiles 返回 CCX 内置的下游 agent 模型知识库。
 func BuiltinAgentModelProfiles() map[string]AgentModelProfile {
 	return map[string]AgentModelProfile{
+		"gpt-6.2-sol": {
+			DisplayName:            "GPT-6.2 Sol",
+			ContextWindowTokens:    500000,
+			MaxContextWindowTokens: 1050000,
+			EffectiveContextRatio:  0.95,
+			AutoCompactRatio:       0.90,
+			TruncationMode:         "tokens",
+			TruncationLimit:        10000,
+			ReasoningEfforts:       []string{"low", "medium", "high", "xhigh", "max"},
+			SupportsPriorityTier:   true,
+		},
+		"gpt-6.2-astra": {
+			DisplayName:            "GPT-6.2 Astra",
+			ContextWindowTokens:    272000,
+			MaxContextWindowTokens: 1050000,
+			EffectiveContextRatio:  0.95,
+			AutoCompactRatio:       0.90,
+			TruncationMode:         "tokens",
+			TruncationLimit:        10000,
+			ReasoningEfforts:       []string{"low", "medium", "high", "xhigh", "max"},
+			SupportsPriorityTier:   true,
+		},
 		"gpt-6.1-sol": {
 			DisplayName:            "GPT-6.1 Sol",
 			ContextWindowTokens:    500000,
@@ -278,8 +300,20 @@ func BuiltinAgentModelProfiles() map[string]AgentModelProfile {
 			MaxOutputTokens:     128000,
 			ReasoningEfforts:    []string{"low", "medium", "high", "xhigh", "max"},
 		},
+		"claude-haiku-5-5*": {
+			DisplayName:         "Claude Haiku 5.5",
+			ContextWindowTokens: 1000000,
+			MaxOutputTokens:     128000,
+			ReasoningEfforts:    []string{"low", "medium", "high", "xhigh", "max"},
+		},
 		"claude-haiku-5*": {
 			DisplayName:         "Claude Haiku 5",
+			ContextWindowTokens: 1000000,
+			MaxOutputTokens:     128000,
+			ReasoningEfforts:    []string{"low", "medium", "high", "xhigh", "max"},
+		},
+		"claude-opus-5-5*": {
+			DisplayName:         "Claude Opus 5.5",
 			ContextWindowTokens: 1000000,
 			MaxOutputTokens:     128000,
 			ReasoningEfforts:    []string{"low", "medium", "high", "xhigh", "max"},
@@ -290,14 +324,32 @@ func BuiltinAgentModelProfiles() map[string]AgentModelProfile {
 			MaxOutputTokens:     128000,
 			ReasoningEfforts:    []string{"low", "medium", "high", "xhigh", "max"},
 		},
+		"claude-sonnet-5-5*": {
+			DisplayName:         "Claude Sonnet 5.5",
+			ContextWindowTokens: 1000000,
+			MaxOutputTokens:     128000,
+			ReasoningEfforts:    []string{"low", "medium", "high", "xhigh", "max"},
+		},
 		"claude-sonnet-5*": {
 			DisplayName:         "Claude Sonnet 5",
 			ContextWindowTokens: 1000000,
 			MaxOutputTokens:     128000,
 			ReasoningEfforts:    []string{"low", "medium", "high", "xhigh", "max"},
 		},
+		"claude-fable-5-2*": {
+			DisplayName:         "Claude Fable 5.2",
+			ContextWindowTokens: 1000000,
+			MaxOutputTokens:     128000,
+			ReasoningEfforts:    []string{"low", "medium", "high", "xhigh", "max"},
+		},
 		"claude-fable-5*": {
 			DisplayName:         "Claude Fable 5",
+			ContextWindowTokens: 1000000,
+			MaxOutputTokens:     128000,
+			ReasoningEfforts:    []string{"low", "medium", "high", "xhigh", "max"},
+		},
+		"claude-mythos-5-2*": {
+			DisplayName:         "Claude Mythos 5.2",
 			ContextWindowTokens: 1000000,
 			MaxOutputTokens:     128000,
 			ReasoningEfforts:    []string{"low", "medium", "high", "xhigh", "max"},

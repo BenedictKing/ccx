@@ -15,6 +15,8 @@ func TestResolveUpstreamCapabilityClaudePointVersions(t *testing.T) {
 		{"claude-opus-5.5", "Claude Opus 5.5", 4, 20},
 		{"claude-sonnet-5.5", "Claude Sonnet 5.5", 2, 10},
 		{"claude-haiku-5.5", "Claude Haiku 5.5", 0.1, 0.5},
+		{"claude-fable-5.2", "Claude Fable 5.2", 8, 40},
+		{"claude-mythos-5.2", "Claude Mythos 5.2", 8, 40},
 		{"claude-fable-5.1", "Claude Fable 5.1", 10, 50},
 		{"claude-mythos-5.1", "Claude Mythos 5.1", 10, 50},
 	} {
@@ -63,6 +65,8 @@ func TestResolveUpstreamCapabilityMergedFamiliesAndLegacyAliases(t *testing.T) {
 		{"gemini-3.6-flash", 1048576, 65536},
 		{"gemini-3.7-flash", 1048576, 65536},
 		{"gemini-3.8-flash", 1048576, 65536},
+		{"gpt-6.2-sol", 1050000, 128000},
+		{"gpt-6.2-astra", 1050000, 128000},
 		{"gpt-6-astra", 1050000, 128000},
 		{"deepseek-v4-flash-20261112", 1000000, 384000},
 		{"deepseek-v4-flash-vision-exp", 1000000, 384000},
@@ -90,7 +94,7 @@ func TestResolveUpstreamCapabilityMergedFamiliesAndLegacyAliases(t *testing.T) {
 }
 
 func TestResolveUpstreamCapabilityLegacyMetadataFilled(t *testing.T) {
-	for _, model := range []string{"claude-haiku-4.5", "claude-sonnet-4.5", "claude-opus-4.6", "claude-opus-5", "claude-sonnet-5", "gpt-6-astra"} {
+	for _, model := range []string{"claude-haiku-4.5", "claude-sonnet-4.5", "claude-opus-4.6", "claude-opus-5", "claude-sonnet-5", "gpt-6.2-sol", "gpt-6.2-astra", "gpt-6-astra"} {
 		resolved := ResolveUpstreamCapability(model, nil, nil)
 		capability := resolved.Capability
 		if !resolved.Known || !capability.Capabilities["vision"] || !capability.Capabilities["toolCalls"] {

@@ -339,6 +339,38 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
       "inputCacheHitPrice": 0.1
     }
   },
+  "(?:^|[-/])claude-fable-5[.-]2(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{4,8})?(?=$|@)": {
+    "provider": "anthropic",
+    "displayName": "Claude Fable 5.2",
+    "contextWindowTokens": 1000000,
+    "maxOutputTokens": 128000,
+    "thinkingMode": "adaptive_always_on",
+    "reasoningEfforts": [
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max"
+    ],
+    "capabilities": {
+      "document": true,
+      "reasoning": true,
+      "vision": true,
+      "toolCalls": true,
+      "webSearch": true
+    },
+    "pricing": {
+      "unit": "per_1m_tokens_usd",
+      "currency": "USD",
+      "inputCacheMissPrice": 8,
+      "outputPrice": 40,
+      "inputCacheHitPrice": 0.2
+    },
+    "sources": [
+      "https://platform.claude.com/docs/en/models/fable-5-2/overview",
+      "https://platform.claude.com/docs/en/models/fable-5-2/whats-new-fable-5-2"
+    ]
+  },
   "(?:^|[-/])claude-fable-5(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{4,8})?(?=$|@)": {
     "provider": "anthropic",
     "displayName": "Claude Fable 5",
@@ -394,6 +426,37 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
       "outputPrice": 50,
       "inputCacheHitPrice": 0.25
     }
+  },
+  "(?:^|[-/])claude-mythos-5[.-]2(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{4,8})?(?=$|@)": {
+    "provider": "anthropic",
+    "displayName": "Claude Mythos 5.2",
+    "contextWindowTokens": 1000000,
+    "maxOutputTokens": 128000,
+    "thinkingMode": "adaptive_always_on",
+    "reasoningEfforts": [
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max"
+    ],
+    "capabilities": {
+      "document": true,
+      "reasoning": true,
+      "vision": true,
+      "toolCalls": true
+    },
+    "pricing": {
+      "unit": "per_1m_tokens_usd",
+      "currency": "USD",
+      "inputCacheMissPrice": 8,
+      "outputPrice": 40,
+      "inputCacheHitPrice": 0.2
+    },
+    "sources": [
+      "https://platform.claude.com/docs/en/models/mythos-5-2/overview",
+      "https://platform.claude.com/docs/en/models/fable-5-2/whats-new-fable-5-2"
+    ]
   },
   "(?:^|[-/])claude-mythos-5(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)": {
     "provider": "anthropic",
@@ -838,6 +901,106 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
     },
     "sources": [
       "https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json"
+    ]
+  },
+  "(?:^|[-/])gpt-6\\.2-sol(?=$|@)": {
+    "provider": "openai",
+    "displayName": "GPT-6.2 Sol",
+    "description": "Efficient, versatile model for everyday reasoning, coding and professional work. Does not support reasoning effort none; use low instead.",
+    "contextWindowTokens": 1050000,
+    "maxOutputTokens": 128000,
+    "reasoningEfforts": [
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max"
+    ],
+    "capabilities": {
+      "vision": true,
+      "toolCalls": true,
+      "jsonMode": true,
+      "reasoning": true,
+      "parallelFunctionCalling": true,
+      "webSearch": true
+    },
+    "pricing": {
+      "unit": "per_1m_tokens_usd",
+      "currency": "USD",
+      "inputCacheMissPrice": 2,
+      "outputPrice": 10,
+      "inputCacheHitPrice": 0.1,
+      "tiers": [
+        {
+          "label": "short_context",
+          "inputTokensUpTo": 272000,
+          "inputCacheHitPrice": 0.1,
+          "inputCacheMissPrice": 2,
+          "outputPrice": 10
+        },
+        {
+          "label": "long_context",
+          "inputTokensAbove": 272000,
+          "inputTokensUpTo": 1050000,
+          "inputCacheHitPrice": 0.2,
+          "inputCacheMissPrice": 4,
+          "outputPrice": 15
+        }
+      ]
+    },
+    "sources": [
+      "https://developers.openai.com/api/docs/models/gpt-6.2-sol",
+      "https://openai.com/index/introducing-gpt-6-2-astra-sol"
+    ]
+  },
+  "(?:^|[-/])gpt-6\\.2-astra(?=$|@)": {
+    "provider": "openai",
+    "displayName": "GPT-6.2 Astra",
+    "description": "Frontier model for demanding reasoning, coding and professional work. Does not support reasoning effort none; use low instead.",
+    "contextWindowTokens": 1050000,
+    "maxOutputTokens": 128000,
+    "reasoningEfforts": [
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max"
+    ],
+    "capabilities": {
+      "vision": true,
+      "toolCalls": true,
+      "jsonMode": true,
+      "reasoning": true,
+      "parallelFunctionCalling": true,
+      "webSearch": true
+    },
+    "pricing": {
+      "unit": "per_1m_tokens_usd",
+      "currency": "USD",
+      "inputCacheMissPrice": 8,
+      "outputPrice": 40,
+      "inputCacheHitPrice": 0.4,
+      "tiers": [
+        {
+          "label": "short_context",
+          "inputTokensUpTo": 272000,
+          "inputCacheHitPrice": 0.4,
+          "inputCacheMissPrice": 8,
+          "outputPrice": 40
+        },
+        {
+          "label": "long_context",
+          "inputTokensAbove": 272000,
+          "inputTokensUpTo": 1050000,
+          "inputCacheHitPrice": 0.8,
+          "inputCacheMissPrice": 16,
+          "outputPrice": 60
+        }
+      ]
+    },
+    "sources": [
+      "https://developers.openai.com/api/docs/models/gpt-6.2-astra",
+      "https://openai.com/index/introducing-gpt-6-2-astra-sol"
     ]
   },
   "(?:^|[-/])gpt-6-astra(?=$|@)": {
