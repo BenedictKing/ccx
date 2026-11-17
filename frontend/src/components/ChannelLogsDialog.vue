@@ -172,6 +172,22 @@
                   {{ t('channelLogs.contextTokens') }} {{ formatTokenCount(log.contextTokens) }}
                 </span>
                 <span
+                  v-if="(log.cacheReadTokens || 0) > 0"
+                  class="text-medium-emphasis log-meta log-cache-usage"
+                  :title="t('channelLogs.cacheReadDetail', { tokens: formatTokenCount(log.cacheReadTokens!) })"
+                  :aria-label="t('channelLogs.cacheReadDetail', { tokens: formatTokenCount(log.cacheReadTokens!) })"
+                >
+                  {{ t('channelLogs.cacheRead') }} {{ formatTokenCount(log.cacheReadTokens!) }}
+                </span>
+                <span
+                  v-if="(log.cacheCreationTokens || 0) > 0"
+                  class="text-medium-emphasis log-meta log-cache-usage"
+                  :title="t('channelLogs.cacheWriteDetail', { tokens: formatTokenCount(log.cacheCreationTokens!) })"
+                  :aria-label="t('channelLogs.cacheWriteDetail', { tokens: formatTokenCount(log.cacheCreationTokens!) })"
+                >
+                  {{ t('channelLogs.cacheWrite') }} {{ formatTokenCount(log.cacheCreationTokens!) }}
+                </span>
+                <span
                   v-if="log.tokensPerSecond"
                   class="text-medium-emphasis log-meta"
                   :title="t('channelLogs.tpsDetail', { output: formatTokenCount(log.outputTokens || 0) })"
@@ -622,6 +638,10 @@ onUnmounted(() => {
 
 .log-meta {
   font-size: 0.875rem;
+}
+
+.log-cache-usage {
+  white-space: nowrap;
 }
 
 .log-inline-code {
