@@ -2781,6 +2781,111 @@
       "sources": ["https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json"]
     },
     {
+      "patterns": ["(?:^|[-/])gemini-4-hydrogen(?=$|@)"],
+      "provider": "google",
+      "displayName": "Gemini 4 Hydrogen",
+      "description": "Fast, efficient general-purpose Gemini 4 model for everyday coding and agentic workflows. Unified 1M context with 64K default synchronous output and up to 1M long decode.",
+      "contextWindowTokens": 1048576,
+      "maxOutputTokens": 1048576,
+      "thinkingMode": "adaptive",
+      "reasoningEfforts": ["low", "medium", "high", "xhigh"],
+      "capabilities": {
+        "document": true,
+        "reasoning": true,
+        "vision": true,
+        "audioInput": true,
+        "videoInput": true,
+        "toolCalls": true,
+        "parallelFunctionCalling": true,
+        "webSearch": true,
+        "codeExecution": true,
+        "structuredOutput": true,
+        "contextCaching": true
+      },
+      "pricing": {
+        "unit": "per_1m_tokens_usd",
+        "currency": "USD",
+        "inputCacheMissPrice": 1.5,
+        "outputPrice": 7.5,
+        "inputCacheHitPrice": 0.15
+      },
+      "sources": [
+        "https://ai.google.dev/gemini-api/docs/models/gemini-4-hydrogen",
+        "https://ai.google.dev/gemini-api/docs/latest-model",
+        "https://cloud.google.com/model-garden/pricing"
+      ]
+    },
+    {
+      "patterns": ["(?:^|[-/])gemini-4-argon(?=$|@)"],
+      "provider": "google",
+      "displayName": "Gemini 4 Argon",
+      "description": "Efficient Gemini 4 frontier reasoning model for complex coding, agentic, math and science tasks. Unified 1M context with 64K default synchronous output and up to 1M long decode.",
+      "contextWindowTokens": 1048576,
+      "maxOutputTokens": 1048576,
+      "thinkingMode": "adaptive",
+      "reasoningEfforts": ["low", "medium", "high"],
+      "capabilities": {
+        "document": true,
+        "reasoning": true,
+        "vision": true,
+        "audioInput": true,
+        "videoInput": true,
+        "toolCalls": true,
+        "parallelFunctionCalling": true,
+        "webSearch": true,
+        "codeExecution": true,
+        "structuredOutput": true,
+        "contextCaching": true
+      },
+      "pricing": {
+        "unit": "per_1m_tokens_usd",
+        "currency": "USD",
+        "inputCacheMissPrice": 4,
+        "outputPrice": 20,
+        "inputCacheHitPrice": 0.2
+      },
+      "sources": [
+        "https://ai.google.dev/gemini-api/docs/models/gemini-4-argon",
+        "https://ai.google.dev/gemini-api/docs/latest-model",
+        "https://cloud.google.com/model-garden/pricing"
+      ]
+    },
+    {
+      "patterns": ["(?:^|[-/])gemini-4-carbon(?=$|@)"],
+      "provider": "google",
+      "displayName": "Gemini 4 Carbon",
+      "description": "Google's strongest reasoning model for agentic coding, multimodal precision, scientific and security reasoning. Unified 1M context with 64K default synchronous output and up to 1M long decode.",
+      "contextWindowTokens": 1048576,
+      "maxOutputTokens": 1048576,
+      "thinkingMode": "adaptive",
+      "reasoningEfforts": ["low", "medium", "high"],
+      "capabilities": {
+        "document": true,
+        "reasoning": true,
+        "vision": true,
+        "audioInput": true,
+        "videoInput": true,
+        "toolCalls": true,
+        "parallelFunctionCalling": true,
+        "webSearch": true,
+        "codeExecution": true,
+        "structuredOutput": true,
+        "contextCaching": true
+      },
+      "pricing": {
+        "unit": "per_1m_tokens_usd",
+        "currency": "USD",
+        "inputCacheMissPrice": 4,
+        "outputPrice": 20,
+        "inputCacheHitPrice": 0.2
+      },
+      "sources": [
+        "https://ai.google.dev/gemini-api/docs/models/gemini-4-carbon",
+        "https://ai.google.dev/gemini-api/docs/latest-model",
+        "https://cloud.google.com/model-garden/pricing"
+      ]
+    },
+    {
       "patterns": ["(?:^|[-/])gemini-3\\.5-flash(?=$|@)"],
       "provider": "google",
       "displayName": "Gemini 3.5 Flash",

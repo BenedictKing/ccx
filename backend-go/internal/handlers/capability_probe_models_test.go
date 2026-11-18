@@ -53,6 +53,17 @@ func TestGetCapabilityProbeModels_DefaultGPTModels(t *testing.T) {
 	}
 }
 
+func TestGetCapabilityProbeModels_DefaultGeminiModels(t *testing.T) {
+	want := []string{"gemini-4-hydrogen", "gemini-4-argon", "gemini-4-carbon", "gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-3.1-pro-preview", "gemini-3-pro-preview", "gemini-3-flash-preview", "gemini-3.1-flash-lite"}
+	models, err := getCapabilityProbeModels("gemini")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !reflect.DeepEqual(models, want) {
+		t.Fatalf("gemini probe models=%v, want %v", models, want)
+	}
+}
+
 func TestGetCapabilityProbeModels_CodexAutoReviewRedirect(t *testing.T) {
 	channel := &config.UpstreamConfig{
 		ServiceType: "openai",
@@ -87,7 +98,7 @@ func TestGetCapabilityProbeModel(t *testing.T) {
 	}{
 		{protocol: "messages", want: "claude-fable-5-2"},
 		{protocol: "chat", want: "gpt-6.2-sol"},
-		{protocol: "gemini", want: "gemini-3.5-flash"},
+		{protocol: "gemini", want: "gemini-4-hydrogen"},
 		{protocol: "responses", want: "gpt-6.2-sol"},
 		{protocol: "unknown", wantErr: true},
 	}
@@ -133,8 +144,8 @@ func TestBuildTestRequest_UsesCentralizedProbeModels(t *testing.T) {
 		},
 		{
 			protocol:      "gemini",
-			expectedURL:   "https://api.example.com/v1beta/models/gemini-3.5-flash:streamGenerateContent?alt=sse",
-			expectedModel: "gemini-3.5-flash",
+			expectedURL:   "https://api.example.com/v1beta/models/gemini-4-hydrogen:streamGenerateContent?alt=sse",
+			expectedModel: "gemini-4-hydrogen",
 			modelInURL:    true,
 		},
 		{
@@ -210,7 +221,7 @@ func TestBuildTestRequest_UsesExistingVersionSuffix(t *testing.T) {
 			name:        "gemini with v1beta base url",
 			protocol:    "gemini",
 			baseURL:     "https://api.example.com/codex/v1beta",
-			expectedURL: "https://api.example.com/codex/v1beta/models/gemini-3.5-flash:streamGenerateContent?alt=sse",
+			expectedURL: "https://api.example.com/codex/v1beta/models/gemini-4-hydrogen:streamGenerateContent?alt=sse",
 		},
 		{
 			name:        "responses with explicit skip marker",

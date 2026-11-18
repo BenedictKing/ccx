@@ -51,6 +51,14 @@ const modelPriorityPatterns: RegExp[] = [
   /gpt-5/i,
 
   // Google Gemini
+  /gemini-4-carbon/i,
+  /gemini-4-argon/i,
+  /gemini-4-hydrogen/i,
+  /gemini-4/i,
+  /gemini-3\.8-flash/i,
+  /gemini-3\.7-flash/i,
+  /gemini-3\.6-flash/i,
+  /gemini-3\.5-flash-lite/i,
   /gemini-3\.5-flash/i,
   /gemini-3\.1-pro/i,
   /gemini-3\.1-flash-lite/i,
