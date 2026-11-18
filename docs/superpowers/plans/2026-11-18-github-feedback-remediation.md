@@ -1,8 +1,10 @@
 # GitHub 用户反馈全量处理方案（网关约定）
 
-日期：2026-11-18  
-范围：`BenedictKing/ccx` 的 36 个开放 issue、3 个 discussion、8 个开放 PR。  
-基线：本地 `codex/v3-lean-from-2.9.37`（`b0da2056`）；远端 `main` 为 `3a08db97`，最新 Release 为 `v2.9.37`。  
+日期：2026-11-18
+
+范围：`BenedictKing/ccx` 的 36 个开放 issue、3 个 discussion、8 个开放 PR。
+
+基线：本地 `codex/v3-lean-from-2.9.37`（`b0da2056`）；远端 `main` 为 `3a08db97`，最新 Release 为 `v2.9.37`。
 目标：把已写代码但尚未交付的修复、尚未闭环的缺陷、新需求和外部依赖分别处理，形成可执行、可验收、可关闭的清单。
 
 ## 1. 处理原则与完成定义
