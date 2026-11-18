@@ -208,16 +208,10 @@
                 </span>
               </v-list-item-title>
             </v-list-item>
-            <!-- 展开的诊断详情 -->
+            <!-- 展开的错误详情 -->
             <v-expand-transition>
-              <div v-if="expandedIndex === i && hasLogDetails(log)" class="px-4 py-2 log-detail-info">
-                <div v-if="log.errorInfo">
-                  {{ formatErrorInfo(log.errorInfo) }}
-                </div>
-                <div v-if="log.selectionTraceSummary" :class="{ 'mt-2': log.errorInfo }">
-                  <div class="log-detail-label">{{ t('channelLogs.selectionTrace') }}</div>
-                  <code class="log-selection-trace">{{ log.selectionTraceSummary }}</code>
-                </div>
+              <div v-if="expandedIndex === i && log.errorInfo?.trim()" class="px-4 py-2 log-detail-info">
+                {{ formatErrorInfo(log.errorInfo) }}
               </div>
             </v-expand-transition>
             <v-divider v-if="i < logs.length - 1" />
@@ -298,6 +292,7 @@ const writeClipboardText = async (text: string) => {
 
 const copyLogEntry = async (log: ChannelLogEntry, index: number) => {
   try {
+    // 复制完整日志，保留页面不展示的调度诊断信息。
     await writeClipboardText(JSON.stringify(log, null, 2))
     copiedLogKey.value = getLogCopyKey(log, index)
     if (copyLogResetTimer) clearTimeout(copyLogResetTimer)
@@ -312,10 +307,6 @@ const copyLogEntry = async (log: ChannelLogEntry, index: number) => {
 
 const toggleExpand = (i: number) => {
   expandedIndex.value = expandedIndex.value === i ? null : i
-}
-
-const hasLogDetails = (log: ChannelLogEntry): boolean => {
-  return Boolean(log.errorInfo?.trim() || log.selectionTraceSummary?.trim())
 }
 
 const getRetestProtocol = (log: ChannelLogEntry): ChannelLogRetestRequest['protocol'] | null => {
@@ -669,20 +660,6 @@ onUnmounted(() => {
   word-break: break-all;
   font-size: 0.875rem;
   line-height: 1.6;
-}
-
-.log-detail-label {
-  color: rgba(var(--v-theme-on-surface), 0.68);
-  font-size: 0.75rem;
-  font-weight: 600;
-  margin-bottom: 2px;
-}
-
-.log-selection-trace {
-  display: block;
-  white-space: pre-wrap;
-  word-break: break-all;
-  font-family: ui-monospace, SFMono-Regular, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 }
 
 .bg-error-subtle {
