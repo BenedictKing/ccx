@@ -41,7 +41,7 @@ func TestGetCapabilityProbeModels_DefaultClaudeModels(t *testing.T) {
 }
 
 func TestGetCapabilityProbeModels_DefaultGPTModels(t *testing.T) {
-	want := []string{"gpt-6.2-sol", "gpt-6.2-astra", "gpt-6.1-terra", "gpt-6.1-sol", "gpt-6-astra", "gpt-6-sol", "gpt-6-luna", "gpt-5.6-sol", "codex-auto-review"}
+	want := []string{"gpt-6.2-astra", "gpt-6.2-sol", "gpt-6.1-sol", "gpt-6.1-terra", "gpt-6-astra", "gpt-6-sol", "gpt-6-luna", "gpt-5.6-sol", "codex-auto-review"}
 	for _, protocol := range []string{"chat", "responses"} {
 		models, err := getCapabilityProbeModels(protocol)
 		if err != nil {
@@ -97,9 +97,9 @@ func TestGetCapabilityProbeModel(t *testing.T) {
 		wantErr  bool
 	}{
 		{protocol: "messages", want: "claude-fable-5-2"},
-		{protocol: "chat", want: "gpt-6.2-sol"},
+		{protocol: "chat", want: "gpt-6.2-astra"},
 		{protocol: "gemini", want: "gemini-4-hydrogen"},
-		{protocol: "responses", want: "gpt-6.2-sol"},
+		{protocol: "responses", want: "gpt-6.2-astra"},
 		{protocol: "unknown", wantErr: true},
 	}
 
@@ -140,7 +140,7 @@ func TestBuildTestRequest_UsesCentralizedProbeModels(t *testing.T) {
 		{
 			protocol:      "chat",
 			expectedURL:   "https://api.example.com/v1/chat/completions",
-			expectedModel: "gpt-6.2-sol",
+			expectedModel: "gpt-6.2-astra",
 		},
 		{
 			protocol:      "gemini",
@@ -151,7 +151,7 @@ func TestBuildTestRequest_UsesCentralizedProbeModels(t *testing.T) {
 		{
 			protocol:      "responses",
 			expectedURL:   "https://api.example.com/v1/responses",
-			expectedModel: "gpt-6.2-sol",
+			expectedModel: "gpt-6.2-astra",
 		},
 	}
 
