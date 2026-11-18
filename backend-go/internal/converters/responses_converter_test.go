@@ -41,8 +41,8 @@ func TestClaudeResponseToResponses_ToolUse(t *testing.T) {
 	if len(result.Output) != 2 {
 		t.Fatalf("期望 2 个输出项，实际 %d", len(result.Output))
 	}
-	if result.Output[0].Type != "text" {
-		t.Errorf("第一项类型期望 'text'，实际 '%s'", result.Output[0].Type)
+	if result.Output[0].Type != "message" || result.Output[0].Role != "assistant" {
+		t.Errorf("第一项应为 assistant message，实际 %+v", result.Output[0])
 	}
 	if result.Output[1].Type != "function_call" {
 		t.Fatalf("第二项类型期望 'function_call'，实际 '%s'", result.Output[1].Type)
@@ -416,12 +416,13 @@ func TestClaudeResponseToResponses_TextOnlyRegression(t *testing.T) {
 		t.Fatalf("期望 1 个输出项，实际 %d", len(result.Output))
 	}
 
-	if result.Output[0].Type != "text" {
-		t.Errorf("类型期望 'text'，实际 '%s'", result.Output[0].Type)
+	if result.Output[0].Type != "message" || result.Output[0].Role != "assistant" {
+		t.Errorf("应为 assistant message，实际 %+v", result.Output[0])
 	}
 
-	if result.Output[0].Content != "Hello, how can I help you?" {
-		t.Errorf("内容不匹配")
+	content, ok := result.Output[0].Content.([]types.ContentBlock)
+	if !ok || len(content) != 1 || content[0].Type != "output_text" || content[0].Text != "Hello, how can I help you?" {
+		t.Errorf("output_text 内容不匹配: %+v", result.Output[0].Content)
 	}
 
 	// 验证 usage

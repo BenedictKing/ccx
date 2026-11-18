@@ -191,6 +191,13 @@ func (p *ResponsesProvider) buildResponsesProviderRequestBody(c *gin.Context, bo
 		if err != nil {
 			return nil, nil, fmt.Errorf("get session failed: %w", err)
 		}
+		if c != nil && c.GetString("copilot_route_source") != "" {
+			for _, item := range saved.Messages {
+				if item.EncryptedContent != "" || len(item.EncryptedFunctionArgs) > 0 {
+					return nil, nil, fmt.Errorf("无法为 Copilot 跨协议续轮无损重建加密历史")
+				}
+			}
+		}
 		// 拼接快照后再归一化，避免续轮漏掉此前的增量声明；不改写持久历史。
 		data, err := json.Marshal(saved.Messages)
 		if err != nil {
@@ -695,7 +702,7 @@ func (p *ResponsesProvider) ConvertToClaudeResponse(providerResp *types.Provider
 	if hasToolUse {
 		claudeResp.StopReason = "tool_use"
 	} else if status, _ := responsesResp["status"].(string); status == "incomplete" {
-		claudeResp.StopReason = "max_tokens"
+		claudeResp.StopReason = responsesIncompleteStopReason(responsesResp)
 	} else {
 		claudeResp.StopReason = "end_turn"
 	}
@@ -1124,7 +1131,7 @@ func (p *ResponsesProvider) HandleStreamResponse(body io.ReadCloser) (<-chan str
 				status := toString(response["status"])
 				finalizeCompletedToolStates(response)
 				if status == "incomplete" || eventType == "response.incomplete" {
-					stopReason = "max_tokens"
+					stopReason = responsesIncompleteStopReason(response)
 				}
 				closeOpenContentBlocks()
 				ensureMessageStart()

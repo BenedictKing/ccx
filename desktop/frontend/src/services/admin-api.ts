@@ -485,6 +485,7 @@ export interface DiscoveryModelsResult {
   items: string[]
   selected: DiscoverySelectedModels
   warnings?: string[]
+  modelDetails?: Array<{ id: string; supported_endpoints?: string[] }>
 }
 
 export interface DiscoveryProtocolResult {

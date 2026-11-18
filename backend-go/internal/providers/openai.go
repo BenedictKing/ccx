@@ -394,10 +394,8 @@ func (p *OpenAIProvider) ConvertToClaudeResponse(providerResp *types.ProviderRes
 		// 设置停止原因
 		if len(msg.ToolCalls) > 0 {
 			claudeResp.StopReason = "tool_use"
-		} else if choice.FinishReason == "length" {
-			claudeResp.StopReason = "max_tokens"
 		} else {
-			claudeResp.StopReason = "end_turn"
+			claudeResp.StopReason = converters.OpenAIFinishReasonToAnthropic(choice.FinishReason)
 		}
 	}
 
@@ -441,6 +439,7 @@ func (p *OpenAIProvider) HandleStreamResponse(body io.ReadCloser) (<-chan string
 		nextBlockIndex := 0
 		toolCallAccumulator := make(map[int]*ToolCallAccumulator)
 		toolUseStopEmitted := false
+		hasToolCalls := false
 		messageStartSent := false
 		stopReason := ""
 		var streamUsage map[string]interface{}
@@ -636,6 +635,7 @@ func (p *OpenAIProvider) HandleStreamResponse(body io.ReadCloser) (<-chan string
 
 			// 处理工具调用（跳过空数组，vLLM 等上游可能在每个 delta 都带 tool_calls:[]）
 			if toolCalls, ok := delta["tool_calls"].([]interface{}); ok && len(toolCalls) > 0 {
+				hasToolCalls = true
 				// 在第一个 content_block 之前发送 message_start
 				if !messageStartSent {
 					eventChan <- buildMessageStartEvent(model)
@@ -713,13 +713,11 @@ func (p *OpenAIProvider) HandleStreamResponse(body io.ReadCloser) (<-chan string
 					textBlockStarted = false
 				}
 
-				if !toolUseStopEmitted && (finishReason == "tool_calls" || finishReason == "function_call") {
+				if finishReason == "tool_calls" || finishReason == "function_call" || (finishReason == "stop" && hasToolCalls) {
 					stopReason = "tool_use"
 					toolUseStopEmitted = true
-				} else if finishReason == "stop" {
-					stopReason = "end_turn"
-				} else if finishReason == "length" {
-					stopReason = "max_tokens"
+				} else if finishReason != "" {
+					stopReason = converters.OpenAIFinishReasonToAnthropic(finishReason)
 				}
 			}
 		}

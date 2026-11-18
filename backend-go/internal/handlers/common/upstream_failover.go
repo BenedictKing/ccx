@@ -379,7 +379,23 @@ func TryUpstreamWithAllKeys(
 				}
 			}
 
-			req, err := buildRequest(c, upstreamCopy, apiKey)
+			copilotRoute, requestAPIKey, err := providers.PrepareCopilotRoute(c, upstreamCopy, apiKey, model, string(kind), false)
+			if err != nil {
+				lastError = fmt.Errorf("copilot route resolution failed: %w", err)
+				failedKeys[apiKey] = true
+				RequestLogf(c, "[%s-CopilotRoute] %v，尝试其它合格 Key/渠道", apiType, err)
+				continue
+			}
+			if copilotRoute != nil {
+				RequestLogf(c, "[%s-CopilotRoute] 实际模型=%s protocol=%s source=%s", apiType, config.RedirectModel(model, upstreamCopy), copilotRoute.ServiceType, copilotRoute.Source)
+			}
+			req, err := buildRequest(c, upstreamCopy, requestAPIKey)
+			if err == nil && req == nil {
+				err = errors.New("request builder returned nil")
+			}
+			if err == nil {
+				err = providers.ApplyCopilotRoute(req, copilotRoute, upstream.CustomHeaders)
+			}
 			if err != nil {
 				// buildRequest 失败通常是客户端参数问题或本地构建错误
 				// 不应污染熔断统计，直接返回错误
@@ -632,7 +648,7 @@ func TryUpstreamWithAllKeys(
 				streamingUserID = trackStreamingConversation(c, channelScheduler, kind, model, channelIndex, upstream.Name)
 				StartStreamTimeoutObservation(c, channelLogStore, metricsKey, logRequestID, time.Now())
 			}
-			usage, err = handleSuccess(c, resp, upstreamCopy, apiKey, attemptBody)
+			usage, err = handleSuccess(c, resp, upstreamCopy, requestAPIKey, attemptBody)
 			// 真实业务流量是托管渠道可用性的最强证据（探针可能被风控拦截，不能单独定论）
 			trafficDiagnostic := ""
 			if err != nil {

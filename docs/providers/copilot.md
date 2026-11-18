@@ -23,7 +23,7 @@
 
 ### 配置建议
 
-- 启用 `Codex 原生工具透传`
+- 原生 Responses 默认直接透传，无需打开工具兼容开关；仅在目标模型不接受 Codex 工具格式且已验证转换有效时开启对应兼容选项。
 - 如模型端点不支持图片工具，可开启 `移除 image_generation 工具`
 - 按需配置 `Model Mapping`，将 Codex 客户端常用别名映射到 Copilot 实际模型名
 
@@ -32,26 +32,33 @@
 | 协议 | 端点 |
 |------|------|
 | Responses | `POST /responses` |
+| OpenAI Chat | `POST /chat/completions` |
+| Anthropic Messages | `POST /v1/messages` |
+| Responses WebSocket | `ws:/responses`（需模型明确声明） |
 | Models | `GET /models` |
+
+每个模型支持的端点不同，以 `/models` 的 `supported_endpoints` 为准；不能因为模型名称是 Claude、GPT 或 Gemini 就推断协议。发现结果保留 `modelDetails`，文本能力测试与实际请求共用同一个模型路由解析器。
 
 ## 跨协议转换
 
-GitHub Copilot 上游实际只暴露 Responses 协议（`/responses`）。CCX 会把其它入口的请求统一转换后再发给 Copilot，因此你可以在以下入口都使用 `serviceType: "copilot"` 的渠道：
+四类文本入口都可以使用 `serviceType: "copilot"`。CCX 先应用模型映射，再从实际模型声明的端点中选择协议：优先与客户端相同的协议，其次依次选择 Responses、Messages、Chat。请求转换和响应解析使用同一结果，Copilot 认证与渠道统计身份保持独立。
 
-| 客户端入口 | 客户端协议 | CCX 转换 | Copilot 上游 |
-|------------|------------|----------|--------------|
-| Responses | Responses | 透传 | `POST /responses` |
-| Chat | OpenAI Chat | Chat → Responses | `POST /responses` |
-| Messages | Anthropic Messages | Messages → Responses | `POST /responses` |
-| Gemini | Gemini generateContent | Gemini → Responses | `POST /responses` |
+| 场景 | CCX 行为 |
+|------|----------|
+| Responses → 支持 Responses 的模型 | 默认原生透传，接收原生 Responses SSE |
+| Responses → 仅支持 Messages/Chat 的模型 | 使用已有转换器，响应转回 Responses |
+| Chat/Messages → 支持相同协议的模型 | 使用原生协议，不经 Responses 中转 |
+| Gemini 或不匹配的客户端协议 | 转换为模型支持的实际协议 |
+| WebSocket → 声明 `ws:/responses` 的模型 | 使用原生 WebSocket v2，保留续轮字段与加密内容 |
+| WebSocket → 未声明 WS 的模型 | 使用已有 HTTP/SSE bridge；不可无损重建的续轮明确失败 |
 
 无论从哪个入口进入，CCX 都会：
 
-1. 把客户端请求体转换成 Responses 格式
-2. 用渠道里保存的 GitHub OAuth token 换取短期 Copilot token
-3. 注入 Copilot 运行时请求头，请求 `https://api.githubcopilot.com/responses`
+1. 用 GitHub OAuth token 换取短期 Copilot token，读取模型的端点信息
+2. 按映射后的模型选择协议，必要时转换请求体
+3. 注入受保护的 Copilot 请求头，并请求选定端点；自定义头不能覆盖 Copilot 认证与身份头
 
-说明：`serviceType: "copilot"` 会跳过默认 `/v1` 前缀，最终请求地址为 `https://api.githubcopilot.com/responses`。
+使用默认 Base URL 时，优先采用 token exchange 返回的 API 地址；显式配置的非默认地址保持有效。端点路径按元数据精确拼接，不统一补 `/v1`。
 
 ## 模型映射建议
 
@@ -75,6 +82,10 @@ GitHub Copilot 的可用模型取决于你的订阅与组织策略，请以诊�
 
 哪一层失败就能快速定位问题。
 
+模型能力缓存按 runtime token、API 地址、代理和 TLS 配置隔离，5 分钟后刷新。日志中的 `CopilotRoute` 显示实际模型、协议和路由来源；未记录 token。模型没有端点元数据、或旧接口明确以 404/405 表示不提供 `/models` 时，HTTP 保留历史 `/responses` 默认值并标记 `legacy-default`，不表示该模型已验证可用。认证失败、临时发现失败、模型未列出或端点均不支持时，返回诊断并尝试其它合格 Key/渠道；不猜测协议、不沿用过期能力。
+
+自动发现中的工具、图片和思考回传测试目前保留“未验证”，不会使用错误协议的探测结果自动开启兼容改写；文本连通性按模型端点实际测试。
+
 ## 常见问题
 
 - **token exchange 返回 401/403**：GitHub OAuth token 失效或没有 Copilot 订阅，需重新授权。
@@ -89,4 +100,6 @@ GitHub Copilot 的可用模型取决于你的订阅与组织策略，请以诊�
 - CCX 会在请求前自动把 GitHub OAuth token 换成短期 Copilot token，并注入 `Authorization: Bearer <copilot_token>`
 - 不要手动把 GitHub OAuth token 当作 `Authorization: Bearer` 调用 `api.githubcopilot.com`
 - OAuth 相关接口默认要求管理员鉴权，避免对外暴露 GitHub 登录流程
+- Responses 加密历史无法解密后转成 Messages/Chat；包括通过 `previous_response_id` 找到的本地历史快照。此类请求应继续使用兼容的原生模型/渠道，不能通过删除密文来伪装成功。
+- Copilot 的本地 compact v1/v2 也按摘要模型选择端点，响应按实际协议解析；显式推理续轮复用已固定的 Copilot 认证。
 - 如需代理访问，请在渠道「代理地址」字段填写 HTTP/HTTPS/SOCKS5 代理 URL

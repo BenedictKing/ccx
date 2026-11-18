@@ -11,7 +11,6 @@ import (
 	"github.com/BenedictKing/ccx/internal/config"
 	"github.com/BenedictKing/ccx/internal/handlers/common"
 	"github.com/BenedictKing/ccx/internal/metrics"
-	"github.com/BenedictKing/ccx/internal/providers"
 	"github.com/BenedictKing/ccx/internal/scheduler"
 	"github.com/BenedictKing/ccx/internal/session"
 	"github.com/BenedictKing/ccx/internal/types"
@@ -106,15 +105,7 @@ func tryLocalCompactV2WithKey(
 		return false, &compactError{status: 400, body: []byte(fmt.Sprintf(`{"error":"%s"}`, err.Error())), shouldFailover: false, err: err}
 	}
 
-	upstreamForCompact := upstream
-	if upstream.CompactModel != "" {
-		upstreamCopy := *upstream
-		upstreamCopy.ModelMapping = nil
-		upstreamForCompact = &upstreamCopy
-	}
-
-	provider := &providers.ResponsesProvider{SessionManager: sessionManager}
-	req, _, err := provider.ConvertBodyToProviderRequest(c, upstreamForCompact, apiKey, localBody, "/v1/responses")
+	req, upstreamForCompact, err := buildLocalCompactUpstreamRequest(c, upstream, apiKey, localBody, sessionManager)
 	if err != nil {
 		return false, &compactError{status: 500, body: []byte(`{"error":"构建本地 compact v2 上游请求失败"}`), shouldFailover: true, err: err}
 	}
@@ -142,9 +133,9 @@ func tryLocalCompactV2WithKey(
 	}
 
 	if originalReq.Stream {
-		return handleLocalCompactV2Stream(c, resp, upstream.ServiceType, originalReq, sessionManager)
+		return handleLocalCompactV2Stream(c, resp, upstreamForCompact.ServiceType, originalReq, sessionManager)
 	}
-	return handleLocalCompactV2NonStream(c, resp, upstream.ServiceType, originalReq, sessionManager)
+	return handleLocalCompactV2NonStream(c, resp, upstreamForCompact.ServiceType, originalReq, sessionManager)
 }
 
 func buildCompactionV2SSEEvents(resp *types.ResponsesResponse) []string {

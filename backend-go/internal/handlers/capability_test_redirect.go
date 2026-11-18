@@ -239,7 +239,9 @@ func executeRedirectModelTest(ctx context.Context, channel *config.UpstreamConfi
 		StartedAt:   startedAt.Format(time.RFC3339Nano),
 	}
 
-	req, err := buildTestRequestWithModel(protocol, channel, actualModel, cfgManager)
+	reqCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	req, err := buildTestRequestWithContext(reqCtx, protocol, channel, actualModel, "", cfgManager)
 	if err != nil {
 		errMsg := fmt.Sprintf("build_request_failed: %v", err)
 		result.Error = &errMsg
@@ -248,8 +250,6 @@ func executeRedirectModelTest(ctx context.Context, channel *config.UpstreamConfi
 		return result
 	}
 
-	reqCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
 	req = req.WithContext(reqCtx)
 
 	startTime := time.Now()

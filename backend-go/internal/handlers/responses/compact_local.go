@@ -318,17 +318,7 @@ func tryLocalCompactWithKey(
 	}
 
 	// 如果配置了 CompactModel，临时禁用 ModelMapping 以避免二次映射
-	upstreamForCompact := upstream
-	if upstream.CompactModel != "" {
-		// 创建临时副本，清空 ModelMapping
-		upstreamCopy := *upstream
-		upstreamCopy.ModelMapping = nil
-		upstreamForCompact = &upstreamCopy
-	}
-
-	// 通过 provider 转换并构建上游请求
-	provider := &providers.ResponsesProvider{SessionManager: sessionManager}
-	req, _, err := provider.ConvertBodyToProviderRequest(c, upstreamForCompact, apiKey, localBody, "/v1/responses")
+	req, upstreamForCompact, err := buildLocalCompactUpstreamRequest(c, upstream, apiKey, localBody, sessionManager)
 	if err != nil {
 		return false, &compactError{status: 500, body: []byte(`{"error":"构建本地 compact 上游请求失败"}`), shouldFailover: true, err: err}
 	}
@@ -358,9 +348,27 @@ func tryLocalCompactWithKey(
 	}
 
 	if stream {
-		return handleLocalCompactStream(c, resp, upstream.ServiceType, originalReq, sessionManager)
+		return handleLocalCompactStream(c, resp, upstreamForCompact.ServiceType, originalReq, sessionManager)
 	}
-	return handleLocalCompactNonStream(c, resp, upstream.ServiceType, originalReq, sessionManager)
+	return handleLocalCompactNonStream(c, resp, upstreamForCompact.ServiceType, originalReq, sessionManager)
+}
+
+// compact v1/v2 使用相同模型端点与认证解析，响应解析沿用实际协议。
+func buildLocalCompactUpstreamRequest(c *gin.Context, upstream *config.UpstreamConfig, apiKey string, body []byte, sm *session.SessionManager) (*http.Request, *config.UpstreamConfig, error) {
+	selected := upstream.Clone()
+	if selected.CompactModel != "" {
+		selected.ModelMapping = nil
+	}
+	c.Set("requestBodyBytes", body)
+	route, token, err := providers.PrepareCopilotRoute(c, selected, apiKey, extractCompactRequestModel(body), "responses", false)
+	if err != nil {
+		return nil, selected, err
+	}
+	req, _, err := (&providers.ResponsesProvider{SessionManager: sm}).ConvertBodyToProviderRequest(c, selected, token, body, "/v1/responses")
+	if err == nil {
+		err = providers.ApplyCopilotRoute(req, route, upstream.CustomHeaders)
+	}
+	return req, selected, err
 }
 
 // PLACEHOLDER_HANDLE_NONSTREAM

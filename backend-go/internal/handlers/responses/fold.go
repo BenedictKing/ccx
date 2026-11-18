@@ -90,6 +90,9 @@ func handleFoldedResponsesStreamSuccess(
 		if err != nil {
 			return nil, nil, err
 		}
+		if err := providers.ApplyPreparedCopilotRoute(c, req, upstream.CustomHeaders); err != nil {
+			return nil, nil, err
+		}
 		req = common.WithRequestLogContext(req, c)
 		roundResp, err := common.SendRequest(req, upstream, envCfg, true, "Responses")
 		if err != nil {

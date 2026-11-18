@@ -332,8 +332,8 @@ func ClaudeResponseToResponses(claudeResp map[string]interface{}, sessionID stri
 		case "text":
 			text, _ := contentBlock["text"].(string)
 			output = append(output, types.ResponsesItem{
-				Type:    "text",
-				Content: text,
+				Type: "message", Role: "assistant", Status: "completed",
+				Content: []types.ContentBlock{{Type: "output_text", Text: text}},
 			})
 		case "tool_use":
 			id, _ := contentBlock["id"].(string)

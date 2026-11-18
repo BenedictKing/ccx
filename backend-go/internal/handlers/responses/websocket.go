@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/BenedictKing/ccx/internal/config"
+	"github.com/BenedictKing/ccx/internal/copilot"
 	"github.com/BenedictKing/ccx/internal/handlers/common"
 	"github.com/BenedictKing/ccx/internal/metrics"
 	"github.com/BenedictKing/ccx/internal/middleware"
@@ -26,6 +27,7 @@ import (
 	"github.com/BenedictKing/ccx/internal/utils"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
+	"github.com/tidwall/gjson"
 	"golang.org/x/net/proxy"
 )
 
@@ -95,8 +97,12 @@ func WebSocketHandler(
 				writeWebSocketError(conn, http.StatusServiceUnavailable, "channel_selection_error", err.Error())
 				return
 			}
-			if selection != nil && selection.Upstream != nil && selection.Upstream.ServiceType == "responses" {
+			if selection != nil && selection.Upstream != nil && (selection.Upstream.ServiceType == "responses" || selection.Upstream.ServiceType == "copilot") {
 				if err := serveNativeResponsesWebSocket(c, conn, cfgManager, sessionManager, channelScheduler, selection, payload); err != nil {
+					if errors.Is(err, copilot.ErrUnsupportedWebSocket) {
+						serveResponsesWebSocketBridgeLoop(c, conn, bridgeRouter, payload)
+						return
+					}
 					if !isWebSocketClosed(err) {
 						writeWebSocketError(conn, http.StatusBadGateway, "upstream_websocket_error", err.Error())
 					}
@@ -128,7 +134,12 @@ func headerContainsToken(header http.Header, key, token string) bool {
 
 func parseWebSocketResponseCreatePayload(payload []byte) (map[string]interface{}, error) {
 	var req map[string]interface{}
-	if err := json.Unmarshal(payload, &req); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(payload))
+	decoder.UseNumber()
+	if !json.Valid(payload) {
+		return nil, errors.New("解析 response.create 失败: invalid JSON")
+	}
+	if err := decoder.Decode(&req); err != nil {
 		return nil, fmt.Errorf("解析 response.create 失败: %w", err)
 	}
 
@@ -418,14 +429,23 @@ func buildNativeResponsesProviderRequest(
 	if err != nil {
 		return nil, nil, err
 	}
+	upstream = upstream.Clone()
+	c.Set("requestBodyBytes", body)
+	route, requestAPIKey, err := providers.PrepareCopilotRoute(c, upstream, apiKey, gjson.GetBytes(body, "model").String(), "responses", true)
+	if err != nil {
+		return nil, nil, err
+	}
 	providerReq, _, err := (&providers.ResponsesProvider{SessionManager: sessionManager}).ConvertBodyToProviderRequest(
 		c,
 		upstream,
-		apiKey,
+		requestAPIKey,
 		body,
 		c.Request.URL.Path,
 	)
 	if err != nil {
+		return nil, nil, err
+	}
+	if err := providers.ApplyCopilotRoute(providerReq, route, upstream.CustomHeaders); err != nil {
 		return nil, nil, err
 	}
 	if providerReq.Body == nil {

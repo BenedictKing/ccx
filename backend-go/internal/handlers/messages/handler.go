@@ -171,7 +171,7 @@ func handleMultiChannel(
 					return cfgManager.GetNextAPIKey(upstream, failedKeys, "Messages")
 				},
 				func(c *gin.Context, upstreamCopy *config.UpstreamConfig, apiKey string) (*http.Request, error) {
-					req, _, err := provider.ConvertToProviderRequest(c, upstreamCopy, apiKey)
+					req, _, err := providers.GetProvider(upstreamCopy.ServiceType).ConvertToProviderRequest(c, upstreamCopy, apiKey)
 					return req, err
 				},
 				func(apiKey string) {
@@ -186,6 +186,7 @@ func handleMultiChannel(
 					channelScheduler.MarkURLSuccess(scheduler.ChannelKindMessages, channelIndex, url)
 				},
 				func(c *gin.Context, resp *http.Response, upstreamCopy *config.UpstreamConfig, apiKey string, actualRequestBody []byte) (*types.Usage, error) {
+					provider := providers.GetProvider(upstreamCopy.ServiceType)
 					if claudeReq.Stream {
 						timeouts := common.ResolveStreamPreflightTimeouts(upstreamCopy, metricsManager.GetCircuitBreakerConfig())
 						return common.HandleStreamResponse(c, resp, provider, envCfg, startTime, upstreamCopy, actualRequestBody, claudeReq.Model, timeouts)
@@ -306,7 +307,7 @@ func handleSingleChannel(
 			return cfgManager.GetNextAPIKey(upstream, failedKeys, "Messages")
 		},
 		func(c *gin.Context, upstreamCopy *config.UpstreamConfig, apiKey string) (*http.Request, error) {
-			req, _, err := provider.ConvertToProviderRequest(c, upstreamCopy, apiKey)
+			req, _, err := providers.GetProvider(upstreamCopy.ServiceType).ConvertToProviderRequest(c, upstreamCopy, apiKey)
 			return req, err
 		},
 		func(apiKey string) {
@@ -317,6 +318,7 @@ func handleSingleChannel(
 		nil,
 		nil,
 		func(c *gin.Context, resp *http.Response, upstreamCopy *config.UpstreamConfig, apiKey string, actualRequestBody []byte) (*types.Usage, error) {
+			provider := providers.GetProvider(upstreamCopy.ServiceType)
 			if claudeReq.Stream {
 				timeouts := common.ResolveStreamPreflightTimeouts(upstreamCopy, metricsManager.GetCircuitBreakerConfig())
 				return common.HandleStreamResponse(c, resp, provider, envCfg, startTime, upstreamCopy, actualRequestBody, claudeReq.Model, timeouts)

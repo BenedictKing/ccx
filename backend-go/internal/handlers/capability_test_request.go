@@ -209,6 +209,10 @@ func buildTestRequestWithModel(protocol string, channel *config.UpstreamConfig, 
 }
 
 func buildTestRequestWithModelAndReasoningEffort(protocol string, channel *config.UpstreamConfig, model, reasoningEffort string, cfgManagers ...*config.ConfigManager) (*http.Request, error) {
+	return buildTestRequestWithContext(context.Background(), protocol, channel, model, reasoningEffort, cfgManagers...)
+}
+
+func buildTestRequestWithContext(ctx context.Context, protocol string, channel *config.UpstreamConfig, model, reasoningEffort string, cfgManagers ...*config.ConfigManager) (*http.Request, error) {
 	cfgManager := firstCapabilityProbeConfigManager(cfgManagers)
 	globalCapabilities := capabilityProbeGlobalCapabilities(cfgManager)
 	baseURL := capabilityTestBaseURL(channel)
@@ -228,6 +232,9 @@ func buildTestRequestWithModelAndReasoningEffort(protocol string, channel *confi
 	probeReasoningEffort := capabilityProbeReasoningEffort(model, channel, globalCapabilities)
 	if override := strings.TrimSpace(reasoningEffort); override != "" {
 		probeReasoningEffort = override
+	}
+	if channel.ServiceType == "copilot" {
+		return buildCopilotCapabilityRequest(ctx, protocol, channel, apiKey, model, reasoningEffort, globalCapabilities)
 	}
 
 	var (
@@ -436,6 +443,9 @@ func getCapabilityStreamProvider(protocol string) providers.Provider {
 func sendAndCheckStream(ctx context.Context, channel *config.UpstreamConfig, req *http.Request, protocol string) (bool, bool, int, []byte, error) {
 	envCfg := config.NewEnvConfig()
 	targetProtocol := targetProtocolForCapabilityProtocol(protocol)
+	if channel.ServiceType == "copilot" {
+		targetProtocol = copilotProtocolForRequest(req, targetProtocol)
+	}
 	apiType := channelKindToApiType(targetProtocol)
 	resp, err := common.SendRequest(req, channel, envCfg, true, apiType)
 	if err != nil {

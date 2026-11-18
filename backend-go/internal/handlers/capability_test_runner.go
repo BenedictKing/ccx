@@ -661,7 +661,9 @@ func executeModelTestWithReasoningEffort(ctx context.Context, channel *config.Up
 		StartedAt: startedAt.Format(time.RFC3339Nano),
 	}
 
-	req, err := buildTestRequestWithModelAndReasoningEffort(protocol, channel, model, reasoningEffort, cfgManager)
+	reqCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	req, err := buildTestRequestWithContext(reqCtx, protocol, channel, model, reasoningEffort, cfgManager)
 	if err != nil {
 		errMsg := fmt.Sprintf("build_request_failed: %v", err)
 		modelResult.Error = &errMsg
@@ -673,8 +675,6 @@ func executeModelTestWithReasoningEffort(ctx context.Context, channel *config.Up
 		return modelResult
 	}
 
-	reqCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
 	req = req.WithContext(reqCtx)
 
 	capabilityJobs.update(jobID, func(job *CapabilityTestJob) {

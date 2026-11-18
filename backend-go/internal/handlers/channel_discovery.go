@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/BenedictKing/ccx/internal/config"
+	"github.com/BenedictKing/ccx/internal/copilot"
 	"github.com/BenedictKing/ccx/internal/httpclient"
 	"github.com/BenedictKing/ccx/internal/utils"
 	"github.com/gin-gonic/gin"
@@ -69,6 +70,7 @@ type DiscoveryModelsResult struct {
 	Items      []string                `json:"items"`
 	Selected   DiscoverySelectedModels `json:"selected"`
 	Warnings   []string                `json:"warnings,omitempty"`
+	Details    []copilot.ModelDetails  `json:"modelDetails,omitempty"`
 }
 
 type DiscoveryProtocolResult struct {
@@ -174,7 +176,14 @@ func ChannelDiscoveryWithModelFetchers(cfgManager *config.ConfigManager, modelFe
 		effectiveSuccessModels := discoveryEffectiveSuccessModels(recommendedKind, compatProbeProtocol(channel, recommendedKind), successByProtocol)
 		applyDiscoveryModelCapabilityRecommendations(&recommendation, models.Items, effectiveSuccessModels, globalCapabilities)
 		capabilities := DiscoveryCapabilitiesResult{}
-		if recommendation.ChannelKind != "" {
+		if channel.ServiceType == "copilot" {
+			// 普通兼容探测使用静态认证/URL，不能把 OAuth token 发给推理接口。
+			// 文本连通性由上面的模型级路由探测确认；未测项目必须保留未知状态。
+			capabilities.ToolCalls.Evidence = "尚未验证工具调用，请按所选模型执行工具调用测试"
+			capabilities.Vision.Evidence = "尚未验证图片输入，请按所选模型执行图片输入测试"
+			capabilities.ThinkingPassback.Evidence = "尚未验证思考回传，保持默认透传配置"
+			recommendation.Evidence = append(recommendation.Evidence, DiscoveryEvidence{Type: "protocol", Key: "copilot", Message: "已按实际模型端点测试文本连通性；未自动启用工具兼容改写"})
+		} else if recommendation.ChannelKind != "" {
 			compatModel := discoveryCompatProbeModel(recommendation.ChannelKind, models.Selected, effectiveSuccessModels)
 			visionModel := discoveryVisionProbeModel(recommendation, models.Items, effectiveSuccessModels, globalCapabilities, compatModel)
 			compat := runCompatDiagnoseWithProbeModel(channel, recommendation.ChannelKind, channel.APIKeys[0], capabilityTestBaseURL(channel), compatModel)
@@ -1202,6 +1211,9 @@ func discoveryToolCallsContainName(raw interface{}, toolName string) bool {
 }
 
 func discoverTransientModelsWithFetchers(ctx context.Context, channel *config.UpstreamConfig, channelKind string, apiKey string, fetchers ChannelDiscoveryModelFetchers) DiscoveryModelsResult {
+	if channel.ServiceType == "copilot" {
+		return discoverTransientModels(ctx, channel, channelKind, apiKey)
+	}
 	fetcherKey, fetcher := selectDiscoveryModelsFetcher(channelKind, channel.ServiceType, fetchers)
 	if fetcher == nil {
 		return discoverTransientModels(ctx, channel, channelKind, apiKey)
@@ -1267,6 +1279,19 @@ func selectDiscoveryModelsFetcher(channelKind, serviceType string, fetchers Chan
 }
 
 func discoverTransientModels(ctx context.Context, channel *config.UpstreamConfig, channelKind string, apiKey string) DiscoveryModelsResult {
+	if channel.ServiceType == "copilot" {
+		models, baseURL, err := copilot.DiscoverModels(ctx, apiKey, copilot.RouteOptions{BaseURL: capabilityTestBaseURL(channel), ProxyURL: channel.ProxyURL, InsecureSkipVerify: channel.InsecureSkipVerify})
+		result := DiscoveryModelsResult{Source: "models_endpoint", URL: baseURL + "/models", Details: models}
+		if err != nil {
+			result.Warnings = []string{err.Error()}
+			return result
+		}
+		result.StatusCode = http.StatusOK
+		for _, model := range models {
+			result.Items = append(result.Items, model.ID)
+		}
+		return result
+	}
 	baseURL := capabilityTestBaseURL(channel)
 	if baseURL == "" {
 		return DiscoveryModelsResult{Source: "none", Warnings: []string{"base URL is empty"}}

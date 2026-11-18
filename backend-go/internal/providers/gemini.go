@@ -443,7 +443,8 @@ func (p *GeminiProvider) ConvertToClaudeResponse(providerResp *types.ProviderRes
 
 	// 设置停止原因
 	finishReason, _ := candidate["finishReason"].(string)
-	if strings.Contains(strings.ToLower(finishReason), "stop") {
+	claudeResp.StopReason = mapGeminiFinishReasonToClaudeStopReason(finishReason)
+	if claudeResp.StopReason == "end_turn" {
 		// 检查是否有工具调用
 		hasToolCall := false
 		for _, c := range claudeResp.Content {
@@ -458,8 +459,6 @@ func (p *GeminiProvider) ConvertToClaudeResponse(providerResp *types.ProviderRes
 		} else {
 			claudeResp.StopReason = "end_turn"
 		}
-	} else if strings.Contains(strings.ToLower(finishReason), "length") {
-		claudeResp.StopReason = "max_tokens"
 	}
 
 	// 使用统计
