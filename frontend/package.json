@@ -5,8 +5,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vue-tsc --noEmit && vite build",
+    "dev": "node scripts/check-icons.js && vite",
+    "build": "node scripts/check-icons.js && vue-tsc --noEmit && vite build",
+    "check:icons": "node scripts/check-icons.js",
     "preview": "vite preview",
     "type-check": "vue-tsc --noEmit",
     "test": "vitest run",
