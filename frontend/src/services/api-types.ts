@@ -1014,3 +1014,11 @@ export interface SiteBalanceResponse {
   currency?: string
   error?: string
 }
+
+export interface SiteChannelGroupCopyResult {
+  channelIndex: number
+  channelName: string
+  accountUid: string
+  group: string
+  reused: boolean
+}

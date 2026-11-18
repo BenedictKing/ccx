@@ -259,3 +259,124 @@ func TestExistingChannelAccountBindingPreservesKeysAndRefreshesRatio(t *testing.
 		t.Fatal("Key 指纹不匹配时不应绑定")
 	}
 }
+
+func TestKeyBindingsSupportTwoAccountsInOneChannel(t *testing.T) {
+	site, uidA, store, cm, adapter := newProvisionTestDeps(t)
+	if _, err := ProvisionProtocol(context.Background(), store, cm, adapter, ProvisionRequest{AccountUID: uidA, Protocol: "chat", Groups: []string{"default"}, Models: []string{"gpt-4o"}}); err != nil {
+		t.Fatal(err)
+	}
+	accountA, _, _ := store.Get(uidA)
+	uidB, err := store.Upsert(SiteAccount{SiteType: "newapi", BaseURL: accountA.BaseURL, UserID: "2", AccessToken: "second"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ProvisionProtocol(context.Background(), store, cm, adapter, ProvisionRequest{AccountUID: uidB, Protocol: "chat", Groups: []string{"default"}, Models: []string{"claude-sonnet-4"}}); err != nil {
+		t.Fatal(err)
+	}
+	channels := cm.GetConfig().ChatUpstream
+	indexA, indexB := -1, -1
+	for i := range channels {
+		if channels[i].SiteAccountUID == uidA {
+			indexA = i
+		}
+		if channels[i].SiteAccountUID == uidB {
+			indexB = i
+		}
+	}
+	keyA := channels[indexA].APIKeys[0]
+	keyB := channels[indexB].APIKeys[0]
+	if _, err := cm.UpdateChatUpstream(indexA, config.UpstreamUpdate{APIKeys: []string{keyA, keyB}}); err != nil {
+		t.Fatal(err)
+	}
+	accountB, _, _ := store.Get(uidB)
+	metaB := accountB.ProvisionedKeys[0]
+	site.mu.Lock()
+	site.tokens[metaB.TokenID].ModelLimits = "gpt-4o,claude-sonnet-4"
+	site.mu.Unlock()
+	if err := BindExistingKey(context.Background(), store, cm, adapter, KeyBindingRequest{AccountUID: uidB, Protocol: "chat", ChannelIndex: indexA, APIKey: keyB, Group: "default", RemoteTokenID: metaB.TokenID}); err != nil {
+		t.Fatal(err)
+	}
+	mixed := cm.GetConfig().ChatUpstream[indexA]
+	if mixed.SiteAccountUID != uidA {
+		t.Fatal("绑定第二个账号不应改写渠道主账号")
+	}
+	if mixed.APIKeyConfigs[0].SourceAccountUID != uidA || mixed.APIKeyConfigs[1].SourceAccountUID != uidB {
+		t.Fatalf("两个 Key 的账号归属不符: keys=%v configs=%+v", mixed.APIKeys, mixed.APIKeyConfigs)
+	}
+	if err := BindExistingKey(context.Background(), store, cm, adapter, KeyBindingRequest{AccountUID: uidB, Protocol: "chat", ChannelIndex: indexA, APIKey: keyA, Group: "default", RemoteTokenID: metaB.TokenID}); err == nil {
+		t.Fatal("远端与本地明文不一致时不得绑定")
+	}
+	if err := UnbindExistingKey(store, cm, KeyBindingRequest{Protocol: "chat", ChannelIndex: indexA, APIKey: keyB}); err != nil {
+		t.Fatal(err)
+	}
+	mixed = cm.GetConfig().ChatUpstream[indexA]
+	if mixed.SiteAccountUID != uidA || mixed.APIKeyConfigs[0].SourceAccountUID != uidA || mixed.APIKeyConfigs[1].SourceAccountUID != "" {
+		t.Fatalf("解绑账号 B 影响了账号 A: %+v", mixed.APIKeyConfigs)
+	}
+	if err := BindExistingKey(context.Background(), store, cm, adapter, KeyBindingRequest{AccountUID: uidB, Protocol: "chat", ChannelIndex: indexA, APIKey: keyB, Group: "default", RemoteTokenID: metaB.TokenID}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := cm.RemoveChatUpstream(indexB); err != nil {
+		t.Fatal(err)
+	}
+	for i, channel := range cm.GetConfig().ChatUpstream {
+		if channel.SiteAccountUID == uidA {
+			indexA = i
+		}
+	}
+	site.deleteTokenByName(metaB.Name)
+	if _, err := ReconcileAccount(context.Background(), store, cm, adapter, uidB); err != nil {
+		t.Fatal(err)
+	}
+	mixed = cm.GetConfig().ChatUpstream[indexA]
+	if len(mixed.APIKeys) != 1 || mixed.APIKeys[0] != keyA || len(mixed.DisabledAPIKeys) != 1 || mixed.DisabledAPIKeys[0].Key != keyB {
+		t.Fatalf("账号 B 对账误伤账号 A 的 Key: %+v", mixed)
+	}
+}
+
+func TestGroupCopyKeepsOriginalAndUsesIndependentKey(t *testing.T) {
+	site, uid, store, cm, adapter := newProvisionTestDeps(t)
+	if _, err := ProvisionProtocol(context.Background(), store, cm, adapter, ProvisionRequest{AccountUID: uid, Protocol: "chat", Groups: []string{"default"}, Models: []string{"gpt-4o"}}); err != nil {
+		t.Fatal(err)
+	}
+	original := cm.GetConfig().ChatUpstream[0]
+	emptyCopy := ChannelGroupCopyRequest{KeyBindingRequest: KeyBindingRequest{AccountUID: uid, Protocol: "chat", ChannelIndex: 0, APIKey: original.APIKeys[0], Group: "empty"}}
+	if _, err := CopyChannelToGroup(context.Background(), store, cm, adapter, emptyCopy); err == nil || len(cm.GetConfig().ChatUpstream) != 1 {
+		t.Fatal("空模型分组不应创建渠道副本")
+	}
+	site.mu.Lock()
+	site.groups["vip"] = 0.5
+	site.mu.Unlock()
+	req := ChannelGroupCopyRequest{KeyBindingRequest: KeyBindingRequest{AccountUID: uid, Protocol: "chat", ChannelIndex: 0, APIKey: original.APIKeys[0], Group: "vip"}}
+	result, err := CopyChannelToGroup(context.Background(), store, cm, adapter, req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Reused || result.ChannelIndex != 0 {
+		t.Fatalf("副本结果不符: %+v", result)
+	}
+	channels := cm.GetConfig().ChatUpstream
+	if len(channels) != 2 || channels[1].Name != original.Name || fmt.Sprint(channels[1].APIKeys) != fmt.Sprint(original.APIKeys) {
+		t.Fatalf("原渠道被改写: %+v", channels)
+	}
+	copy := channels[0]
+	if copy.SiteAccountUID != uid || copy.SiteGroup != "vip" || len(copy.APIKeys) != 1 || copy.APIKeys[0] == original.APIKeys[0] || *copy.APIKeyConfigs[0].GroupMultiplier != 0.5 {
+		t.Fatalf("副本分组或 Key 不符: %+v", copy)
+	}
+	req.ChannelIndex = 1
+	again, err := CopyChannelToGroup(context.Background(), store, cm, adapter, req)
+	if err != nil || !again.Reused || len(cm.GetConfig().ChatUpstream) != 2 {
+		t.Fatalf("重复复制应复用已有副本: %+v %v", again, err)
+	}
+	site.mu.Lock()
+	site.groups["vip"] = 0.25
+	site.mu.Unlock()
+	if _, err := ReconcileAccount(context.Background(), store, cm, adapter, uid); err != nil {
+		t.Fatal(err)
+	}
+	channels = cm.GetConfig().ChatUpstream
+	if *channels[0].APIKeyConfigs[0].GroupMultiplier != 0.25 || *channels[1].APIKeyConfigs[0].GroupMultiplier != 1 {
+		t.Fatalf("分组对账串写: vip=%v default=%v", channels[0].APIKeyConfigs[0].GroupMultiplier, channels[1].APIKeyConfigs[0].GroupMultiplier)
+	}
+}

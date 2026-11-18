@@ -62,7 +62,7 @@ func (f *fakeNewApiSite) handler(w http.ResponseWriter, r *http.Request) {
 		var req NewApiCreateTokenRequest
 		_ = json.NewDecoder(r.Body).Decode(&req)
 		token := &NewApiToken{
-			ID: f.nextID, Key: "plain-" + req.Name, Name: req.Name, Group: req.Group, Status: 1,
+			ID: f.nextID, Key: "plain-" + strconv.Itoa(f.nextID) + "-" + req.Name, Name: req.Name, Group: req.Group, Status: 1,
 			ModelLimitsEnabled: req.ModelLimitsEnabled, ModelLimits: req.ModelLimits,
 		}
 		f.tokens[f.nextID] = token

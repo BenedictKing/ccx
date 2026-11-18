@@ -106,7 +106,6 @@ func ReconcileAccount(ctx context.Context, store *AccountStore, cfgManager *conf
 					actions = append(actions, action)
 				}
 			}
-			break
 		}
 		if !foundLocal {
 			action.Action, action.Detail = "missing_local", "本地渠道已删除，保留人工选择"

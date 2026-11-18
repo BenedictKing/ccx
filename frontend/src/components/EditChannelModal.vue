@@ -71,6 +71,7 @@
                 @update:api-key-configs="form.apiKeyConfigs = $event"
                 @update:max-group-multiplier="form.maxGroupMultiplier = $event"
                 @update:proxy-url="form.proxyUrl = $event"
+                @bind-account="bindingKey = $event"
                 @restore-key="restoreDisabledKey"
                 @restore-key-model="restoreDisabledKeyModel"
                 @suspend-key="suspendKey"
@@ -81,10 +82,12 @@
               />
               <SiteAccountBindingSection
                 v-if="isEditing && props.channel && !['images', 'vectors'].includes(props.channelType)"
+                :show="!!bindingKey"
                 :channel="props.channel"
                 :channel-type="props.channelType"
-                class="mt-6"
-                @updated="emit('updated')"
+                :api-key="bindingKey"
+                @update:show="!$event && (bindingKey = '')"
+                @updated="bindingKey = ''; emit('updated')"
               />
             </section>
 
@@ -438,6 +441,7 @@
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue'
 // 子组件导入
 import AddChannelHeader from './edit-channel/AddChannelHeader.vue'
 import AddChannelSidebarNav from './edit-channel/AddChannelSidebarNav.vue'
@@ -460,6 +464,7 @@ const props = withDefaults(defineProps<EditChannelModalProps>(), {
 })
 
 const emit = defineEmits<EditChannelModalEmits>()
+const bindingKey = ref('')
 
 const {
   formRef,

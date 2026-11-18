@@ -134,6 +134,27 @@
                 <div class="d-flex align-center ga-1">
                   <v-tooltip
                     v-if="isEditing && channelId !== undefined"
+                    :text="t('channelEditor.accountBinding.keyAction')"
+                    location="top"
+                    :open-delay="150"
+                    content-class="key-tooltip"
+                  >
+                    <template #activator="{ props: tooltipProps }">
+                      <v-btn
+                        v-bind="tooltipProps"
+                        size="small"
+                        color="primary"
+                        icon
+                        variant="text"
+                        rounded="md"
+                        @click="$emit('bind-account', key)"
+                      >
+                        <v-icon size="small">mdi-account-switch</v-icon>
+                      </v-btn>
+                    </template>
+                  </v-tooltip>
+                  <v-tooltip
+                    v-if="isEditing && channelId !== undefined"
                     :text="t('channelCard.groupModelPolicy')"
                     location="top"
                     :open-delay="150"
@@ -605,6 +626,7 @@ const emit = defineEmits<{
   'update:apiKeyConfigs': [APIKeyConfig[]]
   'update:maxGroupMultiplier': [number | null]
   'update:proxyUrl': [string]
+  'bind-account': [string]
   'restore-key': [string]
   'restore-key-model': [string, string]
   'suspend-key': [string]

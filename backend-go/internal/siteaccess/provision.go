@@ -436,6 +436,11 @@ func recordProvisionedKey(store *AccountStore, account SiteAccount, protocol str
 
 // matchesAccountChannel 旧渠道只凭确切的 Key 指纹接管，不凭可重名的展示名称。
 func matchesAccountChannel(channel config.UpstreamConfig, account SiteAccount, group, fingerprint string) bool {
+	for _, cfg := range channel.APIKeyConfigs {
+		if cfg.SourceAccountUID == account.UID && keyFingerprint(cfg.Key) == fingerprint {
+			return true
+		}
+	}
 	if channel.SiteAccountUID != "" {
 		return channel.SiteAccountUID == account.UID && channel.SiteGroup == group
 	}

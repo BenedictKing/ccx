@@ -238,6 +238,64 @@ func RegisterRoutes(apiGroup *gin.RouterGroup, deps *Deps) {
 		c.JSON(http.StatusOK, gin.H{"success": true})
 	})
 
+	group.PUT("/channels/:protocol/:index/key-binding", func(c *gin.Context) {
+		var req KeyBindingRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "请求体解析失败"})
+			return
+		}
+		index, err := strconv.Atoi(c.Param("index"))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "无效的渠道索引"})
+			return
+		}
+		req.Protocol, req.ChannelIndex = c.Param("protocol"), index
+		if err := BindExistingKey(c.Request.Context(), deps.Store, deps.CfgManager, adapter, req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"success": true})
+	})
+
+	group.POST("/channels/:protocol/:index/key-unbinding", func(c *gin.Context) {
+		var req KeyBindingRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "请求体解析失败"})
+			return
+		}
+		index, err := strconv.Atoi(c.Param("index"))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "无效的渠道索引"})
+			return
+		}
+		req.Protocol, req.ChannelIndex = c.Param("protocol"), index
+		if err := UnbindExistingKey(deps.Store, deps.CfgManager, req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"success": true})
+	})
+
+	group.POST("/channels/:protocol/:index/group-copy", func(c *gin.Context) {
+		var req ChannelGroupCopyRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "请求体解析失败"})
+			return
+		}
+		index, err := strconv.Atoi(c.Param("index"))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "无效的渠道索引"})
+			return
+		}
+		req.Protocol, req.ChannelIndex = c.Param("protocol"), index
+		result, err := CopyChannelToGroup(c.Request.Context(), deps.Store, deps.CfgManager, adapter, req)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, result)
+	})
+
 	// 分组/模型预览：接入前展示可选分组、倍率与各组模型，不落任何渠道配置
 	group.GET("/accounts/:uid/keys", func(c *gin.Context) {
 		account, found, err := deps.Store.Get(c.Param("uid"))

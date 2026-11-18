@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -99,6 +100,30 @@ func TestProvisionAndReconcileResponsesMatchWebContract(t *testing.T) {
 		"/api/siteaccess/channels/chat/0/binding", strings.NewReader(`{"accountUid":"`+uid+`","group":"default"}`)))
 	if bind.Code != http.StatusOK || cfgManager.GetConfig().ChatUpstream[0].SiteAccountUID != uid {
 		t.Fatalf("绑定端点失败: %d %s", bind.Code, bind.Body.String())
+	}
+	channel := cfgManager.GetConfig().ChatUpstream[0]
+	account, _, _ := store.Get(uid)
+	meta := account.ProvisionedKeys[0]
+	unbindKey := httptest.NewRecorder()
+	router.ServeHTTP(unbindKey, httptest.NewRequest(http.MethodPost,
+		"/api/siteaccess/channels/chat/0/key-unbinding", strings.NewReader(`{"apiKey":"`+channel.APIKeys[0]+`"}`)))
+	if unbindKey.Code != http.StatusOK {
+		t.Fatalf("Key 解绑端点失败: %d %s", unbindKey.Code, unbindKey.Body.String())
+	}
+	bindKey := httptest.NewRecorder()
+	router.ServeHTTP(bindKey, httptest.NewRequest(http.MethodPut,
+		"/api/siteaccess/channels/chat/0/key-binding", strings.NewReader(`{"accountUid":"`+uid+`","apiKey":"`+channel.APIKeys[0]+`","group":"default","remoteTokenId":`+strconv.Itoa(meta.TokenID)+`}`)))
+	if bindKey.Code != http.StatusOK {
+		t.Fatalf("Key 绑定端点失败: %d %s", bindKey.Code, bindKey.Body.String())
+	}
+	site.mu.Lock()
+	site.groups["vip"] = 0.5
+	site.mu.Unlock()
+	copyGroup := httptest.NewRecorder()
+	router.ServeHTTP(copyGroup, httptest.NewRequest(http.MethodPost,
+		"/api/siteaccess/channels/chat/0/group-copy", strings.NewReader(`{"accountUid":"`+uid+`","apiKey":"`+channel.APIKeys[0]+`","group":"vip","remoteTokenId":0}`)))
+	if copyGroup.Code != http.StatusOK || len(cfgManager.GetConfig().ChatUpstream) != 2 {
+		t.Fatalf("分组副本端点失败: %d %s", copyGroup.Code, copyGroup.Body.String())
 	}
 	clean := httptest.NewRecorder()
 	router.ServeHTTP(clean, httptest.NewRequest(http.MethodPost,

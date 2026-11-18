@@ -80,7 +80,12 @@ func syncRemoteKey(cm *config.ConfigManager, apiType string, index int, channel 
 		if remote.UnlimitedQuota != nil && !*remote.UnlimitedQuota && remote.RemainQuota != nil && *remote.RemainQuota <= 0 {
 			cfg.RemoteStatus = "quota_exhausted"
 		}
-		cfg.QuotaGroup = channel.SiteAccountUID + "/" + remote.Group
+		accountUID := cfg.SourceAccountUID
+		if accountUID == "" {
+			accountUID = channel.SiteAccountUID
+			cfg.SourceAccountUID = accountUID
+		}
+		cfg.QuotaGroup = accountUID + "/" + remote.Group
 		cfg.SourceRemoteTokenID = remote.ID
 		found = true
 	}

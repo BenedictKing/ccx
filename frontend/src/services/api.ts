@@ -1280,8 +1280,16 @@ export class ApiService {
     return this.request(`/siteaccess/accounts/${uid}/balance`)
   }
 
-  async updateSiteChannelBinding(protocol: string, index: number, req: { accountUid: string; group: string }): Promise<void> {
-    await this.request(`/siteaccess/channels/${protocol}/${index}/binding`, { method: 'PUT', body: JSON.stringify(req) })
+  async bindSiteKey(protocol: string, index: number, req: { accountUid: string; apiKey: string; group: string; remoteTokenId: number }): Promise<void> {
+    await this.request(`/siteaccess/channels/${protocol}/${index}/key-binding`, { method: 'PUT', body: JSON.stringify(req) })
+  }
+
+  async unbindSiteKey(protocol: string, index: number, apiKey: string): Promise<void> {
+    await this.request(`/siteaccess/channels/${protocol}/${index}/key-unbinding`, { method: 'POST', body: JSON.stringify({ apiKey }) })
+  }
+
+  async copySiteChannelGroup(protocol: string, index: number, req: { accountUid: string; apiKey: string; group: string; remoteTokenId: number }): Promise<import('./api-types').SiteChannelGroupCopyResult> {
+    return this.request(`/siteaccess/channels/${protocol}/${index}/group-copy`, { method: 'POST', body: JSON.stringify(req) })
   }
 
 }
