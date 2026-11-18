@@ -47,6 +47,7 @@ export type EditChannelModalEmits = {
   save: [channel: Omit<Channel, 'index' | 'latency' | 'status'>, options?: { isQuickAdd?: boolean; triggerCapabilityTest?: boolean }]
   error: [message: string]
   success: [message: string]
+  updated: []
 }
 
 type EditChannelModalEmit = <K extends keyof EditChannelModalEmits>(event: K, ...args: EditChannelModalEmits[K]) => void

@@ -211,3 +211,51 @@ func TestSyncDoesNotOverwriteConcurrentManualEdit(t *testing.T) {
 		t.Fatal("后台同步覆盖了最新的人工停用设置")
 	}
 }
+
+func TestExistingChannelAccountBindingPreservesKeysAndRefreshesRatio(t *testing.T) {
+	site, uid, store, cm, adapter := newProvisionTestDeps(t)
+	defer cm.Close()
+	req := ProvisionRequest{AccountUID: uid, Protocol: "chat", Groups: []string{"default"}, Models: []string{"gpt-4o"}}
+	if _, err := ProvisionProtocol(context.Background(), store, cm, adapter, req); err != nil {
+		t.Fatal(err)
+	}
+	original := cm.GetConfig().ChatUpstream[0]
+	originalKeys := append([]string(nil), original.APIKeys...)
+	binding := ChannelBindingRequest{AccountUID: uid, Protocol: "chat", ChannelIndex: 0, Group: "default"}
+
+	if err := BindExistingChannel(context.Background(), store, cm, adapter, ChannelBindingRequest{AccountUID: uid, Protocol: "chat", ChannelIndex: 0, Group: "missing"}); err == nil {
+		t.Fatal("未知分组不应绑定")
+	}
+	if err := UnbindExistingChannel(cm, binding); err != nil {
+		t.Fatal(err)
+	}
+	unbound := cm.GetConfig().ChatUpstream[0]
+	if unbound.SiteAccountUID != "" || unbound.SiteGroup != "" || unbound.APIKeyConfigs[0].MultiplierSource != "manual" {
+		t.Fatalf("解绑状态不符: %+v", unbound)
+	}
+	if fmt.Sprint(unbound.APIKeys) != fmt.Sprint(originalKeys) || unbound.Name != original.Name {
+		t.Fatal("解绑改写了渠道或 Key")
+	}
+
+	site.mu.Lock()
+	site.groups["default"] = 0.25
+	site.mu.Unlock()
+	if err := BindExistingChannel(context.Background(), store, cm, adapter, binding); err != nil {
+		t.Fatal(err)
+	}
+	bound := cm.GetConfig().ChatUpstream[0]
+	if bound.SiteAccountUID != uid || bound.SiteGroup != "default" || *bound.APIKeyConfigs[0].GroupMultiplier != 0.25 {
+		t.Fatalf("绑定或倍率同步失败: %+v", bound)
+	}
+	if fmt.Sprint(bound.APIKeys) != fmt.Sprint(originalKeys) || bound.Name != original.Name {
+		t.Fatal("绑定改写了渠道或 Key")
+	}
+
+	otherKey := "sk-not-the-remote-key"
+	if _, err := cm.UpdateChatUpstream(0, config.UpstreamUpdate{SiteAccountUID: new(string), SiteGroup: new(string), APIKeys: []string{otherKey}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := BindExistingChannel(context.Background(), store, cm, adapter, binding); err == nil {
+		t.Fatal("Key 指纹不匹配时不应绑定")
+	}
+}

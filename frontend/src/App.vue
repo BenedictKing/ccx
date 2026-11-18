@@ -403,6 +403,7 @@
       :channel-type="channelStore.activeTab"
       @save="saveChannel"
       @error="showErrorToast"
+      @updated="refreshChannels"
     />
 
     <!-- 能力测试对话框 -->

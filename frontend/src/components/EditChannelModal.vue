@@ -79,6 +79,13 @@
                 @disable-group-model="disableGroupModel"
                 @restore-group-model="restoreDisabledGroupModel"
               />
+              <SiteAccountBindingSection
+                v-if="isEditing && props.channel && !['images', 'vectors'].includes(props.channelType)"
+                :channel="props.channel"
+                :channel-type="props.channelType"
+                class="mt-6"
+                @updated="emit('updated')"
+              />
             </section>
 
             <!-- 模型重定向（模型映射 + Vision 回退 + 模型过滤） -->
@@ -418,6 +425,7 @@ import AddChannelHeader from './edit-channel/AddChannelHeader.vue'
 import AddChannelSidebarNav from './edit-channel/AddChannelSidebarNav.vue'
 import BasicInfoSection from './edit-channel/BasicInfoSection.vue'
 import ApiKeyManagementSection from './edit-channel/ApiKeyManagementSection.vue'
+import SiteAccountBindingSection from './edit-channel/SiteAccountBindingSection.vue'
 import ModelMappingSection from './edit-channel/ModelMappingSection.vue'
 import ModelCapabilitySection from './edit-channel/ModelCapabilitySection.vue'
 import EmbeddingCompatibilitySection from './edit-channel/EmbeddingCompatibilitySection.vue'

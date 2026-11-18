@@ -1280,6 +1280,10 @@ export class ApiService {
     return this.request(`/siteaccess/accounts/${uid}/balance`)
   }
 
+  async updateSiteChannelBinding(protocol: string, index: number, req: { accountUid: string; group: string }): Promise<void> {
+    await this.request(`/siteaccess/channels/${protocol}/${index}/binding`, { method: 'PUT', body: JSON.stringify(req) })
+  }
+
 }
 
 export const api = new ApiService()

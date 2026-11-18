@@ -88,6 +88,18 @@ func TestProvisionAndReconcileResponsesMatchWebContract(t *testing.T) {
 	if strings.Contains(provision.Body.String(), `"Groups"`) || strings.Contains(provision.Body.String(), `"KeyName"`) {
 		t.Fatalf("接入响应混入大写字段: %s", provision.Body.String())
 	}
+	unbind := httptest.NewRecorder()
+	router.ServeHTTP(unbind, httptest.NewRequest(http.MethodPut,
+		"/api/siteaccess/channels/chat/0/binding", strings.NewReader(`{"accountUid":"","group":""}`)))
+	if unbind.Code != http.StatusOK || cfgManager.GetConfig().ChatUpstream[0].SiteAccountUID != "" {
+		t.Fatalf("解绑端点失败: %d %s", unbind.Code, unbind.Body.String())
+	}
+	bind := httptest.NewRecorder()
+	router.ServeHTTP(bind, httptest.NewRequest(http.MethodPut,
+		"/api/siteaccess/channels/chat/0/binding", strings.NewReader(`{"accountUid":"`+uid+`","group":"default"}`)))
+	if bind.Code != http.StatusOK || cfgManager.GetConfig().ChatUpstream[0].SiteAccountUID != uid {
+		t.Fatalf("绑定端点失败: %d %s", bind.Code, bind.Body.String())
+	}
 	clean := httptest.NewRecorder()
 	router.ServeHTTP(clean, httptest.NewRequest(http.MethodPost,
 		"/api/siteaccess/accounts/"+uid+"/reconcile", nil))

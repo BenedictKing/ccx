@@ -3,6 +3,7 @@ package siteaccess
 import (
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -205,6 +206,33 @@ func RegisterRoutes(apiGroup *gin.RouterGroup, deps *Deps) {
 		}
 		if err := VerifyRealRequest(c.Request.Context(), deps.Store, deps.CfgManager, c.Param("uid"), req.Protocol, req.Group, req.Model); err != nil {
 			c.JSON(http.StatusOK, gin.H{"success": false, "error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"success": true})
+	})
+
+	// 已有渠道绑定/解绑账号：只更新归属与可信倍率，不创建或删除 Key
+	group.PUT("/channels/:protocol/:index/binding", func(c *gin.Context) {
+		var req ChannelBindingRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "请求体解析失败"})
+			return
+		}
+		req.Protocol = c.Param("protocol")
+		index, parseErr := strconv.Atoi(c.Param("index"))
+		if parseErr != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "无效的渠道索引"})
+			return
+		}
+		req.ChannelIndex = index
+		var err error
+		if strings.TrimSpace(req.AccountUID) == "" {
+			err = UnbindExistingChannel(deps.CfgManager, req)
+		} else {
+			err = BindExistingChannel(c.Request.Context(), deps.Store, deps.CfgManager, adapter, req)
+		}
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{"success": true})
