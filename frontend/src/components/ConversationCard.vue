@@ -17,9 +17,10 @@
             <span v-bind="tooltipProps" :class="['status-led', `status-led--${conversation.status}`]"></span>
           </template>
         </v-tooltip>
+        <span :class="['status-label', `status-label--${conversation.status}`]">{{ statusLabel }}</span>
         <v-tooltip :text="kindTooltip" location="top" :open-delay="150" content-class="ccx-tooltip">
           <template #activator="{ props: tooltipProps }">
-            <span v-bind="tooltipProps" :class="['kind-chip', `kind-chip--${conversation.kind}`]">{{ kindLabel }}</span>
+            <span v-bind="tooltipProps" class="kind-chip">{{ kindLabel }}</span>
           </template>
         </v-tooltip>
         <span class="task-card-title" :title="tooltipText">
@@ -35,10 +36,10 @@
             <span v-bind="tooltipProps" class="task-meta-item task-title-stat">{{ duration }}</span>
           </template>
         </v-tooltip>
-        <v-tooltip v-if="hasSubagentActivity" :text="subagentCountTooltip" location="top" :open-delay="150" content-class="ccx-tooltip">
+        <v-tooltip v-if="hasSubagentActivity && (expanded || childConversationCount === 0)" :text="subagentCountTooltip" location="top" :open-delay="150" content-class="ccx-tooltip">
           <template #activator="{ props: tooltipProps }">
             <span v-bind="tooltipProps" class="task-subagent-chip">
-              SA {{ displaySubagentCount }}
+              {{ t('cockpit.subagents') }} {{ displaySubagentCount }}
             </span>
           </template>
         </v-tooltip>
@@ -108,8 +109,10 @@
       </div>
 
       <div class="task-card-notes">
-        <span>{{ conversation.lastModel }}</span>
-        <span class="task-card-channel">{{ conversation.channelName || `Channel ${conversation.currentChannel}` }}</span>
+        <span class="task-card-model" :title="conversation.lastModel">{{ conversation.lastModel }}</span>
+        <v-icon size="12" class="task-route-arrow">mdi-arrow-right</v-icon>
+        <span class="task-card-channel" :title="currentChannelInfo.name">{{ currentChannelInfo.name }}</span>
+        <span v-if="hasOverride" class="override-badge">{{ t('cockpit.overrideBadge') }}</span>
       </div>
 
       <div v-if="expanded" class="main-conversation-detail">
@@ -165,38 +168,6 @@
         </div>
       </div>
 
-      <!-- Row 2: Model + Channel chips (collapsed) -->
-      <div v-if="!expanded" class="d-flex align-center ga-2 flex-wrap">
-        <v-tooltip v-for="ch in visibleChannels" :key="ch.index" :text="getChannelTooltip(ch)" location="top" :open-delay="150" content-class="ccx-tooltip">
-          <template #activator="{ props: tip }">
-            <v-chip
-              v-bind="tip"
-              :class="{
-                'current-channel-chip': ch.index === conversation.currentChannel && !hasOverride,
-                'next-channel-chip': ch.index === nextChannel,
-              }"
-              :color="ch.index === conversation.currentChannel ? 'primary' : ch.index === nextChannel ? (nextChannelCircuitOpen ? 'error' : 'success') : undefined"
-              :variant="ch.index === conversation.currentChannel ? 'flat' : ch.index === nextChannel ? 'flat' : 'outlined'"
-              size="x-small"
-              @click.stop="handleQuickOverride(ch)"
-            >
-              {{ ch.name }}
-              <template v-if="ch.index === conversation.currentChannel" #append>
-                <v-icon size="10">mdi-check</v-icon>
-              </template>
-              <template v-else-if="ch.index === nextChannel" #append>
-                <span class="next-label">| {{ nextChannelCircuitOpen ? 'TRIPPED' : 'NEXT' }}</span>
-              </template>
-            </v-chip>
-          </template>
-        </v-tooltip>
-        <v-tooltip v-if="hiddenCount > 0" :text="hiddenChannelsTooltip" location="top" :open-delay="150" content-class="ccx-tooltip">
-          <template #activator="{ props: tooltipProps }">
-            <v-chip v-bind="tooltipProps" size="x-small" variant="text" @click.stop="$emit('toggleExpand')">+{{ hiddenCount }}</v-chip>
-          </template>
-        </v-tooltip>
-      </div>
-
       <!-- Expanded: Override alert -->
       <v-alert v-if="expanded && hasOverride" type="warning" density="compact" variant="tonal" class="override-alert mb-2 mt-2">
         <div class="d-flex align-center">
@@ -211,9 +182,20 @@
         </div>
       </v-alert>
 
-      <!-- Expanded: Full channel sequence -->
       <div v-if="expanded" class="main-routing-section">
-        <div class="text-caption text-medium-emphasis mb-1">{{ t('cockpit.mainRouting') }} · {{ conversation.lastModel }}</div>
+        <div class="main-routing-head" @click.stop>
+          <span class="main-routing-title">{{ t('cockpit.mainRouting') }} · {{ conversation.lastModel }}</span>
+          <v-select
+            :model-value="overrideDuration"
+            :items="durationOptions"
+            :label="t('cockpit.overrideDuration')"
+            density="compact"
+            variant="outlined"
+            hide-details
+            class="override-duration-select"
+            @update:model-value="emit('update:overrideDuration', $event)"
+          />
+        </div>
         <ConversationChannelSequence
           :channels="channelSequence"
           :current-channel="conversation.currentChannel"
@@ -275,8 +257,7 @@
         </div>
       </div>
 
-      <!-- Row 3: Raw User ID -->
-      <div v-if="conversation.rawUserId" class="raw-user-id mt-2 d-flex align-center">
+      <div v-if="expanded && conversation.rawUserId" class="raw-user-id mt-2 d-flex align-center">
         <v-tooltip :text="t('cockpit.copyRawUserId')" location="top" :open-delay="150" content-class="ccx-tooltip">
           <template #activator="{ props: tooltipProps }">
             <span v-bind="tooltipProps" class="text-caption text-medium-emphasis font-weight-mono raw-user-id-text" @click.stop="copyRawUserId">{{ conversation.rawUserId }}</span>
@@ -327,10 +308,12 @@ const props = defineProps<{
   availableChannels: ChannelInfo[]
   expanded: boolean
   nowMs: number
+  overrideDuration: number
   relatedParentTitle?: string
 }>()
 
 const emit = defineEmits<{
+  'update:overrideDuration': [value: number]
   toggleExpand: []
   setOverride: [convId: string, sequence: ChannelSequenceEntry[], subagentSequence?: ChannelSequenceEntry[], clearSubagentSequence?: boolean]
   removeOverride: [convId: string]
@@ -338,8 +321,6 @@ const emit = defineEmits<{
   success: [message: string]
   error: [message: string]
 }>()
-
-const MAX_VISIBLE = 6
 
 const conversation = computed(() => props.conversation)
 const emptySubagentSummary: SubagentSummary = { total: 0, streaming: 0, active: 0, idle: 0 }
@@ -350,8 +331,18 @@ const displaySubagentCount = computed(() => subagentSummary.value.total || props
 const visibleSubagents = computed(() => subagents.value.slice(0, props.expanded ? 12 : 4))
 const hasOverride = computed(() => props.override?.hasMainSequence === true)
 const kindLabel = computed(() => props.conversation.kind.toUpperCase())
-
-
+const statusLabel = computed(() => t(`cockpit.column.${props.conversation.status === 'active' ? 'working' : props.conversation.status}`))
+const durationOptions = computed(() => [
+  { title: t('cockpit.durationDefault'), value: 1800 },
+  { title: t('cockpit.duration15min'), value: 900 },
+  { title: t('cockpit.duration1hour'), value: 3600 },
+  { title: t('cockpit.duration2hours'), value: 7200 },
+  { title: t('cockpit.duration4hours'), value: 14400 },
+  { title: t('cockpit.duration8hours'), value: 28800 },
+  { title: t('cockpit.duration12hours'), value: 43200 },
+  { title: t('cockpit.duration24hours'), value: 86400 },
+  { title: t('cockpit.durationNever'), value: -1 },
+])
 
 function subagentStatusColor(status: ConversationInfo['status']): string {
   switch (status) {
@@ -595,50 +586,10 @@ const subagentNextChannelCircuitOpen = computed(() => {
   return subagentNextChannelInfo.value.circuitOpen === true
 })
 
-const visibleChannels = computed(() => {
-  const result: ChannelInfo[] = []
-  const required = [currentChannelInfo.value, nextChannelInfo.value].filter((ch): ch is ChannelInfo => !!ch)
-  const requiredIndexes = new Set(required.map(ch => ch.index))
-  const pushUnique = (channel?: ChannelInfo) => {
-    if (!channel || result.some(ch => ch.index === channel.index)) return
-    result.push(channel)
-  }
-  for (const ch of channelSequence.value) {
-    if (result.length >= MAX_VISIBLE) break
-    pushUnique(ch)
-  }
-  for (const channel of required) {
-    if (result.some(ch => ch.index === channel.index)) continue
-    if (result.length >= MAX_VISIBLE) {
-      let removeIndex = result.length - 1
-      for (let i = result.length - 1; i >= 0; i--) {
-        if (!requiredIndexes.has(result[i].index)) { removeIndex = i; break }
-      }
-      result.splice(removeIndex, 1)
-    }
-    pushUnique(channel)
-  }
-  return result
-})
-
-const hiddenCount = computed(() => Math.max(0, channelSequence.value.length - visibleChannels.value.length))
-const hiddenChannelsTooltip = computed(() => t('cockpit.tooltip.hiddenChannels', { count: hiddenCount.value }))
 const moreSubagentsTooltip = computed(() => t('cockpit.tooltip.moreSubagents', { count: subagents.value.length - visibleSubagents.value.length }))
 
 function buildSequence(channels: ChannelInfo[]): ChannelSequenceEntry[] {
   return channels.map(ch => ({ channelIndex: ch.index, channelName: ch.name }))
-}
-
-function getChannelTooltip(ch: ChannelInfo): string {
-  if (ch.index === props.conversation.currentChannel && !hasOverride.value) return t('cockpit.tooltip.quickCurrentChannel')
-  if (ch.index === nextChannel.value) return t('cockpit.tooltip.quickNextOverride')
-  return t('cockpit.tooltip.quickSetNext')
-}
-
-function handleQuickOverride(ch: ChannelInfo) {
-  if (!hasOverride.value && ch.index === props.conversation.currentChannel) return
-  const rest = channelSequence.value.filter(c => c.index !== ch.index)
-  emit('setOverride', props.conversation.id, buildSequence([ch, ...rest]))
 }
 
 // subagent 渠道：移到最前（等同主对话的 moveToTop）
@@ -698,19 +649,16 @@ function shortId(value: string): string {
   return `${value.slice(0, 8)}...${value.slice(-4)}`
 }
 
-
 </script>
 
 <style scoped>
 .conversation-card {
   cursor: pointer;
   position: relative;
-  transition: all 0.1s ease;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
   border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   box-shadow: none;
-  background:
-    radial-gradient(circle, var(--ccx-dot-grid-color) 1px, transparent 1px) 0 0 / var(--ccx-dot-grid-size) var(--ccx-dot-grid-size),
-    rgb(var(--v-theme-surface));
+  background: rgb(var(--v-theme-surface));
   border-radius: 0;
 }
 .conversation-card::before {
@@ -758,9 +706,20 @@ function shortId(value: string): string {
   flex: 1 1 auto;
   min-width: 0;
   color: rgb(var(--v-theme-on-surface));
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 800;
   line-height: 1.4;
+}
+
+.status-label {
+  flex-shrink: 0;
+  color: rgb(var(--v-theme-on-surface) / 62%);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.status-label--streaming {
+  color: rgb(var(--v-theme-primary));
 }
 
 .task-card-meta {
@@ -788,12 +747,12 @@ function shortId(value: string): string {
 .task-subagent-chip {
   display: inline-flex;
   align-items: center;
-  height: 18px;
-  padding: 0 4px;
+  height: 20px;
+  padding: 0 5px;
   border: 1px solid rgb(var(--v-theme-warning));
-  color: rgb(var(--v-theme-warning));
+  color: rgb(var(--v-theme-on-surface) / 76%);
   background: rgba(var(--v-theme-warning), 0.1);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   line-height: 1;
 }
@@ -813,17 +772,40 @@ function shortId(value: string): string {
 .task-card-notes {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 7px;
   flex-wrap: wrap;
   margin-top: 8px;
-  color: rgb(var(--v-theme-on-surface) / 62%);
+  color: rgb(var(--v-theme-on-surface) / 68%);
   font-size: 12px;
   line-height: 1.45;
 }
 
+.task-card-model,
+.task-card-channel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .task-card-channel {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  color: rgb(var(--v-theme-on-surface) / 44%);
+  color: rgb(var(--v-theme-on-surface) / 58%);
+}
+
+.task-route-arrow {
+  flex: 0 0 auto;
+  color: rgb(var(--v-theme-on-surface) / 42%);
+}
+
+.override-badge {
+  margin-left: auto;
+  padding: 2px 5px;
+  border: 1px solid rgb(var(--v-theme-warning) / 55%);
+  color: rgb(var(--v-theme-on-surface) / 76%);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 /* Status LED */
@@ -850,21 +832,16 @@ function shortId(value: string): string {
   display: inline-flex;
   align-items: center;
   flex-shrink: 0;
-  height: 18px;
-  padding: 0 4px;
-  border: 1px solid currentColor;
-  font-size: 9px;
+  height: 20px;
+  padding: 0 5px;
+  border: 1px solid var(--ccx-kind-color);
+  background: color-mix(in srgb, var(--ccx-kind-color) 6%, transparent);
+  color: rgb(var(--v-theme-on-surface) / 78%);
+  font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.02em;
   line-height: 1;
 }
-
-.kind-chip--messages { color: var(--ccx-kind-messages); }
-.kind-chip--chat { color: var(--ccx-kind-chat); }
-.kind-chip--responses { color: var(--ccx-kind-responses); }
-.kind-chip--gemini { color: var(--ccx-kind-gemini); }
-.kind-chip--images { color: var(--ccx-kind-images); }
-.kind-chip--vectors { color: var(--ccx-kind-vectors); }
 
 /* Display label (title/userId) */
 .display-label {
@@ -878,7 +855,6 @@ function shortId(value: string): string {
   white-space: nowrap;
 }
 
-
 .main-conversation-detail {
   margin-top: 10px;
   padding: 9px 10px;
@@ -891,8 +867,8 @@ function shortId(value: string): string {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  color: rgb(var(--v-theme-on-surface) / 56%);
-  font-size: 10px;
+  color: rgb(var(--v-theme-on-surface) / 64%);
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -975,7 +951,7 @@ function shortId(value: string): string {
   align-items: center;
   gap: 5px;
   color: rgb(var(--v-theme-primary));
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -1015,8 +991,8 @@ function shortId(value: string): string {
 }
 
 .main-conversation-field span {
-  color: rgb(var(--v-theme-on-surface) / 48%);
-  font-size: 10px;
+  color: rgb(var(--v-theme-on-surface) / 62%);
+  font-size: 11px;
   font-weight: 700;
 }
 
@@ -1029,6 +1005,27 @@ function shortId(value: string): string {
 
 .main-routing-section {
   margin-top: 12px;
+}
+
+.main-routing-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 190px;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.main-routing-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: rgb(var(--v-theme-on-surface) / 62%);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.override-duration-select {
+  width: 190px;
 }
 
 .subagent-expanded-section {
@@ -1135,7 +1132,7 @@ function shortId(value: string): string {
   border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   background: rgb(var(--v-theme-surface) / 68%);
   color: rgb(var(--v-theme-on-surface) / 68%);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   line-height: 1;
   transition: background-color 0.12s ease, border-color 0.12s ease;
@@ -1155,13 +1152,11 @@ button.relation-chip {
 .relation-chip--parent {
   border-color: rgb(var(--v-theme-info) / 48%);
   background: rgb(var(--v-theme-info) / 10%);
-  color: rgb(var(--v-theme-info));
 }
 
 .relation-chip--children {
   border-color: rgb(var(--v-theme-warning) / 48%);
   background: rgb(var(--v-theme-warning) / 10%);
-  color: rgb(var(--v-theme-warning));
 }
 
 .relation-chip--parent:hover,
@@ -1170,24 +1165,19 @@ button.relation-chip {
   border-color: var(--ccx-kind-color);
 }
 
-/* Next label */
-.next-label {
-  display: inline-block;
-  margin-left: 6px;
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-}
-
 /* Override alert */
 .override-alert {
   border: 2px solid rgb(var(--v-theme-warning)) !important;
   border-radius: 0 !important;
 }
 
-.current-channel-chip {
-  cursor: default !important;
-  opacity: 0.85;
+.override-alert :deep(.v-alert__content),
+.override-alert :deep(.v-btn) {
+  color: rgb(var(--v-theme-on-surface) / 82%);
+}
+
+.subagent-row :deep(.v-chip__content) {
+  font-size: 11px;
 }
 
 .font-weight-mono {
@@ -1198,14 +1188,11 @@ button.relation-chip {
 .raw-user-id {
   border-top: 1px dashed rgba(var(--v-border-color), var(--v-border-opacity));
   padding-top: 6px;
-  opacity: 0.6;
   cursor: pointer;
-}
-.raw-user-id:hover {
-  opacity: 0.9;
 }
 .raw-user-id-text {
   overflow: hidden;
+  color: rgb(var(--v-theme-on-surface) / 62%);
   text-overflow: ellipsis;
   white-space: nowrap;
   min-width: 0;
@@ -1216,6 +1203,17 @@ button.relation-chip {
 }
 .raw-user-id:hover .copy-btn {
   opacity: 1;
+}
+
+@media (max-width: 480px) {
+  .main-routing-head {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .override-duration-select {
+    width: 100%;
+  }
 }
 
 </style>

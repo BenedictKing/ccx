@@ -136,6 +136,10 @@ function getDemoteTooltip(ch: ChannelInfo, index: number): string {
   border-bottom: none;
 }
 
+.channel-item :deep(.v-chip__content) {
+  font-size: 11px;
+}
+
 .channel-item-animated {
   animation: ccx-slide-in 0.18s ease both;
 }
@@ -145,16 +149,16 @@ function getDemoteTooltip(ch: ChannelInfo, index: number): string {
 }
 
 .seq-num {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
-  opacity: 0.5;
+  opacity: 0.65;
   min-width: 2.5ch;
   font-variant-numeric: tabular-nums;
 }
 
 .seq-arrow {
-  font-size: 10px;
-  opacity: 0.35;
+  font-size: 11px;
+  opacity: 0.5;
   margin: 0 4px;
 }
 

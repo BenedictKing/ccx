@@ -1,49 +1,43 @@
 <template>
   <div class="cockpit-board-page">
     <div class="cockpit-toolbar">
-      <div class="cockpit-controls">
-        <div class="cockpit-filter-controls">
-          <v-select
-            v-if="isCompactFilter"
-            v-model="kindFilter"
-            :items="kindFilterOptions"
-            density="compact"
-            variant="outlined"
-            hide-details
-            class="kind-filter-select"
-          />
-          <v-chip-group v-else v-model="kindFilter" mandatory selected-class="filter-chip-selected" class="cockpit-kind-filter">
-            <v-chip value="" variant="outlined" size="small" class="filter-chip kind-all" filter>ALL</v-chip>
-            <v-chip value="messages" variant="outlined" size="small" class="filter-chip kind-messages" filter>MESSAGES</v-chip>
-            <v-chip value="chat" variant="outlined" size="small" class="filter-chip kind-chat" filter>CHAT</v-chip>
-            <v-chip value="images" variant="outlined" size="small" class="filter-chip kind-images" filter>IMAGES</v-chip>
-            <v-chip value="vectors" variant="outlined" size="small" class="filter-chip kind-vectors" filter>VECTORS</v-chip>
-            <v-chip value="responses" variant="outlined" size="small" class="filter-chip kind-responses" filter>RESPONSES</v-chip>
-            <v-chip value="gemini" variant="outlined" size="small" class="filter-chip kind-gemini" filter>GEMINI</v-chip>
-          </v-chip-group>
-        </div>
+      <div class="cockpit-summary">
+        <span class="cockpit-summary-item">
+          <span class="cockpit-column-dot cockpit-column-dot--working"></span>
+          <strong>{{ boardSummary.working }}</strong>
+          <span>{{ t('cockpit.column.working') }}</span>
+        </span>
+        <span class="cockpit-summary-item">
+          <span class="cockpit-column-dot cockpit-column-dot--idle"></span>
+          <strong>{{ boardSummary.idle }}</strong>
+          <span>{{ t('cockpit.column.idle') }}</span>
+        </span>
+        <span v-if="overrideCount" class="cockpit-summary-item cockpit-summary-item--override">
+          {{ t('cockpit.override', { count: overrideCount }) }}
+        </span>
+      </div>
 
-        <div class="cockpit-tool-controls">
-          <v-text-field
-            v-model="searchQuery"
-            density="compact"
-            variant="outlined"
-            hide-details
-            clearable
-            prepend-inner-icon="mdi-magnify"
-            :placeholder="t('cockpit.searchPlaceholder')"
-            class="conversation-search-field"
-          />
-          <v-select
-            v-model="overrideDuration"
-            :items="durationOptions"
-            density="compact"
-            variant="outlined"
-            hide-details
-            class="override-duration-select"
-            :label="t('cockpit.overrideDuration')"
-          />
-        </div>
+      <div class="cockpit-controls">
+        <v-select
+          v-model="kindFilter"
+          :items="kindFilterOptions"
+          :label="t('cockpit.protocol')"
+          density="compact"
+          variant="outlined"
+          hide-details
+          class="kind-filter-select"
+        />
+        <v-text-field
+          v-model="searchQuery"
+          density="compact"
+          variant="outlined"
+          hide-details
+          clearable
+          prepend-inner-icon="mdi-magnify"
+          :placeholder="t('cockpit.searchPlaceholder')"
+          :aria-label="t('cockpit.searchPlaceholder')"
+          class="conversation-search-field"
+        />
       </div>
     </div>
 
@@ -88,10 +82,11 @@
             <div
               v-for="item in column.items"
               :key="item.conversation.id"
-              class="cockpit-board-card"
               :ref="el => setConversationCardRef(item.conversation.id, el as Element | null)"
+              class="cockpit-board-card"
             >
               <ConversationCard
+                v-model:override-duration="overrideDuration"
                 :conversation="item.conversation"
                 :subagents="item.subagents"
                 :subagent-summary="item.subagentSummary"
@@ -117,7 +112,6 @@
 
 <script setup lang="ts">
 import { ref, computed, nextTick, watch } from 'vue'
-import { useDisplay } from 'vuetify'
 import { api, type ConversationInfo, type SequenceOverrideInfo, type ChannelSequenceEntry } from '@/services/api'
 import { useGlobalTick } from '@/composables/useGlobalTick'
 import { useI18n } from '@/i18n'
@@ -125,7 +119,6 @@ import { buildConversationBoardItems, filterConversationBoardItems, type BoardCo
 import ConversationCard from './ConversationCard.vue'
 
 const { t } = useI18n()
-const { width } = useDisplay()
 const emit = defineEmits<{
   success: [message: string]
   error: [message: string]
@@ -145,33 +138,19 @@ const expandedCards = ref(new Set<string>())
 const pinnedConversationOrder = ref<string[]>([])
 const cardElements = new Map<string, HTMLElement>()
 
-const isCompactFilter = computed(() => width.value < 400)
-
 const boardColumnMeta = computed<Array<{ key: BoardColumnKey; label: string; color: string }>>(() => [
   { key: 'working', label: t('cockpit.column.working'), color: '#6366f1' },
   { key: 'idle', label: t('cockpit.column.idle'), color: '#10b981' },
 ])
 
-const kindFilterOptions = [
-  { title: 'ALL', value: '' },
+const kindFilterOptions = computed(() => [
+  { title: t('cockpit.allProtocols'), value: '' },
   { title: 'MESSAGES', value: 'messages' },
   { title: 'CHAT', value: 'chat' },
   { title: 'IMAGES', value: 'images' },
   { title: 'VECTORS', value: 'vectors' },
   { title: 'RESPONSES', value: 'responses' },
   { title: 'GEMINI', value: 'gemini' },
-]
-
-const durationOptions = computed(() => [
-  { title: t('cockpit.durationDefault'), value: 1800 },
-  { title: t('cockpit.duration15min'), value: 900 },
-  { title: t('cockpit.duration1hour'), value: 3600 },
-  { title: t('cockpit.duration2hours'), value: 7200 },
-  { title: t('cockpit.duration4hours'), value: 14400 },
-  { title: t('cockpit.duration8hours'), value: 28800 },
-  { title: t('cockpit.duration12hours'), value: 43200 },
-  { title: t('cockpit.duration24hours'), value: 86400 },
-  { title: t('cockpit.durationNever'), value: -1 },
 ])
 
 const sortedConversations = computed(() => {
@@ -182,6 +161,15 @@ const sortedConversations = computed(() => {
 })
 
 const boardItems = computed(() => buildConversationBoardItems(sortedConversations.value))
+
+const boardSummary = computed(() => boardItems.value.reduce((summary, item) => {
+  summary[item.aggregateStatus] += 1
+  return summary
+}, { working: 0, idle: 0 }))
+
+const overrideCount = computed(() => Object.values(overrides.value).filter(override =>
+  override.hasMainSequence || (override.subagentSequence?.length ?? 0) > 0,
+).length)
 
 const visibleBoardItems = computed(() => {
   return filterConversationBoardItems(boardItems.value, kindFilter.value, searchQuery.value)
@@ -399,9 +387,49 @@ fetchAllChannels()
 
 .cockpit-toolbar {
   display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin-bottom: 16px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.cockpit-summary,
+.cockpit-summary-item,
+.cockpit-controls {
+  display: flex;
+  align-items: center;
+}
+
+.cockpit-summary {
+  gap: 18px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.cockpit-summary-item {
+  gap: 7px;
+  color: rgb(var(--v-theme-on-surface) / 66%);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.cockpit-summary-item strong {
+  color: rgb(var(--v-theme-on-surface));
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.cockpit-summary-item--override {
+  padding-left: 18px;
+  border-left: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  color: rgb(var(--v-theme-on-surface) / 72%);
+  font-weight: 700;
+}
+
+.cockpit-controls {
+  gap: 10px;
+  min-width: 0;
 }
 
 .cockpit-column-dot {
@@ -411,118 +439,28 @@ fetchAllChannels()
   flex: 0 0 auto;
 }
 
-.cockpit-controls {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
+.cockpit-column-dot--working {
+  background: #6366f1;
 }
 
-.cockpit-filter-controls {
-  display: flex;
-  min-width: 0;
-  flex: 0 1 auto;
-}
-
-.cockpit-tool-controls {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 10px;
-  margin-left: auto;
-  min-width: 0;
-  flex: 1 1 420px;
-}
-
-.cockpit-kind-filter {
-  flex: 0 1 auto;
-}
-
-.filter-chip {
-  border-radius: 0 !important;
-  font-size: 10px !important;
-  font-weight: 700;
-  letter-spacing: 0;
-  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
-}
-
-.kind-all {
-  color: rgb(var(--v-theme-primary)) !important;
-}
-
-.kind-messages {
-  color: #8b5cf6 !important;
-}
-
-.kind-chat {
-  color: #3b82f6 !important;
-}
-
-.kind-images {
-  color: #ec4899 !important;
-}
-
-.kind-vectors {
-  color: #0ea5e9 !important;
-}
-
-.kind-responses {
-  color: #14b8a6 !important;
-}
-
-.kind-gemini {
-  color: #f97316 !important;
-}
-
-.filter-chip-selected.kind-all {
-  background: rgb(var(--v-theme-primary) / 10%) !important;
-  border-color: rgb(var(--v-theme-primary)) !important;
-}
-
-.filter-chip-selected.kind-messages {
-  background: rgb(139 92 246 / 10%) !important;
-  border-color: rgb(139 92 246 / 60%) !important;
-}
-
-.filter-chip-selected.kind-chat {
-  background: rgb(59 130 246 / 10%) !important;
-  border-color: rgb(59 130 246 / 60%) !important;
-}
-
-.filter-chip-selected.kind-images {
-  background: rgb(236 72 153 / 10%) !important;
-  border-color: rgb(236 72 153 / 60%) !important;
-}
-
-.filter-chip-selected.kind-vectors {
-  background: rgb(14 165 233 / 10%) !important;
-  border-color: rgb(14 165 233 / 60%) !important;
-}
-
-.filter-chip-selected.kind-responses {
-  background: rgb(20 184 166 / 10%) !important;
-  border-color: rgb(20 184 166 / 60%) !important;
-}
-
-.filter-chip-selected.kind-gemini {
-  background: rgb(249 115 22 / 10%) !important;
-  border-color: rgb(249 115 22 / 60%) !important;
+.cockpit-column-dot--idle {
+  background: #10b981;
 }
 
 .kind-filter-select {
-  max-width: 160px;
-  flex: 0 0 auto;
-}
-
-.override-duration-select {
-  max-width: 180px;
-  flex: 0 0 auto;
+  width: 170px;
+  flex: 0 0 170px;
 }
 
 .conversation-search-field {
-  max-width: 320px;
-  min-width: 180px;
-  flex: 1 1 240px;
+  width: 300px;
+  max-width: 300px;
+  flex: 0 1 300px;
+}
+
+.conversation-search-field :deep(.v-field__input)::placeholder {
+  color: rgb(var(--v-theme-on-surface) / 58%);
+  opacity: 1;
 }
 
 .cockpit-empty {
@@ -532,7 +470,7 @@ fetchAllChannels()
 .cockpit-board {
   display: grid;
   grid-template-columns: minmax(420px, 1.35fr) minmax(320px, 1fr);
-  gap: 14px;
+  gap: 20px;
   align-items: start;
 }
 
@@ -545,7 +483,8 @@ fetchAllChannels()
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 6px 4px 10px;
+  padding: 0 2px 10px;
+  border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
 }
 
 .cockpit-column-title {
@@ -553,39 +492,32 @@ fetchAllChannels()
   align-items: center;
   gap: 8px;
   min-width: 0;
-  color: rgb(var(--v-theme-on-surface) / 68%);
-  font-size: 12px;
+  color: rgb(var(--v-theme-on-surface) / 76%);
+  font-size: 13px;
   font-weight: 800;
-  letter-spacing: 0;
-  text-transform: uppercase;
 }
 
 .cockpit-column-count {
-  color: rgb(var(--v-theme-on-surface) / 50%);
+  color: rgb(var(--v-theme-on-surface) / 58%);
   font-size: 12px;
   font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 
 .cockpit-column-body {
-  min-height: 60vh;
-  padding: 8px;
-  background: rgba(0, 0, 0, 0.025);
-  border: 1px dashed rgba(var(--v-border-color), var(--v-border-opacity));
-}
-
-.v-theme--dark .cockpit-column-body {
-  background: rgba(255, 255, 255, 0.035);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 80px;
+  padding-top: 10px;
 }
 
 .cockpit-column-empty {
-  padding: 14px 8px;
-  color: rgb(var(--v-theme-on-surface) / 38%);
+  padding: 18px 8px;
+  border: 1px dashed rgba(var(--v-border-color), var(--v-border-opacity));
+  color: rgb(var(--v-theme-on-surface) / 48%);
   font-size: 12px;
   text-align: center;
-}
-
-.cockpit-board-card {
-  margin-bottom: 10px;
 }
 
 .conversation-card-target :deep(.conversation-card) {
@@ -597,82 +529,53 @@ fetchAllChannels()
   .cockpit-board {
     grid-template-columns: 1fr;
   }
-
-  .cockpit-controls,
-  .cockpit-tool-controls {
-    gap: 8px;
-  }
-
-  .cockpit-tool-controls {
-    flex: 1 1 320px;
-  }
-
-  .conversation-search-field {
-    max-width: 260px;
-    min-width: 150px;
-    flex-basis: 190px;
-  }
-
-  .override-duration-select {
-    max-width: 164px;
-  }
-
-  .filter-chip {
-    padding-inline: 8px !important;
-  }
 }
 
 @media (max-width: 600px) {
   .cockpit-toolbar {
-    gap: 8px;
+    align-items: stretch;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 16px;
   }
 
-  .cockpit-controls,
-  .cockpit-tool-controls {
-    gap: 6px;
+  .cockpit-summary {
+    justify-content: space-between;
+    gap: 10px;
   }
 
-  .filter-chip {
-    padding-inline: 7px !important;
+  .cockpit-summary-item--override {
+    margin-left: auto;
+    padding-left: 10px;
   }
-}
 
-@media (max-width: 400px) {
-  .cockpit-tool-controls {
-    margin-left: 0;
+  .cockpit-controls {
     width: 100%;
-    flex-basis: 100%;
-    flex-wrap: nowrap;
   }
 
   .kind-filter-select {
-    max-width: 170px;
-    width: 170px;
-    flex-basis: 170px;
+    width: 142px;
+    flex-basis: 142px;
   }
 
   .conversation-search-field {
+    width: auto;
     min-width: 0;
     max-width: none;
     flex: 1 1 0;
   }
-
-  .override-duration-select {
-    max-width: 154px;
-    flex: 0 0 154px;
-  }
 }
 
 @media (max-width: 340px) {
-  .cockpit-tool-controls {
-    flex-wrap: wrap;
+  .cockpit-controls {
+    align-items: stretch;
+    flex-direction: column;
   }
 
-  .conversation-search-field,
-  .override-duration-select {
-    max-width: none;
+  .kind-filter-select,
+  .conversation-search-field {
     width: 100%;
-    flex-basis: 100%;
+    flex-basis: auto;
   }
 }
 </style>
