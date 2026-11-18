@@ -1,7 +1,7 @@
 <template>
   <div class="site-account-binding">
     <div class="d-flex align-center ga-2 mb-2">
-      <v-icon color="primary">mdi-account-link</v-icon>
+      <v-icon color="primary">mdi-account-switch</v-icon>
       <div>
         <div class="text-subtitle-2">{{ t('channelEditor.accountBinding.title') }}</div>
         <div class="text-caption text-medium-emphasis">{{ t('channelEditor.accountBinding.hint') }}</div>
