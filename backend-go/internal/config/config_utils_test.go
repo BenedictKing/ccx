@@ -243,3 +243,57 @@ func TestIsValidReasoningEffort(t *testing.T) {
 		t.Fatalf("isValidReasoningEffort(%q) = true, want false", "ultra")
 	}
 }
+
+func TestRequestModelForAgent(t *testing.T) {
+	upstream := &UpstreamConfig{SubagentModel: " sol "}
+	if got := RequestModelForAgent("astra", upstream, "subagent"); got != "sol" {
+		t.Fatalf("subagent model = %q, want sol", got)
+	}
+	if got := RequestModelForAgent("astra", upstream, "main"); got != "astra" {
+		t.Fatalf("main model = %q, want astra", got)
+	}
+	if got := RequestModelForAgent("astra", &UpstreamConfig{}, "subagent"); got != "astra" {
+		t.Fatalf("empty subagent model = %q, want astra", got)
+	}
+}
+
+func TestWithAgentModelResolvesClassAndCustomModel(t *testing.T) {
+	upstream := &UpstreamConfig{
+		SubagentModel: "sol",
+		ModelMapping: map[string]string{
+			"astra": "gpt-main",
+			"sol":   "gpt-subagent",
+		},
+	}
+
+	resolved := WithAgentModel("astra", upstream, "subagent")
+	if got := RedirectModel("astra", resolved); got != "gpt-subagent" {
+		t.Fatalf("subagent redirected model = %q, want gpt-subagent", got)
+	}
+	if got := RedirectModel("astra", upstream); got != "gpt-main" {
+		t.Fatalf("original channel mapping mutated: %q", got)
+	}
+	if got := RedirectModel("astra", WithAgentModel("astra", upstream, "main")); got != "gpt-main" {
+		t.Fatalf("main redirected model = %q, want gpt-main", got)
+	}
+
+	upstream.SubagentModel = "gpt-exact"
+	upstream.ModelMapping["gpt"] = "should-not-apply"
+	if got := RedirectModel("astra", WithAgentModel("astra", upstream, "subagent")); got != "gpt-exact" {
+		t.Fatalf("custom subagent model = %q, want gpt-exact", got)
+	}
+}
+
+func TestApplySubagentModelUpdate(t *testing.T) {
+	upstream := &UpstreamConfig{}
+	value := " sol "
+	applySubagentModelUpdate(upstream, UpstreamUpdate{SubagentModel: &value})
+	if upstream.SubagentModel != "sol" {
+		t.Fatalf("SubagentModel = %q, want sol", upstream.SubagentModel)
+	}
+	value = ""
+	applySubagentModelUpdate(upstream, UpstreamUpdate{SubagentModel: &value})
+	if upstream.SubagentModel != "" {
+		t.Fatalf("SubagentModel after clear = %q, want empty", upstream.SubagentModel)
+	}
+}

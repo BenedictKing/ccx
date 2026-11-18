@@ -478,6 +478,8 @@
   "addChannel.modelMappingHintResponses": "Atur pemetaan nama model untuk mengarahkan model yang diminta ke model target. Contoh: arahkan \"opus\" ke \"gpt-5.4\".",
   "addChannel.modelMappingHintVectors": "Atur pemetaan nama model Embeddings untuk mengarahkan model vektor yang diminta ke model target. Contoh: arahkan \"text-embedding-3-small\" ke \"jina-embeddings-v2-base-zh\".",
   "addChannel.modelMappingHintMessages": "Atur pemetaan nama model untuk mengarahkan model yang diminta ke model target. Contoh: arahkan \"opus\" ke \"claude-sonnet-4-5-20250929\".",
+  "addChannel.subagentModelLabel": "Model subagent",
+  "addChannel.subagentModelHint": "Hanya berlaku untuk request yang teridentifikasi sebagai subagent. Pilih kelas model atau masukkan nama model spesifik. Kelas model dipetakan melalui konfigurasi di bawah; kosongkan untuk mengikuti request klien.",
   "addChannel.targetModelPlaceholderChat": "Contoh: gpt-5.4",
   "addChannel.targetModelPlaceholderResponses": "Contoh: gpt-5.4",
   "addChannel.targetModelPlaceholderGemini": "Contoh: gemini-3.5-flash",

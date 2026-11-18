@@ -157,6 +157,34 @@ func RedirectModelWithRule(model string, upstream *UpstreamConfig) (string, stri
 	return model, "", ""
 }
 
+// RequestModelForAgent 返回角色在当前渠道下使用的请求模型。
+func RequestModelForAgent(model string, upstream *UpstreamConfig, agentRole string) string {
+	if agentRole == "subagent" && upstream != nil {
+		if subagentModel := strings.TrimSpace(upstream.SubagentModel); subagentModel != "" {
+			return subagentModel
+		}
+	}
+	return model
+}
+
+// WithAgentModel 将角色模型解析结果固定到本次请求的渠道副本，保持后续协议转换一致。
+func WithAgentModel(model string, upstream *UpstreamConfig, agentRole string) *UpstreamConfig {
+	if upstream == nil || agentRole != "subagent" || strings.TrimSpace(upstream.SubagentModel) == "" {
+		return upstream
+	}
+	requestModel := RequestModelForAgent(model, upstream, agentRole)
+	redirectedModel := requestModel
+	if mapped, ok := upstream.ModelMapping[requestModel]; ok {
+		redirectedModel = mapped
+	}
+	clone := upstream.Clone()
+	if clone.ModelMapping == nil {
+		clone.ModelMapping = make(map[string]string)
+	}
+	clone.ModelMapping[model] = redirectedModel
+	return clone
+}
+
 // ResolveReasoningEffort 根据原始模型名解析 reasoning effort
 func ResolveReasoningEffort(model string, upstream *UpstreamConfig) string {
 	if upstream == nil || upstream.ReasoningMapping == nil || len(upstream.ReasoningMapping) == 0 {
@@ -451,6 +479,12 @@ func (u *UpstreamConfig) Clone() *UpstreamConfig {
 	}
 
 	return &cloned
+}
+
+func applySubagentModelUpdate(upstream *UpstreamConfig, updates UpstreamUpdate) {
+	if upstream != nil && updates.SubagentModel != nil {
+		upstream.SubagentModel = strings.TrimSpace(*updates.SubagentModel)
+	}
 }
 
 func applyModelCapabilityUpdates(upstream *UpstreamConfig, updates UpstreamUpdate) {

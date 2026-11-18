@@ -603,3 +603,72 @@ func TestTraceAffinityUsesContextBuckets(t *testing.T) {
 		t.Fatalf("small context selected channel = %q, want cheap-200k", result.Upstream.Name)
 	}
 }
+
+func TestSelectChannelUsesSubagentModelForFilteringAndContext(t *testing.T) {
+	cfg := config.Config{
+		Upstream: []config.UpstreamConfig{
+			{
+				Name:          "main-only",
+				BaseURL:       "https://main.example.com",
+				APIKeys:       []string{"sk-main"},
+				Status:        "active",
+				Priority:      1,
+				SubagentModel: "sol",
+				SupportedModels: []string{
+					"sol",
+				},
+				ModelMapping: map[string]string{
+					"client": "large-model",
+					"sol":    "small-model",
+				},
+				ModelCapabilities: map[string]config.UpstreamModelCapability{
+					"large-model": {ContextWindowTokens: 1000000},
+					"small-model": {ContextWindowTokens: 200000},
+				},
+			},
+			{
+				Name:            "subagent-capable",
+				BaseURL:         "https://subagent.example.com",
+				APIKeys:         []string{"sk-subagent"},
+				Status:          "active",
+				Priority:        2,
+				SubagentModel:   "custom-subagent",
+				SupportedModels: []string{"custom-subagent"},
+				ModelCapabilities: map[string]config.UpstreamModelCapability{
+					"custom-subagent": {ContextWindowTokens: 1000000},
+				},
+			},
+		},
+	}
+
+	scheduler, cleanup := createTestScheduler(t, cfg)
+	defer cleanup()
+
+	mainResult, err := scheduler.SelectChannelWithOptions(context.Background(), SelectionOptions{
+		Kind:      ChannelKindMessages,
+		Model:     "client",
+		AgentRole: "main",
+	})
+	if err == nil || mainResult != nil {
+		t.Fatalf("main request should keep original model filtering: result=%#v err=%v", mainResult, err)
+	}
+
+	result, err := scheduler.SelectChannelWithOptions(context.Background(), SelectionOptions{
+		Kind:      ChannelKindMessages,
+		Model:     "client",
+		AgentRole: "subagent",
+		ContextRequirement: &ContextRequirement{
+			InputTokens:    250000,
+			RequiredTokens: 250000,
+		},
+	})
+	if err != nil {
+		t.Fatalf("subagent selection failed: %v", err)
+	}
+	if result.ChannelIndex != 1 {
+		t.Fatalf("subagent channel = %d, want 1", result.ChannelIndex)
+	}
+	if got := config.RedirectModel("client", result.Upstream); got != "custom-subagent" {
+		t.Fatalf("subagent redirected model = %q, want custom-subagent", got)
+	}
+}

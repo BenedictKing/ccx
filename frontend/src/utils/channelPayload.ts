@@ -55,6 +55,7 @@ export interface ChannelFormLike {
   apiKeyConfigs?: Channel['apiKeyConfigs']
   maxGroupMultiplier?: number | null
   modelMapping: Record<string, SelectableString>
+  subagentModel?: SelectableString
   modelCapabilitiesText?: string
   modelCapabilityRows?: ModelCapabilityRow[]
   embeddingCapabilityRows?: EmbeddingCapabilityRow[]
@@ -557,6 +558,10 @@ export function buildChannelPayload(
     noVision: form.noVision,
     noVisionModels: form.noVisionModels,
     visionFallbackModel: normalizeSelectableString(form.visionFallbackModel),
+  }
+
+  if (form.subagentModel !== undefined) {
+    channelData.subagentModel = normalizeSelectableString(form.subagentModel).trim()
   }
 
   if (options.channelType === 'vectors') {

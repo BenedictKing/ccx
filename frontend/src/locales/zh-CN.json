@@ -478,6 +478,8 @@
   "addChannel.modelMappingHintResponses": "配置模型名称映射，将请求中的模型名重定向到目标模型。例如：将 \"opus\" 重定向到 \"gpt-5.4\"",
   "addChannel.modelMappingHintVectors": "配置 Embeddings 模型名称映射，将请求中的向量模型名重定向到目标模型。例如：将 \"text-embedding-3-small\" 重定向到 \"jina-embeddings-v2-base-zh\"",
   "addChannel.modelMappingHintMessages": "配置模型名称映射，将请求中的模型名重定向到目标模型。例如：将 \"opus\" 重定向到 \"claude-sonnet-4-5-20250929\"",
+  "addChannel.subagentModelLabel": "子代理模型",
+  "addChannel.subagentModelHint": "仅用于识别为子代理的请求。可选择模型大类或输入具体模型名；大类继续按下方模型映射解析，留空沿用客户端请求。",
   "addChannel.targetModelPlaceholderChat": "例如：gpt-5.4",
   "addChannel.targetModelPlaceholderResponses": "例如：gpt-5.4",
   "addChannel.targetModelPlaceholderGemini": "例如：gemini-3.5-flash",

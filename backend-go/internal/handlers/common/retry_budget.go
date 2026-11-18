@@ -2,6 +2,7 @@ package common
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/BenedictKing/ccx/internal/config"
@@ -35,7 +36,7 @@ func (b *retryBudget) consume() error {
 	return nil
 }
 
-func exactTargetFilter(target string, previous scheduler.CandidateFilterFunc) scheduler.CandidateFilterFunc {
+func exactTargetFilter(target string, allowSubagentOverride bool, previous scheduler.CandidateFilterFunc) scheduler.CandidateFilterFunc {
 	return func(channels []scheduler.ChannelInfo, getUpstream func(scheduler.ChannelInfo) *config.UpstreamConfig, available func(scheduler.ChannelInfo, *config.UpstreamConfig) bool) ([]scheduler.ChannelInfo, error) {
 		if previous != nil {
 			var err error
@@ -47,7 +48,14 @@ func exactTargetFilter(target string, previous scheduler.CandidateFilterFunc) sc
 		out := make([]scheduler.ChannelInfo, 0, len(channels))
 		for _, channel := range channels {
 			upstream := getUpstream(channel)
-			if upstream != nil && config.RedirectModel(target, upstream) == target {
+			if upstream == nil {
+				continue
+			}
+			if allowSubagentOverride && strings.TrimSpace(upstream.SubagentModel) != "" {
+				out = append(out, channel)
+				continue
+			}
+			if config.RedirectModel(target, upstream) == target {
 				out = append(out, channel)
 			}
 		}

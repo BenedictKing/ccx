@@ -177,6 +177,7 @@ export interface Channel {
   website?: string
   insecureSkipVerify?: boolean
   modelMapping?: Record<string, string>
+  subagentModel?: string                 // 子代理请求模型大类或具体模型名，为空沿用请求模型
   modelCapabilities?: Record<string, UpstreamModelCapability>
   embeddingCapabilities?: Record<string, EmbeddingCapability>
   defaultCapability?: UpstreamModelCapability

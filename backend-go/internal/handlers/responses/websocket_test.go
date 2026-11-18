@@ -113,11 +113,13 @@ func TestResponsesWebSocketHandler_ResponsesUpstreamKeepsNativeV2Continuation(t 
 	store, _ := metrics.NewRoutingStore(nil)
 	defer store.Close()
 	router := newResponsesWebSocketTestRouter(t, config.UpstreamConfig{
-		Name:        "responses-ws-test",
-		BaseURL:     upstream.URL,
-		APIKeys:     []string{"sk-test"},
-		ServiceType: "responses",
-		Status:      "active",
+		Name:          "responses-ws-test",
+		BaseURL:       upstream.URL,
+		APIKeys:       []string{"sk-test"},
+		ServiceType:   "responses",
+		Status:        "active",
+		SubagentModel: "sol",
+		ModelMapping:  map[string]string{"sol": "gpt-subagent"},
 	}, store)
 	server := httptest.NewServer(router)
 	defer server.Close()
@@ -136,7 +138,7 @@ func TestResponsesWebSocketHandler_ResponsesUpstreamKeepsNativeV2Continuation(t 
 		"input":           "hello",
 		"stream":          false,
 		"generate":        true,
-		"client_metadata": map[string]interface{}{"x-codex-installation-id": "install"},
+		"client_metadata": map[string]interface{}{"x-codex-installation-id": "install", "x-openai-subagent": "review"},
 	})
 	if err != nil {
 		t.Fatalf("write websocket request: %v", err)
@@ -159,7 +161,7 @@ func TestResponsesWebSocketHandler_ResponsesUpstreamKeepsNativeV2Continuation(t 
 		records, _ := store.Snapshot("responses", time.Now().Add(-time.Hour), time.Now().Add(time.Second))
 		if len(records) == 2 && records[0].Status == metrics.RoutingStatusSuccess && records[1].Status == metrics.RoutingStatusSuccess {
 			for _, request := range records {
-				if len(request.Attempts) != 1 || request.Attempts[0].Transport != "websocket" || request.Attempts[0].SentModel != "gpt-5" {
+				if len(request.Attempts) != 1 || request.Attempts[0].Transport != "websocket" || request.Attempts[0].SentModel != "gpt-subagent" {
 					t.Fatalf("native observation=%+v", request)
 				}
 			}
@@ -174,6 +176,9 @@ func TestResponsesWebSocketHandler_ResponsesUpstreamKeepsNativeV2Continuation(t 
 	second := <-upstreamBody
 	if first["type"] != "response.create" || second["previous_response_id"] != "resp-1" {
 		t.Fatalf("native continuation was not forwarded: first=%v second=%v", first, second)
+	}
+	if first["model"] != "gpt-subagent" || second["model"] != "gpt-subagent" {
+		t.Fatalf("subagent model was not applied to both turns: first=%v second=%v", first, second)
 	}
 }
 

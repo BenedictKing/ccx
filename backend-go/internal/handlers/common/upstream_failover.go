@@ -154,6 +154,9 @@ func TryUpstreamWithAllKeys(
 	if len(urlResults) == 0 {
 		return false, "", 0, nil, nil, nil
 	}
+	if agentCtx := AgentContextFromGin(c); agentCtx != nil {
+		upstream = config.WithAgentModel(model, upstream, agentCtx.AgentRole)
+	}
 
 	tryOpts := tryUpstreamOptions{}
 	for _, opt := range opts {

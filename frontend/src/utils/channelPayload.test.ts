@@ -22,6 +22,7 @@ describe('buildChannelPayload', () => {
         { key: 'sk-2', groupMultiplier: 0 },
       ],
       modelMapping: { 'gpt-5': 'gpt-5.4' },
+      subagentModel: 'sol',
       reasoningMapping: { 'gpt-5': 'max' },
       reasoningParamStyle: 'reasoning_effort',
       textVerbosity: 'medium',
@@ -55,6 +56,7 @@ describe('buildChannelPayload', () => {
       { key: 'sk-2', groupMultiplier: 0, name: undefined, quotaGroup: undefined, models: undefined },
     ])
     expect(result.modelMapping).toEqual({ 'gpt-5': 'gpt-5.4' })
+    expect(result.subagentModel).toBe('sol')
     expect(result.reasoningMapping).toEqual({ 'gpt-5': 'max' })
     expect(result.reasoningParamStyle).toBe('reasoning_effort')
     expect(result.textVerbosity).toBe('medium')
@@ -123,6 +125,7 @@ describe('buildChannelPayload', () => {
       modelMapping: {
         '{"title":"codex","value":"codex"}': { title: 'MiMo', value: 'mimo-v2.5-pro' }
       },
+      subagentModel: { title: 'Exact', value: 'gpt-exact' },
       reasoningMapping: {},
       reasoningParamStyle: 'reasoning',
       textVerbosity: '',
@@ -144,6 +147,7 @@ describe('buildChannelPayload', () => {
     })
 
     expect(result.modelMapping).toEqual({ codex: 'mimo-v2.5-pro' })
+    expect(result.subagentModel).toBe('gpt-exact')
     expect(result.visionFallbackModel).toBe('mimo-v2.5-pro')
   })
 

@@ -150,6 +150,7 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     apiKeyConfigs: undefined as Channel['apiKeyConfigs'],
     maxGroupMultiplier: null as number | null,
     modelMapping: {} as Record<string, string>,
+    subagentModel: '',
     modelCapabilitiesText: '',
     modelCapabilityRows: [] as ModelCapabilityRow[],
     embeddingCapabilityRows: [] as EmbeddingCapabilityRow[],
@@ -197,6 +198,7 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
   const {
     serviceTypeOptions,
     allSourceModelOptions: sourceModelOptions,
+    allSourceModelOptions: subagentModelSourceOptions,
     modelMappingHint,
     targetModelPlaceholder,
     reasoningEffortOptions,
@@ -770,6 +772,7 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     form.apiKeyConfigs = undefined
     form.maxGroupMultiplier = null
     form.modelMapping = {}
+    form.subagentModel = ''
     form.modelCapabilitiesText = ''
     form.modelCapabilityRows = []
     form.embeddingCapabilityRows = []
@@ -863,6 +866,7 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
       : undefined
 
     form.modelMapping = { ...(channel.modelMapping || {}) }
+    form.subagentModel = channel.subagentModel || ''
     form.modelCapabilitiesText = Object.keys(channel.modelCapabilities || {}).length > 0
       ? JSON.stringify(normalizeModelCapabilities(channel.modelCapabilities), null, 2)
       : ''
@@ -977,6 +981,15 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     isEditing,
     t,
     visibleDisabledKeys,
+  })
+
+  const subagentModelOptions = computed(() => {
+    const seen = new Set<string>()
+    return [...subagentModelSourceOptions.value, ...targetModelOptions.value].filter(option => {
+      if (seen.has(option.value)) return false
+      seen.add(option.value)
+      return true
+    })
   })
 
   const {
@@ -1273,6 +1286,7 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     onMenuUpdate,
     serviceTypeOptions,
     sourceModelOptions,
+    subagentModelOptions,
     modelMappingHint,
     targetModelPlaceholder,
     reasoningEffortOptions,

@@ -902,3 +902,39 @@ func TestUpdateGeminiUpstream_AdvancedOptions(t *testing.T) {
 func boolPtr(v bool) *bool {
 	return &v
 }
+
+func TestUpdateResponsesUpstreamSubagentModel(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.json")
+	initialConfig := `{
+		"upstream": [],
+		"responsesUpstream": [{
+			"name": "responses-channel",
+			"baseUrl": "https://responses.example.com",
+			"apiKeys": ["test-key"],
+			"serviceType": "responses"
+		}]
+	}`
+	if err := os.WriteFile(configPath, []byte(initialConfig), 0644); err != nil {
+		t.Fatalf("写入配置失败: %v", err)
+	}
+	cm, err := NewConfigManager(configPath, "")
+	if err != nil {
+		t.Fatalf("初始化配置管理器失败: %v", err)
+	}
+	defer cm.Close()
+
+	model := " sol "
+	if _, err := cm.UpdateResponsesUpstream(0, UpstreamUpdate{SubagentModel: &model}); err != nil {
+		t.Fatalf("设置 subagentModel 失败: %v", err)
+	}
+	if got := cm.GetConfig().ResponsesUpstream[0].SubagentModel; got != "sol" {
+		t.Fatalf("SubagentModel = %q, want sol", got)
+	}
+	model = ""
+	if _, err := cm.UpdateResponsesUpstream(0, UpstreamUpdate{SubagentModel: &model}); err != nil {
+		t.Fatalf("清空 subagentModel 失败: %v", err)
+	}
+	if got := cm.GetConfig().ResponsesUpstream[0].SubagentModel; got != "" {
+		t.Fatalf("SubagentModel after clear = %q, want empty", got)
+	}
+}

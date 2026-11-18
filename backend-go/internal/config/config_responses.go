@@ -212,6 +212,7 @@ func (cm *ConfigManager) UpdateResponsesUpstream(index int, updates UpstreamUpda
 	if updates.ModelMapping != nil {
 		upstream.ModelMapping = updates.ModelMapping
 	}
+	applySubagentModelUpdate(upstream, updates)
 	applyModelCapabilityUpdates(upstream, updates)
 	if updates.ReasoningMapping != nil {
 		upstream.ReasoningMapping = updates.ReasoningMapping

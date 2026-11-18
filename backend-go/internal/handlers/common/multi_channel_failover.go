@@ -2,6 +2,7 @@ package common
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/BenedictKing/ccx/internal/config"
@@ -132,13 +133,13 @@ func HandleMultiChannelFailoverWithSelectionFilter(
 		}
 		c.Set(retryBudgetContextKey, &retryBudget{remaining: attempts, deadline: time.Now().Add(time.Duration(seconds) * time.Second)})
 	}
-	for _, target := range targets {
+	for targetIndex, target := range targets {
 		c.Set("ccxRoutingEffectiveModel", target)
 		c.Set("ccxRoutingPolicy", policy != nil)
 		failedChannels := make(map[int]bool)
 		filter := candidateFilter
 		if policy != nil {
-			filter = exactTargetFilter(target, candidateFilter)
+			filter = exactTargetFilter(target, targetIndex == 0 && agentRole == "subagent", candidateFilter)
 		}
 
 		for channelAttempt := 0; channelAttempt < maxChannelAttempts; channelAttempt++ {
@@ -171,7 +172,9 @@ func HandleMultiChannelFailoverWithSelectionFilter(
 				break
 			}
 
-			if policy != nil && selection.Upstream != nil {
+			hasSubagentModel := agentRole == "subagent" && selection.Upstream != nil && strings.TrimSpace(selection.Upstream.SubagentModel) != ""
+			c.Set("ccxRoutingPolicy", policy != nil && !hasSubagentModel)
+			if policy != nil && selection.Upstream != nil && !hasSubagentModel {
 				selection.Upstream = selection.Upstream.Clone()
 				if selection.Upstream.ModelMapping == nil {
 					selection.Upstream.ModelMapping = map[string]string{}

@@ -77,6 +77,7 @@ func (s *ChannelScheduler) SelectChannelWithOptions(ctx context.Context, opts Se
 		return newSelectionTraceError(err, trace)
 	}
 	finish := func(upstream *config.UpstreamConfig, channelIndex int, reason string) *SelectionResult {
+		upstream = config.WithAgentModel(model, upstream, opts.AgentRole)
 		result := s.selectionResultWithRecord(kind, upstream, channelIndex, reason, !opts.DryRun)
 		channelName := ""
 		if upstream != nil {
@@ -88,7 +89,7 @@ func (s *ChannelScheduler) SelectChannelWithOptions(ctx context.Context, opts Se
 	}
 
 	// 获取活跃渠道列表（含模型过滤）
-	activeChannels := s.getActiveChannelsWithTrace(kind, model, trace)
+	activeChannels := s.getActiveChannelsWithTrace(kind, model, opts.AgentRole, trace)
 	trace.setStage("active_model_filter", len(activeChannels))
 	if len(activeChannels) == 0 {
 		// 区分"无活跃渠道"和"无渠道支持该模型"
@@ -169,7 +170,7 @@ func (s *ChannelScheduler) SelectChannelWithOptions(ctx context.Context, opts Se
 		trace.setStage("default_route_filter", len(activeChannels))
 	}
 
-	activeChannels, err := s.filterChannelsByContext(activeChannels, kind, model, opts.ContextRequirement, trace)
+	activeChannels, err := s.filterChannelsByContext(activeChannels, kind, model, opts.AgentRole, opts.ContextRequirement, trace)
 	if err != nil {
 		trace.setStage("context_filter", 0)
 		return nil, traceErr(err)
@@ -274,7 +275,7 @@ func (s *ChannelScheduler) SelectChannelWithOptions(ctx context.Context, opts Se
 	// 1. 检查 Trace 亲和性（促销渠道失败时或无促销渠道时）
 	if userID != "" {
 		if preferredIdx, ok := s.preferredTraceChannel(opts, affinityUserID, activeChannels); ok {
-			bestPriority := s.findBestAvailableChannelPriority(activeChannels, failedChannels, kind, model)
+			bestPriority := s.findBestAvailableChannelPriority(activeChannels, failedChannels, kind, model, opts.AgentRole)
 			for _, ch := range activeChannels {
 				if ch.Index == preferredIdx && !failedChannels[preferredIdx] {
 					// 检查渠道状态：只有 active 状态才使用亲和性
@@ -354,7 +355,8 @@ func (s *ChannelScheduler) SelectChannelWithOptions(ctx context.Context, opts Se
 			continue
 		}
 
-		if deferred, ratio, scope, cooldown := s.channelRateLimitSoftDeferred(upstream, kind, ch.Index, model, time.Now()); deferred {
+		requestModel := config.RequestModelForAgent(model, upstream, opts.AgentRole)
+		if deferred, ratio, scope, cooldown := s.channelRateLimitSoftDeferred(upstream, kind, ch.Index, requestModel, time.Now()); deferred {
 			prefix := kindSchedulerLogPrefix(kind)
 			if cooldown {
 				log.Printf("[%s-RateLimit] 软跳过高水位渠道: [%d] %s scope=%s usage=%.0f%% cooldown (high=%.0f%%, recover<%.0f%%/%s)",
@@ -403,6 +405,7 @@ func (s *ChannelScheduler) SelectChannelWithOptions(ctx context.Context, opts Se
 	// 3. 所有健康渠道都失败，选择失败率最低的作为降级
 	result, err := s.selectFallbackChannelWithRecord(activeChannels, failedChannels, kind, !opts.DryRun)
 	if result != nil {
+		result.Upstream = config.WithAgentModel(model, result.Upstream, opts.AgentRole)
 		channelName := ""
 		if result.Upstream != nil {
 			channelName = result.Upstream.Name
@@ -692,7 +695,7 @@ func (s *ChannelScheduler) channelIsRuntimeAvailable(upstream *config.UpstreamCo
 	return !s.channelInRuntimeCooldown(kind, channelIndex)
 }
 
-func (s *ChannelScheduler) filterChannelsByContext(activeChannels []ChannelInfo, kind ChannelKind, model string, requirement *ContextRequirement, trace *SelectionTrace) ([]ChannelInfo, error) {
+func (s *ChannelScheduler) filterChannelsByContext(activeChannels []ChannelInfo, kind ChannelKind, model, agentRole string, requirement *ContextRequirement, trace *SelectionTrace) ([]ChannelInfo, error) {
 	if requirement == nil {
 		return activeChannels, nil
 	}
@@ -726,7 +729,8 @@ func (s *ChannelScheduler) filterChannelsByContext(activeChannels []ChannelInfo,
 			continue
 		}
 
-		resolved := config.ResolveUpstreamCapability(model, upstream, cfg.UpstreamModelCapabilities)
+		effectiveUpstream := config.WithAgentModel(model, upstream, agentRole)
+		resolved := config.ResolveUpstreamCapability(model, effectiveUpstream, cfg.UpstreamModelCapabilities)
 		capability := resolved.Capability
 		if capability.ContextWindowTokens > maxKnownWindow {
 			maxKnownWindow = capability.ContextWindowTokens
@@ -1036,10 +1040,10 @@ type ChannelInfo struct {
 
 // getActiveChannels 获取活跃渠道列表（按优先级排序）
 func (s *ChannelScheduler) getActiveChannels(kind ChannelKind, model string) []ChannelInfo {
-	return s.getActiveChannelsWithTrace(kind, model, nil)
+	return s.getActiveChannelsWithTrace(kind, model, "", nil)
 }
 
-func (s *ChannelScheduler) getActiveChannelsWithTrace(kind ChannelKind, model string, trace *SelectionTrace) []ChannelInfo {
+func (s *ChannelScheduler) getActiveChannelsWithTrace(kind ChannelKind, model, agentRole string, trace *SelectionTrace) []ChannelInfo {
 	cfg := s.configManager.GetConfig()
 
 	var upstreams []config.UpstreamConfig
@@ -1079,11 +1083,12 @@ func (s *ChannelScheduler) getActiveChannelsWithTrace(kind ChannelKind, model st
 		// 只选择 active 状态的渠道（suspended 也算在活跃序列中，但会被健康检查过滤）
 		if status != "disabled" {
 			// 过滤不支持当前模型的渠道
-			if model != "" {
-				supported, reason := upstream.ExplainModelSupport(model)
+			requestModel := config.RequestModelForAgent(model, &upstream, agentRole)
+			if requestModel != "" {
+				supported, reason := upstream.ExplainModelSupport(requestModel)
 				if !supported {
 					prefix := kindSchedulerLogPrefix(kind)
-					log.Printf("[%s-ModelFilter] 跳过渠道 [%d] %s: 模型 %q 不被 supportedModels 支持 (%s)", prefix, i, upstream.Name, model, reason)
+					log.Printf("[%s-ModelFilter] 跳过渠道 [%d] %s: 模型 %q 不被 supportedModels 支持 (%s)", prefix, i, upstream.Name, requestModel, reason)
 					trace.skipChannel(ch, "active_model_filter", "unsupported_model", reason)
 					continue
 				}
@@ -1110,6 +1115,7 @@ func (s *ChannelScheduler) findBestAvailableChannelPriority(
 	failedChannels map[int]bool,
 	kind ChannelKind,
 	model string,
+	agentRole string,
 ) int {
 	bestPriority := -1
 
@@ -1125,7 +1131,8 @@ func (s *ChannelScheduler) findBestAvailableChannelPriority(
 		if !s.channelIsRuntimeAvailable(upstream, kind, ch.Index) {
 			continue
 		}
-		if deferred, _, _, _ := s.channelRateLimitSoftDeferred(upstream, kind, ch.Index, model, time.Now()); deferred {
+		requestModel := config.RequestModelForAgent(model, upstream, agentRole)
+		if deferred, _, _, _ := s.channelRateLimitSoftDeferred(upstream, kind, ch.Index, requestModel, time.Now()); deferred {
 			continue
 		}
 

@@ -478,6 +478,8 @@
   "addChannel.modelMappingHintResponses": "Configure model name mapping to redirect the requested model to a target model. Example: redirect \"opus\" to \"gpt-5.4\".",
   "addChannel.modelMappingHintVectors": "Configure Embeddings model name mapping to redirect the requested vector model to a target model. Example: redirect \"text-embedding-3-small\" to \"jina-embeddings-v2-base-zh\".",
   "addChannel.modelMappingHintMessages": "Configure model name mapping to redirect the requested model to a target model. Example: redirect \"opus\" to \"claude-sonnet-4-5-20250929\".",
+  "addChannel.subagentModelLabel": "Subagent model",
+  "addChannel.subagentModelHint": "Only applies to requests identified as subagents. Choose a model class or enter an exact model name. Classes resolve through the mappings below; leave empty to keep the client request.",
   "addChannel.targetModelPlaceholderChat": "Example: gpt-5.4",
   "addChannel.targetModelPlaceholderResponses": "Example: gpt-5.4",
   "addChannel.targetModelPlaceholderGemini": "Example: gemini-3.5-flash",

@@ -121,3 +121,77 @@ func TestModelFallbackWithRealUpstreamAttempts(t *testing.T) {
 		})
 	}
 }
+
+func TestSubagentModelOverridesFallbackAndReachesUpstream(t *testing.T) {
+	var attempts atomic.Int32
+	var sentModel atomic.Value
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts.Add(1)
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		sentModel.Store(body["model"])
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"subagent works"}}]}`))
+	}))
+	defer srv.Close()
+
+	channel := config.UpstreamConfig{
+		Name:            "subagent-relay",
+		ServiceType:     "openai",
+		BaseURL:         srv.URL,
+		APIKeys:         []string{"key"},
+		Status:          "active",
+		SupportedModels: []string{"sol"},
+		SubagentModel:   "sol",
+		ModelMapping:    map[string]string{"sol": "subagent-actual"},
+	}
+	cfg := config.Config{
+		ChatUpstream: []config.UpstreamConfig{channel},
+		ModelFallbackPolicies: map[string]config.ModelFallbackPolicy{
+			"chat:client": {Protocol: "chat", RequestModel: "client", Models: []string{"primary", "backup"}, MaxAttempts: 3, MaxWaitSeconds: 10},
+		},
+	}
+	data, _ := json.Marshal(cfg)
+	path := filepath.Join(t.TempDir(), "config.json")
+	if err := os.WriteFile(path, data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	cm, err := config.NewConfigManager(path, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cm.Close()
+	manager := metrics.NewMetricsManager()
+	defer manager.Stop()
+	sch := scheduler.NewChannelScheduler(cm, manager, manager, manager, manager, manager, session.NewTraceAffinityManager(), warmup.NewURLManager(time.Minute, 3))
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	body := []byte(`{"model":"client","messages":[{"role":"user","content":"hello"}]}`)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewReader(body))
+	SetRequestLogContextWithAgent(c, "user", 1, &types.AgentContext{AgentRole: "subagent"})
+	env := config.NewEnvConfig()
+
+	HandleMultiChannelFailover(c, env, sch, scheduler.ChannelKindChat, "Chat", "user", "client", "subagent", func(selection *scheduler.SelectionResult) MultiChannelAttemptResult {
+		handled, key, index, failover, usage, lastErr := TryUpstreamWithAllKeys(c, env, cm, sch, scheduler.ChannelKindChat, "Chat", manager, selection.Upstream, []warmup.URLLatencyResult{{URL: srv.URL}}, body, nil, false,
+			func(up *config.UpstreamConfig, failed map[string]bool) (string, error) {
+				return cm.GetNextChatAPIKey(up, failed)
+			},
+			func(c *gin.Context, up *config.UpstreamConfig, key string) (*http.Request, error) {
+				payload, _ := json.Marshal(map[string]string{"model": config.RedirectModel("client", up)})
+				return http.NewRequestWithContext(c.Request.Context(), http.MethodPost, srv.URL, bytes.NewReader(payload))
+			}, nil, nil, nil,
+			func(c *gin.Context, resp *http.Response, up *config.UpstreamConfig, key string, actual []byte) (*types.Usage, error) {
+				defer resp.Body.Close()
+				payload, err := io.ReadAll(resp.Body)
+				if err == nil {
+					c.Data(200, "application/json", payload)
+				}
+				return nil, err
+			}, "client", "", selection.ChannelIndex, sch.GetChannelLogStore(scheduler.ChannelKindChat))
+		return MultiChannelAttemptResult{Handled: handled, Attempted: true, SuccessKey: key, SuccessBaseURLIdx: index, FailoverError: failover, Usage: usage, LastError: lastErr}
+	}, nil, nil)
+
+	if recorder.Code != 200 || attempts.Load() != 1 || sentModel.Load() != "subagent-actual" {
+		t.Fatalf("status=%d attempts=%d sentModel=%v body=%s", recorder.Code, attempts.Load(), sentModel.Load(), recorder.Body.String())
+	}
+}

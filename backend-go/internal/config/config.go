@@ -36,6 +36,7 @@ type UpstreamConfig struct {
 	Website               string                             `json:"website,omitempty"`
 	InsecureSkipVerify    bool                               `json:"insecureSkipVerify,omitempty"`
 	ModelMapping          map[string]string                  `json:"modelMapping,omitempty"`
+	SubagentModel         string                             `json:"subagentModel,omitempty"`     // 子代理请求模型大类或具体模型名，为空沿用请求模型
 	ModelCapabilities     map[string]UpstreamModelCapability `json:"modelCapabilities,omitempty"` // 实际模型能力覆盖，key 支持模型通配符
 	EmbeddingCapabilities map[string]EmbeddingCapability     `json:"embeddingCapabilities,omitempty"`
 	DefaultCapability     UpstreamModelCapability            `json:"defaultCapability,omitempty"`   // 渠道默认实际模型能力
@@ -477,6 +478,7 @@ type UpstreamUpdate struct {
 	Website                       *string                            `json:"website"`
 	InsecureSkipVerify            *bool                              `json:"insecureSkipVerify"`
 	ModelMapping                  map[string]string                  `json:"modelMapping"`
+	SubagentModel                 *string                            `json:"subagentModel"`
 	ModelCapabilities             map[string]UpstreamModelCapability `json:"modelCapabilities"`
 	EmbeddingCapabilities         map[string]EmbeddingCapability     `json:"embeddingCapabilities"`
 	DefaultCapability             *UpstreamModelCapability           `json:"defaultCapability"`
