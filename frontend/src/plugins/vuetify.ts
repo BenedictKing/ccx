@@ -212,6 +212,7 @@ import {
   mdiCashMultiple,
   mdiCash,
   mdiAccountSwitch,
+  mdiAccountMultipleOutline,
   mdiChatOutline,
   mdiSourceBranch,
   mdiDragHorizontalVariant,
@@ -446,6 +447,7 @@ const iconMap: Record<string, string> = {
 
   // 渠道配置
   'account-switch': mdiAccountSwitch,
+  'account-multiple-outline': mdiAccountMultipleOutline,
   'chat-outline': mdiChatOutline,
   'vector-point': mdiVectorPoint,
   'vector-polyline': mdiVectorPolyline,
