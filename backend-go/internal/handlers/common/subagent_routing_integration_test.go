@@ -21,6 +21,7 @@ import (
 )
 
 func TestSubagentRoutingFailoverKeepsPolicyModel(t *testing.T) {
+	var cm *config.ConfigManager
 	sentModels := make(chan string, 2)
 	newUpstream := func(name string, fail bool) *httptest.Server {
 		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -30,6 +31,10 @@ func TestSubagentRoutingFailoverKeepsPolicyModel(t *testing.T) {
 			sentModels <- model
 			w.Header().Set("Content-Type", "application/json")
 			if fail {
+				mapping := map[string]string{"sol": "changed-during-retry"}
+				if _, err := cm.UpdateChatUpstream(1, config.UpstreamUpdate{ModelMapping: mapping}); err != nil {
+					t.Error(err)
+				}
 				w.WriteHeader(http.StatusInternalServerError)
 				_, _ = w.Write([]byte(`{"error":{"message":"retry"}}`))
 				return

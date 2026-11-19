@@ -21,18 +21,25 @@ type SocketRoutingObserver struct {
 	finishedIDs   map[string]bool
 	finishedOrder []string
 	closed        bool
+	onSuccess     func(string, string)
 }
 type SocketRoutingTurn struct {
 	context                   *gin.Context
 	id, attemptID, responseID string
+	requestedModel            string
+	sentModel                 string
 }
 
-func NewSocketRoutingObserver(parent *gin.Context) *SocketRoutingObserver {
+func NewSocketRoutingObserver(parent *gin.Context, onSuccess ...func(string, string)) *SocketRoutingObserver {
 	store, _ := parent.Request.Context().Value(routingStoreContextKey{}).(*metrics.RoutingStore)
-	return &SocketRoutingObserver{request: parent.Request, store: store, finishedIDs: make(map[string]bool)}
+	observer := &SocketRoutingObserver{request: parent.Request, store: store, finishedIDs: make(map[string]bool)}
+	if len(onSuccess) > 0 {
+		observer.onSuccess = onSuccess[0]
+	}
+	return observer
 }
 func (o *SocketRoutingObserver) Begin(payload []byte) *SocketRoutingTurn {
-	if o.store == nil {
+	if o.store == nil && o.onSuccess == nil {
 		return nil
 	}
 	o.mu.Lock()
@@ -47,11 +54,15 @@ func (o *SocketRoutingObserver) Begin(payload []byte) *SocketRoutingTurn {
 	}
 	id := GenerateRequestID()
 	model := gjson.GetBytes(payload, "model").String()
-	o.store.StartRequest(metrics.RoutingRequest{GatewayRequestID: id, APIType: "responses", RequestedModel: model, ReceivedAt: time.Now()})
+	if o.store != nil {
+		o.store.StartRequest(metrics.RoutingRequest{GatewayRequestID: id, APIType: "responses", RequestedModel: model, ReceivedAt: time.Now()})
+	}
 	c := &gin.Context{Request: o.request}
 	c.Set("ccxRoutingTransport", "websocket")
-	c.Set(routingObservationKey, &routingObservation{store: o.store, id: id, model: model})
-	turn := &SocketRoutingTurn{context: c, id: id}
+	if o.store != nil {
+		c.Set(routingObservationKey, &routingObservation{store: o.store, id: id, model: model})
+	}
+	turn := &SocketRoutingTurn{context: c, id: id, requestedModel: model}
 	o.pending = append(o.pending, turn)
 	return turn
 }
@@ -65,19 +76,20 @@ func (o *SocketRoutingObserver) Sending(turn *SocketRoutingTurn, body []byte, up
 		return
 	}
 	turn.attemptID = GenerateRequestID()
+	turn.sentModel = gjson.GetBytes(body, "model").String()
 	req, _ := http.NewRequest(http.MethodPost, "http://routing-observation.invalid/v1/responses", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	StartRoutingAttempt(turn.context, req, upstream, routingTracker(turn.context).model, turn.attemptID, reason, decision)
+	StartRoutingAttempt(turn.context, req, upstream, turn.requestedModel, turn.attemptID, reason, decision)
 }
 func (o *SocketRoutingObserver) finishLocked(turn *SocketRoutingTurn, status string, code int) {
-	if turn.attemptID != "" {
+	if o.store != nil && turn.attemptID != "" {
 		o.store.FinishAttempt(turn.id, turn.attemptID, status, code)
 	}
 	stage := ""
 	if status == metrics.RoutingStatusFailed {
 		stage = "websocket"
 	}
-	if turn.id != "" {
+	if o.store != nil && turn.id != "" {
 		o.store.FinishRequest(turn.id, status, stage)
 	}
 	if turn.responseID != "" && !o.finishedIDs[turn.responseID] {
@@ -87,6 +99,9 @@ func (o *SocketRoutingObserver) finishLocked(turn *SocketRoutingTurn, status str
 			delete(o.finishedIDs, o.finishedOrder[0])
 			o.finishedOrder = o.finishedOrder[1:]
 		}
+	}
+	if status == metrics.RoutingStatusSuccess && o.onSuccess != nil && turn.sentModel != "" {
+		o.onSuccess(turn.requestedModel, turn.sentModel)
 	}
 	for i, candidate := range o.pending {
 		if candidate == turn {
@@ -98,9 +113,6 @@ func (o *SocketRoutingObserver) finishLocked(turn *SocketRoutingTurn, status str
 
 // Event 在事件成功写回客户端后调用；依据协议终态而非 HTTP 101 判定成功。
 func (o *SocketRoutingObserver) Event(payload []byte) {
-	if o.store == nil {
-		return
-	}
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	if len(o.pending) == 0 {
@@ -164,9 +176,6 @@ func (o *SocketRoutingObserver) Event(payload []byte) {
 	}
 }
 func (o *SocketRoutingObserver) Close(status string) {
-	if o.store == nil {
-		return
-	}
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	o.closed = true
@@ -176,8 +185,11 @@ func (o *SocketRoutingObserver) Close(status string) {
 }
 
 // PinSocketModelMapping 固定本轮实际执行的模型规则，不修改持久化渠道配置。
-func PinSocketModelMapping(upstream *config.UpstreamConfig, payload []byte) (*config.UpstreamConfig, RoutingMappingDecision) {
+func PinSocketModelMapping(upstream *config.UpstreamConfig, payload []byte, agentRoles ...string) (*config.UpstreamConfig, RoutingMappingDecision) {
 	model := gjson.GetBytes(payload, "model").String()
+	if len(agentRoles) > 0 {
+		upstream = config.WithAgentModel(model, upstream, agentRoles[0])
+	}
 	mapped, source, match := config.RedirectModelWithRule(model, upstream)
 	clone := upstream.Clone()
 	if match != "" {

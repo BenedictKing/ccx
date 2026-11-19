@@ -67,6 +67,7 @@ type SelectionOptions struct {
 	AgentConfidence       string
 	SubagentRouting       *config.SubagentRoutingPolicy
 	ApplySubagentRouting  bool
+	ConfigSnapshot        *config.Config // 同一请求的候选和重试共用，不按旧索引读取新配置
 	CandidateFilter       CandidateFilterFunc
 	DryRun                bool // 只诊断选择结果，不更新 lastSelectedChannel 或 override TTL
 }

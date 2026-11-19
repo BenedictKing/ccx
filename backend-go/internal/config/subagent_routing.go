@@ -293,6 +293,13 @@ func WithSubagentRouting(upstream *UpstreamConfig, policy *SubagentRoutingPolicy
 	clone.SubagentModel = ""
 	if apply {
 		clone.SubagentModel = strings.TrimSpace(policy.Model)
+		if clone.SubagentModel != "" {
+			if clone.ModelMapping == nil {
+				clone.ModelMapping = make(map[string]string)
+			}
+			// 新策略沿用完整模型映射规则；旧渠道字段仍保持原兼容语义。
+			clone.ModelMapping[clone.SubagentModel] = RedirectModel(clone.SubagentModel, upstream)
+		}
 	}
 	return clone
 }

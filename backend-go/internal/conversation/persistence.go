@@ -38,7 +38,7 @@ type persistedConversation struct {
 	CreatedAt            time.Time  `json:"createdAt"`
 	LastActiveAt         time.Time  `json:"lastActiveAt"`
 
-	SuccessfulChannels map[string]ChannelEntry `json:"successfulChannels,omitempty"`
+	SuccessfulChannels map[string]SuccessfulChannel `json:"successfulChannels,omitempty"`
 }
 
 type persistedState struct {

@@ -149,7 +149,7 @@ func TestResponsesWebSocketHandler_ResponsesUpstreamKeepsNativeV2Continuation(t 
 		t.Fatalf("terminal event type = %v, want response.completed", completed["type"])
 	}
 	if err := conn.WriteJSON(map[string]interface{}{
-		"type": "response.create", "model": "gpt-5", "previous_response_id": "resp-1",
+		"type": "response.create", "model": "gpt-second", "previous_response_id": "resp-1",
 		"input": []interface{}{map[string]interface{}{"type": "function_call_output", "call_id": "call-1", "output": "Fri"}},
 	}); err != nil {
 		t.Fatalf("write continuation: %v", err)

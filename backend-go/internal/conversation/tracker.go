@@ -13,6 +13,16 @@ import (
 	"github.com/BenedictKing/ccx/internal/types"
 )
 
+// SuccessfulChannel 保存可恢复的成功来源；旧记录允许缺少新增字段。
+type SuccessfulChannel struct {
+	ChannelEntry
+	ChannelUID   string `json:"channelUid,omitempty"`
+	RequestModel string `json:"requestModel,omitempty"`
+	Model        string `json:"model,omitempty"`
+	BaseURL      string `json:"baseUrl,omitempty"`
+	ServiceType  string `json:"serviceType,omitempty"`
+}
+
 type Conversation struct {
 	ID                   string     `json:"id"`
 	Kind                 string     `json:"kind"`
@@ -46,7 +56,7 @@ type Conversation struct {
 	SubagentChannel int  `json:"subagentChannel,omitempty"`
 
 	// 成功渠道独立于流式进行中状态，用于恢复加密续轮的来源亲和。
-	SuccessfulChannels map[string]ChannelEntry `json:"-"`
+	SuccessfulChannels map[string]SuccessfulChannel `json:"-"`
 }
 
 func (conv *Conversation) recomputeTitle() {
@@ -183,9 +193,9 @@ func (ct *ConversationTracker) TrackWithStatusAndMessages(kind, userID, model st
 	conv.Status = status
 	if kind == "responses" && status == "active" {
 		if conv.SuccessfulChannels == nil {
-			conv.SuccessfulChannels = make(map[string]ChannelEntry)
+			conv.SuccessfulChannels = make(map[string]SuccessfulChannel)
 		}
-		conv.SuccessfulChannels[affinityRole(agentRole)] = ChannelEntry{ChannelIndex: channelIndex, ChannelName: channelName}
+		conv.SuccessfulChannels[affinityRole(agentRole)] = SuccessfulChannel{ChannelEntry: ChannelEntry{ChannelIndex: channelIndex, ChannelName: channelName}}
 	}
 
 	// 角色观测：subagent 单独累计，主对话记录主渠道
@@ -387,15 +397,30 @@ func (ct *ConversationTracker) GetConversationByUser(kind, userID string) (*Conv
 }
 
 // GetSuccessfulChannel 返回成功渠道的值快照，避免读取进行中请求覆盖的 CurrentChannel。
-func (ct *ConversationTracker) GetSuccessfulChannel(kind, userID, agentRole string) (ChannelEntry, bool) {
+func (ct *ConversationTracker) GetSuccessfulChannel(kind, userID, agentRole string) (SuccessfulChannel, bool) {
 	ct.mu.RLock()
 	defer ct.mu.RUnlock()
 	conv := ct.conversations[ct.userMapping[kind+":"+userID]]
 	if conv == nil {
-		return ChannelEntry{}, false
+		return SuccessfulChannel{}, false
 	}
 	channel, ok := conv.SuccessfulChannels[affinityRole(agentRole)]
 	return channel, ok
+}
+
+// RecordSuccessfulChannel 仅在请求真正成功后记录实际发送模型和稳定来源。
+func (ct *ConversationTracker) RecordSuccessfulChannel(kind, userID, agentRole string, channel SuccessfulChannel) {
+	ct.mu.Lock()
+	defer ct.mu.Unlock()
+	conv := ct.conversations[ct.userMapping[kind+":"+userID]]
+	if conv == nil || channel.Model == "" {
+		return
+	}
+	if conv.SuccessfulChannels == nil {
+		conv.SuccessfulChannels = make(map[string]SuccessfulChannel)
+	}
+	conv.SuccessfulChannels[affinityRole(agentRole)] = channel
+	ct.dirty = true
 }
 
 func affinityRole(agentRole string) string {

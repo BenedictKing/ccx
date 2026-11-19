@@ -97,6 +97,7 @@ func TestEncryptedContinuationKeepsRequestModelOnSuccessfulChannel(t *testing.T)
 	defer tracker.Stop()
 	tracker.Track("responses", "user", "astra", 1, "source", "", "child", 1, "subagent")
 	s.SetConversationComponents(tracker, nil)
+	s.RecordSuccessfulResponse("user", "astra", "subagent", 1, s.configManager.GetConfig().ResponsesUpstream[1].Clone(), "original-actual", "https://b.example")
 	policy := &config.SubagentRoutingPolicy{Model: "sol", Channels: []config.SubagentRoutingChannel{{ChannelUID: "uid-a", Enabled: true}, {ChannelUID: "uid-b", Enabled: true}}}
 	result, err := s.SelectChannelWithOptions(context.Background(), SelectionOptions{
 		UserID: "user", Kind: ChannelKindResponses, Model: "astra", AgentRole: "subagent", AgentConfidence: "exact",

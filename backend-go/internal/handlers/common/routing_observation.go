@@ -119,9 +119,6 @@ func StartRoutingAttempt(c *gin.Context, req *http.Request, upstream *config.Ups
 
 func startRoutingAttempt(c *gin.Context, req *http.Request, upstream *config.UpstreamConfig, effectiveModel, attemptID, reason string, auxiliary bool, decisions ...RoutingMappingDecision) {
 	tracker := routingTracker(c)
-	if tracker == nil {
-		return
-	}
 	var body []byte
 	if req.GetBody != nil {
 		if reader, err := req.GetBody(); err == nil {
@@ -130,6 +127,12 @@ func startRoutingAttempt(c *gin.Context, req *http.Request, upstream *config.Ups
 		}
 	}
 	sent := requestModel(req.URL.Path, req.Header.Get("Content-Type"), body)
+	if !auxiliary && c != nil {
+		c.Set("ccxCurrentSentModel", sent)
+	}
+	if tracker == nil {
+		return
+	}
 	mapped, source, match := config.RedirectModelWithRule(effectiveModel, upstream)
 	if len(decisions) > 0 {
 		mapped, source, match = decisions[0].Model, decisions[0].Source, decisions[0].Match

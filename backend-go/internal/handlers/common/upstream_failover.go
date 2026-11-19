@@ -761,6 +761,8 @@ func TryUpstreamWithAllKeys(
 			if markURLSuccess != nil {
 				markURLSuccess(currentBaseURL)
 			}
+			c.Set("ccxSuccessfulRequestModel", c.GetString("ccxCurrentSentModel"))
+			c.Set("ccxSuccessfulBaseURL", currentBaseURL)
 			metricsManager.RecordRequestFinalizeSuccess(currentBaseURL, apiKey, metricsServiceType, requestID, usage)
 			channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, kind)
 			if probeKey := currentBaseURL + "|" + apiKey; probeAcquired[probeKey] {

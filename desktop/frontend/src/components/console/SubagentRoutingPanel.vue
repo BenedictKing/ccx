@@ -37,6 +37,7 @@ const visibleChannels = computed(() => {
 })
 const currentState = computed(() => JSON.stringify({ model: normalizedModel.value, channels: channels.value.map(channel => ({ channelUid: channel.channelUid, enabled: channel.enabled })) }))
 const dirty = computed(() => Boolean(savedState.value) && currentState.value !== savedState.value)
+const canSave = computed(() => Boolean(savedState.value) && !loading.value && !saving.value && (dirty.value || !activated.value))
 const modelOptions = computed(() => props.type === 'messages'
   ? ['haiku', 'sonnet', 'opus', 'fable']
   : props.type === 'gemini'
@@ -103,6 +104,7 @@ function cancel() {
 }
 
 async function save() {
+  if (!canSave.value) return
   saving.value = true
   errorMessage.value = ''
   savedMessage.value = ''
@@ -224,7 +226,7 @@ watch(() => props.type, () => {
         <div class="flex items-center justify-end gap-2">
           <span v-if="dirty" class="mr-auto text-[11px] text-muted-foreground">{{ t('subagentRouting.unsaved') }}</span>
           <Button variant="outline" :disabled="!dirty || saving" @click="cancel">{{ t('common.cancel') }}</Button>
-          <Button :disabled="!dirty || saving" @click="save"><Loader2 v-if="saving" class="h-3.5 w-3.5 animate-spin" />{{ t('common.save') }}</Button>
+          <Button :disabled="!canSave" @click="save"><Loader2 v-if="saving" class="h-3.5 w-3.5 animate-spin" />{{ t('common.save') }}</Button>
         </div>
       </template>
     </div>

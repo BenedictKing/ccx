@@ -208,16 +208,17 @@ func selectResponsesWebSocketChannel(
 		agentConfidence = agentCtx.Confidence
 		c.Set("agentContext", agentCtx)
 	}
-	subagentRouting, applySubagentRouting := channelScheduler.ResolveSubagentRouting(scheduler.ChannelKindResponses, agentRole, agentConfidence)
+	common.SetRequestLogContextWithAgent(c, userID, countResponsesUserMessages(req["input"]), agentCtx)
+	cfg := cfgManager.GetConfig()
+	subagentRouting, applySubagentRouting := config.ResolveSubagentRouting(cfg, "responses", agentRole, agentConfidence)
 	c.Set("ccxSubagentRoutingApplied", applySubagentRouting)
 	if applySubagentRouting && subagentRouting != nil {
 		c.Set("ccxSubagentRoutingModel", subagentRouting.Model)
 	}
 
-	cfg := cfgManager.GetConfig()
 	contextRequirement := common.BuildResponsesContextRequirement(payload, cfg.ContextRouting)
 	common.ApplyAgentModelProfile(contextRequirement, model, cfg)
-	channelScheduler.ApplySubagentRoutingProfile(contextRequirement, subagentRouting, applySubagentRouting)
+	channelScheduler.ApplySubagentRoutingProfile(contextRequirement, subagentRouting, applySubagentRouting, cfg)
 
 	return channelScheduler.SelectChannelWithOptions(c.Request.Context(), scheduler.SelectionOptions{
 		UserID:                userID,
@@ -226,11 +227,12 @@ func selectResponsesWebSocketChannel(
 		RoutePrefix:           c.Param("routePrefix"),
 		ChannelName:           c.GetHeader("X-Channel"),
 		ContextRequirement:    contextRequirement,
-		PreserveTraceAffinity: common.HasResponsesEncryptedContent(payload),
+		PreserveTraceAffinity: common.RequiresResponsesSourceAffinity(payload),
 		AgentRole:             agentRole,
 		AgentConfidence:       agentConfidence,
 		SubagentRouting:       subagentRouting,
 		ApplySubagentRouting:  applySubagentRouting,
+		ConfigSnapshot:        &cfg,
 	})
 }
 
@@ -294,7 +296,17 @@ func serveNativeResponsesWebSocket(
 	selection *scheduler.SelectionResult,
 	firstPayload []byte,
 ) error {
-	observer := common.NewSocketRoutingObserver(c)
+	baseURL := ""
+	userID := utils.ExtractUnifiedSessionID(c, firstPayload)
+	agentCtx := common.AgentContextFromGin(c)
+	agentRole := ""
+	if agentCtx != nil {
+		agentRole = agentCtx.AgentRole
+	}
+	observer := common.NewSocketRoutingObserver(c, func(model, actualModel string) {
+		channelScheduler.TrackConversation(scheduler.ChannelKindResponses, userID, model, selection.ChannelIndex, selection.Upstream.Name, "", "", 0, agentRole, agentCtx)
+		channelScheduler.RecordSuccessfulResponse(userID, model, agentRole, selection.ChannelIndex, selection.Upstream, actualModel, baseURL)
+	})
 	firstTurn := observer.Begin(firstPayload)
 	defer observer.Close(metrics.RoutingStatusFailed)
 	upstream := selection.Upstream
@@ -306,7 +318,7 @@ func serveNativeResponsesWebSocket(
 	}
 
 	upstreamCopy := upstream.Clone()
-	baseURL := selectResponsesWebSocketBaseURL(channelScheduler, selection.ChannelIndex, upstreamCopy)
+	baseURL = selectResponsesWebSocketBaseURL(channelScheduler, selection.ChannelIndex, upstreamCopy)
 	if baseURL != "" {
 		upstreamCopy.BaseURL = baseURL
 	}
@@ -315,7 +327,7 @@ func serveNativeResponsesWebSocket(
 		return err
 	}
 
-	firstUpstream, firstDecision := common.PinSocketModelMapping(upstreamCopy, firstPayload)
+	firstUpstream, firstDecision := common.PinSocketModelMapping(upstreamCopy, firstPayload, agentRole)
 	firstRequest, err := buildNativeResponsesWebSocketRequest(c, firstUpstream, apiKey, firstPayload, sessionManager)
 	if err != nil {
 		return err
@@ -345,7 +357,7 @@ func serveNativeResponsesWebSocket(
 
 	errCh := make(chan bool, 2)
 	go func() {
-		_ = copyNativeResponsesClientToUpstream(c, clientConn, upstreamConn, upstreamCopy, apiKey, sessionManager, observer)
+		_ = copyNativeResponsesClientToUpstream(c, clientConn, upstreamConn, upstreamCopy, apiKey, sessionManager, observer, agentRole)
 		errCh <- true
 	}()
 	go func() {
@@ -477,6 +489,7 @@ func copyNativeResponsesClientToUpstream(
 	apiKey string,
 	sessionManager *session.SessionManager,
 	observer *common.SocketRoutingObserver,
+	agentRole string,
 ) error {
 	for {
 		messageType, payload, err := clientConn.ReadMessage()
@@ -488,7 +501,7 @@ func copyNativeResponsesClientToUpstream(
 			return errors.New("only text messages are supported")
 		}
 		turn := observer.Begin(payload)
-		pinned, decision := common.PinSocketModelMapping(upstream, payload)
+		pinned, decision := common.PinSocketModelMapping(upstream, payload, agentRole)
 		body, err := buildNativeResponsesWebSocketBody(c, pinned, apiKey, payload, sessionManager)
 		if err != nil {
 			observer.Close(metrics.RoutingStatusFailed)

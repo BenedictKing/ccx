@@ -124,20 +124,21 @@ func HandleMultiChannelFailoverWithSelectionFilter(
 	preserveTraceAffinity := false
 	if body := GetEffectiveRequestBody(c, nil); len(body) > 0 {
 		hasImageContent = HasImageContent(c, body)
-		preserveTraceAffinity = kind == scheduler.ChannelKindResponses && HasResponsesEncryptedContent(body)
+		preserveTraceAffinity = kind == scheduler.ChannelKindResponses && RequiresResponsesSourceAffinity(body)
 	}
 
 	agentConfidence := ""
 	if agentCtx := AgentContextFromGin(c); agentCtx != nil {
 		agentConfidence = agentCtx.Confidence
 	}
-	subagentRouting, applySubagentRouting := channelScheduler.ResolveSubagentRouting(kind, agentRole, agentConfidence)
-	channelScheduler.ApplySubagentRoutingProfile(contextRequirement, subagentRouting, applySubagentRouting)
+	cfg := channelScheduler.ConfigSnapshot()
+	subagentRouting, applySubagentRouting := config.ResolveSubagentRouting(cfg, string(kind), agentRole, agentConfidence)
+	channelScheduler.ApplySubagentRoutingProfile(contextRequirement, subagentRouting, applySubagentRouting, cfg)
 	c.Set("ccxSubagentRoutingApplied", applySubagentRouting)
 	if applySubagentRouting && subagentRouting != nil {
 		c.Set("ccxSubagentRoutingModel", subagentRouting.Model)
 	}
-	maxChannelAttempts := channelScheduler.GetActiveChannelCount(kind)
+	maxChannelAttempts := channelScheduler.GetActiveChannelCount(kind, cfg)
 	if applySubagentRouting && subagentRouting != nil {
 		maxChannelAttempts = len(subagentRouting.Channels)
 		if maxChannelAttempts < 1 {
@@ -145,8 +146,8 @@ func HandleMultiChannelFailoverWithSelectionFilter(
 		}
 	}
 	targets := []string{model}
-	policy := channelScheduler.ModelFallbackPolicy(kind, model, c.Param("routePrefix"))
-	if applySubagentRouting && subagentRouting != nil && strings.TrimSpace(subagentRouting.Model) != "" {
+	policy := channelScheduler.ModelFallbackPolicy(kind, model, c.Param("routePrefix"), cfg)
+	if applySubagentRouting && subagentRouting != nil && (strings.TrimSpace(subagentRouting.Model) != "" || preserveTraceAffinity) {
 		policy = nil
 	}
 	if c.GetHeader("X-Channel") != "" {
@@ -198,6 +199,7 @@ func HandleMultiChannelFailoverWithSelectionFilter(
 				AgentConfidence:       agentConfidence,
 				SubagentRouting:       subagentRouting,
 				ApplySubagentRouting:  applySubagentRouting,
+				ConfigSnapshot:        &cfg,
 				CandidateFilter:       filter,
 			})
 			if err != nil {
@@ -253,6 +255,9 @@ func HandleMultiChannelFailoverWithSelectionFilter(
 						channelName = upstream.Name
 					}
 					channelScheduler.TrackConversationWithMessages(kind, userID, model, channelIndex, channelName, "", lastUserMsgStr, lastUserMessages, userMsgCountInt, agentRole, AgentContextFromGin(c))
+					if kind == scheduler.ChannelKindResponses {
+						channelScheduler.RecordSuccessfulResponse(userID, model, agentRole, channelIndex, upstream, c.GetString("ccxSuccessfulRequestModel"), c.GetString("ccxSuccessfulBaseURL"))
+					}
 					if envCfg.ShouldLog("debug") {
 						RequestLogf(c, "[%s-Conversation-Debug] 已追踪对话: kind=%s, user=%s, model=%s, channel=%d, userMessages=%d, hasFallbackTitle=%t",
 							apiType, kind, scheduler.MaskUserIDForLog(userID), model, channelIndex, userMsgCountInt, lastUserMsgStr != "")

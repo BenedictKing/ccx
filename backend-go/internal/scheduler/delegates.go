@@ -359,7 +359,10 @@ func (s *ChannelScheduler) isUpstreamInConfig(upstream *config.UpstreamConfig, k
 }
 
 // GetActiveChannelCount 获取活跃渠道数量
-func (s *ChannelScheduler) GetActiveChannelCount(kind ChannelKind) int {
+func (s *ChannelScheduler) GetActiveChannelCount(kind ChannelKind, snapshots ...config.Config) int {
+	if len(snapshots) > 0 {
+		return len(s.getActiveChannelsWithTrace(snapshots[0], kind, "", "", nil, false, nil))
+	}
 	return len(s.getActiveChannels(kind, ""))
 }
 

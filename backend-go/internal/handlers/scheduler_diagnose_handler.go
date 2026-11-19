@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/BenedictKing/ccx/internal/config"
 	"github.com/BenedictKing/ccx/internal/scheduler"
 	"github.com/gin-gonic/gin"
 )
@@ -55,9 +56,10 @@ func DiagnoseSchedulerSelection(sch *scheduler.ChannelScheduler, kind scheduler.
 		if agentRole == "subagent" && agentConfidence == "" {
 			agentConfidence = "exact"
 		}
-		subagentRouting, applySubagentRouting := sch.ResolveSubagentRouting(kind, agentRole, agentConfidence)
+		cfg := sch.ConfigSnapshot()
+		subagentRouting, applySubagentRouting := config.ResolveSubagentRouting(cfg, string(kind), agentRole, agentConfidence)
 		contextRequirement := diagnoseContextRequirement(req.ContextRequirement)
-		sch.ApplySubagentRoutingProfile(contextRequirement, subagentRouting, applySubagentRouting)
+		sch.ApplySubagentRoutingProfile(contextRequirement, subagentRouting, applySubagentRouting, cfg)
 		result, err := sch.SelectChannelWithOptions(c.Request.Context(), scheduler.SelectionOptions{
 			UserID:               strings.TrimSpace(req.UserID),
 			FailedChannels:       failedChannels,
@@ -71,6 +73,7 @@ func DiagnoseSchedulerSelection(sch *scheduler.ChannelScheduler, kind scheduler.
 			AgentConfidence:      agentConfidence,
 			SubagentRouting:      subagentRouting,
 			ApplySubagentRouting: applySubagentRouting,
+			ConfigSnapshot:       &cfg,
 			DryRun:               true,
 		})
 		if err != nil {

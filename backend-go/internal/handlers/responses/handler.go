@@ -373,6 +373,7 @@ func handleSingleChannel(
 				agentRole,
 				agentCtx,
 			)
+			channelScheduler.RecordSuccessfulResponse(userID, responsesReq.Model, agentRole, channelIndex, upstream, c.GetString("ccxSuccessfulRequestModel"), c.GetString("ccxSuccessfulBaseURL"))
 		}
 	}
 

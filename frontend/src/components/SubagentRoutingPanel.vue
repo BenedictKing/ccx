@@ -35,6 +35,7 @@
         :items="modelOptions"
         item-title="title"
         item-value="value"
+        :return-object="false"
         :label="t('subagentRouting.modelLabel')"
         :hint="t('subagentRouting.modelHint')"
         persistent-hint
@@ -109,7 +110,7 @@
         <span v-if="dirty" class="text-caption text-medium-emphasis">{{ t('subagentRouting.unsaved') }}</span>
         <v-spacer />
         <v-btn variant="text" :disabled="!dirty || saving" @click="cancel">{{ t('app.actions.cancel') }}</v-btn>
-        <v-btn color="primary" :loading="saving" :disabled="!dirty || saving" @click="save">{{ t('app.actions.save') }}</v-btn>
+        <v-btn color="primary" :loading="saving" :disabled="!canSave" @click="save">{{ t('app.actions.save') }}</v-btn>
       </div>
     </template>
   </v-card>
@@ -142,6 +143,7 @@ const normalizedModel = computed(() => (typeof draftModel.value === 'string' ? d
 const enabledCount = computed(() => channels.value.filter(channel => channel.enabled).length)
 const currentState = computed(() => JSON.stringify({ model: normalizedModel.value, channels: channels.value.map(channel => ({ channelUid: channel.channelUid, enabled: channel.enabled })) }))
 const dirty = computed(() => Boolean(savedState.value) && currentState.value !== savedState.value)
+const canSave = computed(() => Boolean(savedState.value) && !loading.value && !saving.value && (dirty.value || !activated.value))
 const modelOptions = computed(() => {
   const models = props.channelType === 'messages'
     ? ['haiku', 'sonnet', 'opus', 'fable']
@@ -206,6 +208,7 @@ function cancel() {
 }
 
 async function save() {
+  if (!canSave.value) return
   saving.value = true
   errorMessage.value = ''
   try {

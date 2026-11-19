@@ -48,8 +48,12 @@ func (cm *ConfigManager) ReplaceAgentModelFallbackPolicies(agent, protocol strin
 func (cm *ConfigManager) ResolveModelFallbackPolicy(protocol, model string) *ModelFallbackPolicy {
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
+	return ResolveModelFallbackPolicy(cm.config, protocol, model)
+}
+
+func ResolveModelFallbackPolicy(cfg Config, protocol, model string) *ModelFallbackPolicy {
 	var found *ModelFallbackPolicy
-	for _, policy := range cm.config.ModelFallbackPolicies {
+	for _, policy := range cfg.ModelFallbackPolicies {
 		if policy.Protocol != protocol || policy.RequestModel == "" || !strings.Contains(model, policy.RequestModel) || len(policy.Models) == 0 {
 			continue
 		}
