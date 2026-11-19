@@ -64,6 +64,9 @@ type SelectionOptions struct {
 	HasImageContent       bool
 	PreserveTraceAffinity bool   // 加密续轮不因自动优先级切换渠道；显式覆盖与可用性检查仍生效
 	AgentRole             string // "main" | "subagent" — 角色感知 override 查找与亲和隔离
+	AgentConfidence       string
+	SubagentRouting       *config.SubagentRoutingPolicy
+	ApplySubagentRouting  bool
 	CandidateFilter       CandidateFilterFunc
 	DryRun                bool // 只诊断选择结果，不更新 lastSelectedChannel 或 override TTL
 }

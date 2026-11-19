@@ -101,6 +101,7 @@ func (cm *ConfigManager) AddUpstream(upstream UpstreamConfig) error {
 
 	upstream.ChannelUID = newChannelUID()
 	cm.config.Upstream = append([]UpstreamConfig{upstream}, cm.config.Upstream...)
+	appendSubagentChannelLocked(&cm.config, "messages", upstream.ChannelUID)
 
 	if err := cm.saveConfigLocked(cm.config); err != nil {
 		return err
@@ -118,6 +119,9 @@ func (cm *ConfigManager) UpdateUpstream(index int, updates UpstreamUpdate) (shou
 
 	if index < 0 || index >= len(cm.config.Upstream) {
 		return false, fmt.Errorf("无效的上游索引: %d", index)
+	}
+	if err := rejectLegacySubagentModelUpdate(cm.config, "messages", updates); err != nil {
+		return false, err
 	}
 
 	if err := validateKeySettings(updates.APIKeyConfigs, updates.MaxGroupMultiplier.Value); err != nil {
@@ -399,6 +403,7 @@ func (cm *ConfigManager) RemoveUpstream(index int) (*UpstreamConfig, error) {
 
 	removed := cm.config.Upstream[index]
 	cm.config.Upstream = append(cm.config.Upstream[:index], cm.config.Upstream[index+1:]...)
+	removeSubagentChannelLocked(&cm.config, "messages", removed.ChannelUID)
 
 	cm.clearFailedKeysForUpstream(&removed, "Messages")
 

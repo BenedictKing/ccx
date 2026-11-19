@@ -34,6 +34,8 @@ import type {
   SchedulerStatsResponse,
   SchedulerDiagnoseRequest,
   SchedulerDiagnoseResponse,
+  SubagentRoutingView,
+  TextChannelKind,
   StartCapabilityTestOptions,
   UsageReportChannel,
   CompatDiagnoseResult
@@ -189,6 +191,17 @@ export class ApiService {
 
   async getChannels(): Promise<ChannelsResponse> {
     return this.request('/messages/channels')
+  }
+
+  async getSubagentRouting(type: TextChannelKind): Promise<SubagentRoutingView> {
+    return this.request(`/${type}/channels/subagent-routing`)
+  }
+
+  async updateSubagentRouting(type: TextChannelKind, revision: string, policy: SubagentRoutingView['policy']): Promise<SubagentRoutingView> {
+    return this.request(`/${type}/channels/subagent-routing`, {
+      method: 'PUT',
+      body: JSON.stringify({ revision, policy })
+    })
   }
 
   async addChannel(channel: Omit<Channel, 'index' | 'latency' | 'status'>): Promise<void> {

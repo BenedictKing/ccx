@@ -83,7 +83,9 @@ func UpdateUpstream(cfgManager *config.ConfigManager, sch *scheduler.ChannelSche
 
 		shouldResetMetrics, err := cfgManager.UpdateUpstream(id, updates)
 		if err != nil {
-			if strings.Contains(err.Error(), "无效的上游索引") {
+			if err == config.ErrSubagentLegacyModelConflict {
+				c.JSON(409, gin.H{"error": err.Error(), "code": "SUBAGENT_ROUTING_ACTIVE"})
+			} else if strings.Contains(err.Error(), "无效的上游索引") {
 				c.JSON(404, gin.H{"error": "Upstream not found"})
 			} else {
 				c.JSON(500, gin.H{"error": "Failed to save config"})

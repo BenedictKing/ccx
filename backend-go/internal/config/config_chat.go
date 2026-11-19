@@ -101,6 +101,7 @@ func (cm *ConfigManager) AddChatUpstream(upstream UpstreamConfig) error {
 
 	upstream.ChannelUID = newChannelUID()
 	cm.config.ChatUpstream = append([]UpstreamConfig{upstream}, cm.config.ChatUpstream...)
+	appendSubagentChannelLocked(&cm.config, "chat", upstream.ChannelUID)
 
 	if err := cm.saveConfigLocked(cm.config); err != nil {
 		return err
@@ -118,6 +119,9 @@ func (cm *ConfigManager) UpdateChatUpstream(index int, updates UpstreamUpdate) (
 
 	if index < 0 || index >= len(cm.config.ChatUpstream) {
 		return false, fmt.Errorf("无效的 Chat 上游索引: %d", index)
+	}
+	if err := rejectLegacySubagentModelUpdate(cm.config, "chat", updates); err != nil {
+		return false, err
 	}
 
 	if err := validateKeySettings(updates.APIKeyConfigs, updates.MaxGroupMultiplier.Value); err != nil {
@@ -392,6 +396,7 @@ func (cm *ConfigManager) RemoveChatUpstream(index int) (*UpstreamConfig, error) 
 
 	removed := cm.config.ChatUpstream[index]
 	cm.config.ChatUpstream = append(cm.config.ChatUpstream[:index], cm.config.ChatUpstream[index+1:]...)
+	removeSubagentChannelLocked(&cm.config, "chat", removed.ChannelUID)
 
 	cm.clearFailedKeysForUpstream(&removed, "chat")
 

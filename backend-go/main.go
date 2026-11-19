@@ -669,6 +669,7 @@ func main() {
 	apiGroup := r.Group("/api")
 	{
 		siteaccess.RegisterRoutes(apiGroup, siteAccessDeps)
+		handlers.RegisterSubagentRoutingRoutes(apiGroup, cfgManager)
 		handlers.RegisterRoutingRoutes(apiGroup, routingStore, cfgManager)
 		apiGroup.GET("/reports/usage/channels", handlers.GetUsageReportChannels(cfgManager))
 		apiGroup.GET("/reports/usage.csv", handlers.GetUsageReportCSV(metricsStore, cfgManager))

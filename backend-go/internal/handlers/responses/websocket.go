@@ -202,14 +202,22 @@ func selectResponsesWebSocketChannel(
 	userID := utils.ExtractUnifiedSessionID(c, affinityBody)
 	agentCtx := utils.ExtractAgentContext(c, payload)
 	agentRole := ""
+	agentConfidence := ""
 	if agentCtx != nil {
 		agentRole = agentCtx.AgentRole
+		agentConfidence = agentCtx.Confidence
 		c.Set("agentContext", agentCtx)
+	}
+	subagentRouting, applySubagentRouting := channelScheduler.ResolveSubagentRouting(scheduler.ChannelKindResponses, agentRole, agentConfidence)
+	c.Set("ccxSubagentRoutingApplied", applySubagentRouting)
+	if applySubagentRouting && subagentRouting != nil {
+		c.Set("ccxSubagentRoutingModel", subagentRouting.Model)
 	}
 
 	cfg := cfgManager.GetConfig()
 	contextRequirement := common.BuildResponsesContextRequirement(payload, cfg.ContextRouting)
 	common.ApplyAgentModelProfile(contextRequirement, model, cfg)
+	channelScheduler.ApplySubagentRoutingProfile(contextRequirement, subagentRouting, applySubagentRouting)
 
 	return channelScheduler.SelectChannelWithOptions(c.Request.Context(), scheduler.SelectionOptions{
 		UserID:                userID,
@@ -220,6 +228,9 @@ func selectResponsesWebSocketChannel(
 		ContextRequirement:    contextRequirement,
 		PreserveTraceAffinity: common.HasResponsesEncryptedContent(payload),
 		AgentRole:             agentRole,
+		AgentConfidence:       agentConfidence,
+		SubagentRouting:       subagentRouting,
+		ApplySubagentRouting:  applySubagentRouting,
 	})
 }
 

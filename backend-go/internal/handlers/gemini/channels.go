@@ -81,7 +81,11 @@ func UpdateUpstream(cfgManager *config.ConfigManager, sch *scheduler.ChannelSche
 
 		shouldResetMetrics, err := cfgManager.UpdateGeminiUpstream(id, updates)
 		if err != nil {
-			c.JSON(500, gin.H{"error": err.Error()})
+			status := 500
+			if err == config.ErrSubagentLegacyModelConflict {
+				status = 409
+			}
+			c.JSON(status, gin.H{"error": err.Error()})
 			return
 		}
 

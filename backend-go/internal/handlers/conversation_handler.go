@@ -92,6 +92,12 @@ func SetConversationOverride(deps *ConversationHandlerDeps) gin.HandlerFunc {
 			c.JSON(http.StatusNotFound, gin.H{"error": "conversation not found"})
 			return
 		}
+		if deps.ConfigManager != nil {
+			if _, activated := config.SubagentRoutingForConfig(deps.ConfigManager.GetConfig(), conv.Kind); activated {
+				c.JSON(http.StatusConflict, gin.H{"error": "该协议已启用独立子代理配置，请在渠道列表的子代理标签页调整全局策略", "code": "SUBAGENT_ROUTING_ACTIVE"})
+				return
+			}
+		}
 
 		// 解析 duration：nil=系统默认，-1=永不恢复，>0=自定义秒数
 		var overrideDuration time.Duration

@@ -91,6 +91,7 @@
                 :subagents="item.subagents"
                 :subagent-summary="item.subagentSummary"
                 :override="overrides[item.conversation.id]"
+                :routing-active="activatedRoutingKinds.has(item.conversation.kind)"
                 :available-channels="getChannelsForKind(item.conversation.kind)"
                 :expanded="expandedCards.has(item.conversation.id)"
                 :now-ms="nowMs"
@@ -130,6 +131,7 @@ const loading = ref(true)
 const conversations = ref<ConversationInfo[]>([])
 const overrides = ref<Record<string, SequenceOverrideInfo>>({})
 const channelsByKind = ref<Record<string, DashboardChannel[]>>({})
+const activatedRoutingKinds = ref(new Set<string>())
 const kindFilter = ref('')
 const searchQuery = ref('')
 const overrideDuration = ref(1800)
@@ -265,6 +267,15 @@ watch(expandedCards, expanded => {
 })
 
 async function fetchAllChannels() {
+  const textKinds = ['messages', 'chat', 'responses', 'gemini'] as const
+  const routingStates = await Promise.all(textKinds.map(async kind => {
+    try {
+      return [kind, (await api.getSubagentRouting(kind)).activated] as const
+    } catch {
+      return [kind, false] as const
+    }
+  }))
+  activatedRoutingKinds.value = new Set(routingStates.filter(([, active]) => active).map(([kind]) => kind))
   const kinds = ['messages', 'chat', 'responses', 'gemini', 'images', 'vectors'] as const
   for (const kind of kinds) {
     try {

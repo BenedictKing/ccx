@@ -182,7 +182,11 @@
         </div>
       </v-alert>
 
-      <div v-if="expanded" class="main-routing-section">
+      <v-alert v-if="expanded && routingActive" type="info" density="compact" variant="tonal" class="mt-2">
+        {{ t('cockpit.managedBySubagentRouting') }}
+      </v-alert>
+
+      <div v-if="expanded && !routingActive" class="main-routing-section">
         <div class="main-routing-head" @click.stop>
           <span class="main-routing-title">{{ t('cockpit.mainRouting') }} · {{ conversation.lastModel }}</span>
           <v-select
@@ -233,7 +237,7 @@
         </div>
 
         <!-- Subagent Routing：为主对话与 subagent 分别指定渠道 -->
-        <div class="subagent-routing mt-3">
+        <div v-if="!routingActive" class="subagent-routing mt-3">
           <div class="d-flex align-center mb-1">
             <span class="text-caption text-medium-emphasis">{{ t('cockpit.subagentRouting') }}</span>
             <span v-if="hasSubagentOverride" class="text-caption text-warning ml-2">[{{ t('cockpit.subagentOverride') }}]</span>
@@ -305,6 +309,7 @@ const props = defineProps<{
   subagents?: ConversationInfo[]
   subagentSummary?: SubagentSummary
   override?: SequenceOverrideInfo
+  routingActive?: boolean
   availableChannels: ChannelInfo[]
   expanded: boolean
   nowMs: number

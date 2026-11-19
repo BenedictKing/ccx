@@ -369,6 +369,9 @@ onBeforeUnmount(() => {
                     <span v-if="log.requestSource === 'capability_test'" class="inline-flex border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-bold text-amber-700 dark:text-amber-300">
                       {{ t('channelLogs.sourceCapabilityTest') }}
                     </span>
+                    <span v-if="log.subagentPolicyApplied" class="inline-flex border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary" :title="t('subagentRouting.modelLabel')">
+                      {{ log.subagentPolicyModel || t('subagentRouting.keepRequestModel') }}
+                    </span>
                     <span v-if="log.originalModel" class="text-muted-foreground">{{ log.originalModel }} →</span>
                     <span class="font-medium">{{ log.model }}</span>
                     <span

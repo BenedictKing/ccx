@@ -185,6 +185,9 @@
                       <div v-if="log.baseUrl" class="log-detail-row">
                         <dt>{{ t('channelLogs.baseUrl') }}</dt><dd class="log-detail-code">{{ log.baseUrl }}</dd>
                       </div>
+                      <div v-if="log.subagentPolicyApplied" class="log-detail-row">
+                        <dt>{{ t('channelLogs.subagentPolicy') }}</dt><dd>{{ log.subagentPolicyModel || t('subagentRouting.keepRequestModel') }}</dd>
+                      </div>
                       <div v-if="log.selectionReason" class="log-detail-row">
                         <dt>{{ t('channelLogs.selectionReason') }}</dt><dd>{{ log.selectionReason }}</dd>
                       </div>

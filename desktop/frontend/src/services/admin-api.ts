@@ -240,6 +240,42 @@ export interface Channel {
   rpm?: number
 }
 
+export type TextChannelKind = 'messages' | 'chat' | 'responses' | 'gemini'
+
+export interface SubagentRoutingChannel {
+  channelUid: string
+  enabled: boolean
+}
+
+export interface SubagentRoutingPolicy {
+  model: string
+  channels: SubagentRoutingChannel[]
+}
+
+export interface SubagentRoutingChannelView {
+  channelUid: string
+  channelIndex: number
+  channelName: string
+  serviceType: string
+  status: ChannelStatus
+  effectiveState: string
+  enabled: boolean
+  requestModel: string
+  resolvedModel: string
+  modelSupported: boolean
+  modelMapping?: Record<string, string>
+}
+
+export interface SubagentRoutingView {
+  protocol: TextChannelKind
+  activated: boolean
+  revision: string
+  policy: SubagentRoutingPolicy
+  channels: SubagentRoutingChannelView[]
+  legacyModels?: Array<{ channelUid: string; channelName: string; model: string }>
+  legacyMixed: boolean
+}
+
 export interface ChannelsResponse {
   channels: Channel[]
   current: number
@@ -680,6 +716,8 @@ export interface ChannelLogEntry {
   agentType?: string         // codex_subagent | claude_code_subagent
   parentThreadId?: string    // Codex parent thread id
   agentConfidence?: string   // exact | heuristic
+  subagentPolicyApplied?: boolean
+  subagentPolicyModel?: string
   sessionId?: string         // 扁平化会话标识
 }
 

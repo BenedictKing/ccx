@@ -78,7 +78,7 @@ func CompactHandler(
 		common.SetRequestLogContext(c, userID, countResponsesUserMessages(compactReq.Input))
 
 		// 检查是否为多渠道模式
-		isMultiChannel := channelScheduler.IsMultiChannelMode(scheduler.ChannelKindResponses)
+		isMultiChannel := common.ShouldUseMultiChannel(c, channelScheduler, scheduler.ChannelKindResponses)
 
 		if isMultiChannel {
 			handleMultiChannelCompact(c, envCfg, cfgManager, channelScheduler, sessionManager, bodyBytes, userID)

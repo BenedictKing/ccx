@@ -589,6 +589,9 @@ type Config struct {
 	// 移除计费头中的 cch= 参数：兼容旧全局配置读取；新语义已下沉到渠道级字段
 	StripBillingHeader bool `json:"stripBillingHeader,omitempty"`
 
+	// 各文本协议的独立子代理默认模型与渠道序列。
+	SubagentRouting map[string]SubagentRoutingPolicy `json:"subagentRouting,omitempty"`
+
 	// 驾驶舱 override 默认有效期（分钟，1-1440；0 或未设置时使用环境变量 OVERRIDE_TTL_MINUTES）
 	OverrideTTLMinutes int `json:"overrideTtlMinutes,omitempty"`
 
@@ -702,6 +705,13 @@ func (cm *ConfigManager) GetConfig() Config {
 		for k, v := range cm.config.ModelFallbackPolicies {
 			v.Models = append([]string(nil), v.Models...)
 			cloned.ModelFallbackPolicies[k] = v
+		}
+	}
+	if cm.config.SubagentRouting != nil {
+		cloned.SubagentRouting = make(map[string]SubagentRoutingPolicy, len(cm.config.SubagentRouting))
+		for k, v := range cm.config.SubagentRouting {
+			v.Channels = append([]SubagentRoutingChannel(nil), v.Channels...)
+			cloned.SubagentRouting[k] = v
 		}
 	}
 	if cm.config.UpstreamModelCapabilities != nil {

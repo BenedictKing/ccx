@@ -101,6 +101,7 @@ func (cm *ConfigManager) AddResponsesUpstream(upstream UpstreamConfig) error {
 
 	upstream.ChannelUID = newChannelUID()
 	cm.config.ResponsesUpstream = append([]UpstreamConfig{upstream}, cm.config.ResponsesUpstream...)
+	appendSubagentChannelLocked(&cm.config, "responses", upstream.ChannelUID)
 
 	if err := cm.saveConfigLocked(cm.config); err != nil {
 		return err
@@ -118,6 +119,9 @@ func (cm *ConfigManager) UpdateResponsesUpstream(index int, updates UpstreamUpda
 
 	if index < 0 || index >= len(cm.config.ResponsesUpstream) {
 		return false, fmt.Errorf("无效的 Responses 上游索引: %d", index)
+	}
+	if err := rejectLegacySubagentModelUpdate(cm.config, "responses", updates); err != nil {
+		return false, err
 	}
 
 	if err := validateKeySettings(updates.APIKeyConfigs, updates.MaxGroupMultiplier.Value); err != nil {
@@ -398,6 +402,7 @@ func (cm *ConfigManager) RemoveResponsesUpstream(index int) (*UpstreamConfig, er
 
 	removed := cm.config.ResponsesUpstream[index]
 	cm.config.ResponsesUpstream = append(cm.config.ResponsesUpstream[:index], cm.config.ResponsesUpstream[index+1:]...)
+	removeSubagentChannelLocked(&cm.config, "responses", removed.ChannelUID)
 
 	cm.clearFailedKeysForUpstream(&removed, "Responses")
 

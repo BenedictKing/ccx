@@ -95,7 +95,7 @@ func Handler(envCfg *config.EnvConfig, cfgManager *config.ConfigManager, channel
 		}
 
 		// 检查是否为多渠道模式
-		isMultiChannel := channelScheduler.IsMultiChannelMode(scheduler.ChannelKindMessages)
+		isMultiChannel := common.ShouldUseMultiChannel(c, channelScheduler, scheduler.ChannelKindMessages)
 
 		if isMultiChannel {
 			handleMultiChannel(c, envCfg, cfgManager, channelScheduler, bodyBytes, claudeReq, userID, startTime)

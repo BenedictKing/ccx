@@ -32,6 +32,17 @@ type OnMultiChannelHandledFunc func(selection *scheduler.SelectionResult, result
 // HandleAllFailedFunc 处理"所有渠道都失败"的返回逻辑（不同入口可能有不同错误格式）。
 type HandleAllFailedFunc func(c *gin.Context, failoverErr *FailoverError, lastError error)
 
+func ShouldUseMultiChannel(c *gin.Context, channelScheduler *scheduler.ChannelScheduler, kind scheduler.ChannelKind) bool {
+	if channelScheduler.IsMultiChannelMode(kind) {
+		return true
+	}
+	agentCtx := AgentContextFromGin(c)
+	if agentCtx == nil {
+		return false
+	}
+	return channelScheduler.HasSubagentRouting(kind, agentCtx.AgentRole, agentCtx.Confidence)
+}
+
 // HandleMultiChannelFailover 处理多渠道 failover 外壳逻辑（选渠道 + 聚合错误 + Trace 亲和）。
 // 具体"渠道内 Key/BaseURL 轮转"由 trySelectedChannel 实现（通常调用 TryUpstreamWithAllKeys）。
 func HandleMultiChannelFailover(
@@ -116,9 +127,28 @@ func HandleMultiChannelFailoverWithSelectionFilter(
 		preserveTraceAffinity = kind == scheduler.ChannelKindResponses && HasResponsesEncryptedContent(body)
 	}
 
+	agentConfidence := ""
+	if agentCtx := AgentContextFromGin(c); agentCtx != nil {
+		agentConfidence = agentCtx.Confidence
+	}
+	subagentRouting, applySubagentRouting := channelScheduler.ResolveSubagentRouting(kind, agentRole, agentConfidence)
+	channelScheduler.ApplySubagentRoutingProfile(contextRequirement, subagentRouting, applySubagentRouting)
+	c.Set("ccxSubagentRoutingApplied", applySubagentRouting)
+	if applySubagentRouting && subagentRouting != nil {
+		c.Set("ccxSubagentRoutingModel", subagentRouting.Model)
+	}
 	maxChannelAttempts := channelScheduler.GetActiveChannelCount(kind)
+	if applySubagentRouting && subagentRouting != nil {
+		maxChannelAttempts = len(subagentRouting.Channels)
+		if maxChannelAttempts < 1 {
+			maxChannelAttempts = 1
+		}
+	}
 	targets := []string{model}
 	policy := channelScheduler.ModelFallbackPolicy(kind, model, c.Param("routePrefix"))
+	if applySubagentRouting && subagentRouting != nil && strings.TrimSpace(subagentRouting.Model) != "" {
+		policy = nil
+	}
 	if c.GetHeader("X-Channel") != "" {
 		policy = nil
 	}
@@ -165,6 +195,9 @@ func HandleMultiChannelFailoverWithSelectionFilter(
 				HasImageContent:       hasImageContent,
 				PreserveTraceAffinity: preserveTraceAffinity,
 				AgentRole:             agentRole,
+				AgentConfidence:       agentConfidence,
+				SubagentRouting:       subagentRouting,
+				ApplySubagentRouting:  applySubagentRouting,
 				CandidateFilter:       filter,
 			})
 			if err != nil {

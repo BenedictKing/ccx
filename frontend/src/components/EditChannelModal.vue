@@ -243,24 +243,6 @@
                 </div>
               </v-alert>
 
-              <v-combobox
-                v-if="!['images', 'vectors'].includes(props.channelType)"
-                v-model="form.subagentModel"
-                class="mb-6"
-                :items="subagentModelOptions"
-                :loading="fetchingModels"
-                :label="t('addChannel.subagentModelLabel')"
-                :hint="t('addChannel.subagentModelHint')"
-                prepend-inner-icon="mdi-account-multiple-outline"
-                persistent-hint
-                clearable
-                variant="outlined"
-                density="comfortable"
-                eager
-                @focus="ensureTargetModelsLoaded"
-                @update:menu="onMenuUpdate"
-              />
-
               <ModelMappingSection
                 v-if="form.serviceType"
                 :mapping-rows="modelMappingRows"
@@ -474,7 +456,6 @@ const {
   onMenuUpdate,
   serviceTypeOptions,
   sourceModelOptions,
-  subagentModelOptions,
   modelMappingHint,
   targetModelPlaceholder,
   reasoningEffortOptions,

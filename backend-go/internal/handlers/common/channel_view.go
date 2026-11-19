@@ -10,6 +10,7 @@ func BuildChannelView(up config.UpstreamConfig, index int) gin.H {
 	priority := config.GetChannelPriority(&up, index)
 	return gin.H{
 		"index":                         index,
+		"channelUid":                    up.ChannelUID,
 		"name":                          up.Name,
 		"serviceType":                   up.ServiceType,
 		"authHeader":                    up.AuthHeader,
@@ -24,6 +25,7 @@ func BuildChannelView(up config.UpstreamConfig, index int) gin.H {
 		"website":                       up.Website,
 		"insecureSkipVerify":            up.InsecureSkipVerify,
 		"modelMapping":                  up.ModelMapping,
+		"subagentModel":                 up.SubagentModel,
 		"modelCapabilities":             up.ModelCapabilities,
 		"embeddingCapabilities":         up.EmbeddingCapabilities,
 		"defaultCapability":             up.DefaultCapability,

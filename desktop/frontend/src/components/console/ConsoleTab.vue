@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, watch } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { Button } from '@/components/ui/button'
 import { Alert } from '@/components/ui/alert'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -29,6 +29,7 @@ const emit = defineEmits<{
 const { status } = useStatus()
 const { t } = useLanguage()
 const { activeTab, refreshError } = useConsoleChannels()
+const channelManager = ref<InstanceType<typeof ChannelManager> | null>(null)
 
 // 子 Tab 定义
 const protocolTabs: { value: ManagedChannelType; label: string }[] = [
@@ -44,7 +45,14 @@ const applySelection = (selection: ConsoleSelection) => {
   activeTab.value = consoleSelectionChannelType(selection)
 }
 
+const canChangeProtocol = (next: ManagedChannelType) => {
+  if (next === activeTab.value) return true
+  const confirm = channelManager.value?.confirmDiscard
+  return typeof confirm !== 'function' || confirm()
+}
+
 const updateProtocolTab = (next: ManagedChannelType) => {
+  if (!canChangeProtocol(next)) return
   activeTab.value = next
   emit('update:selection', channelSelectionPath(next))
 }
@@ -70,6 +78,11 @@ onMounted(() => {
 })
 
 watch(() => props.selection, (selection) => {
+  const next = consoleSelectionChannelType(selection)
+  if (!canChangeProtocol(next)) {
+    emit('update:selection', channelSelectionPath(activeTab.value))
+    return
+  }
   applySelection(selection)
 })
 
@@ -130,7 +143,7 @@ watch(() => props.selection, (selection) => {
         <div class="h-full">
           <ScrollArea class="h-full">
             <div class="p-3">
-              <ChannelManager :type="activeTab" />
+              <ChannelManager ref="channelManager" :type="activeTab" />
             </div>
           </ScrollArea>
         </div>

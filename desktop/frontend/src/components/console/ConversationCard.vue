@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { Button } from '@/components/ui/button'
+import { Alert } from '@/components/ui/alert'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { Check, Copy, CornerUpLeft, FileText, GitBranch } from 'lucide-vue-next'
 import { useLanguage } from '@/composables/useLanguage'
@@ -35,6 +36,7 @@ const props = defineProps<{
   subagents?: ConversationInfo[]
   subagentSummary?: SubagentSummary
   override?: SequenceOverrideInfo
+  routingActive?: boolean
   availableChannels: ConversationChannelInfo[]
   expanded: boolean
   nowMs: number
@@ -719,7 +721,11 @@ function shortId(value: string): string {
     </div>
 
     <!-- Expanded: Full channel sequence -->
-    <div v-if="expanded" class="main-routing-section mt-3">
+    <Alert v-if="expanded && routingActive" class="mt-3">
+      <p class="text-xs">{{ t('cockpit.managedBySubagentRouting') }}</p>
+    </Alert>
+
+    <div v-if="expanded && !routingActive" class="main-routing-section mt-3">
       <div class="mb-1 text-xs text-muted-foreground">{{ t('cockpit.mainRouting') }} · {{ conversation.lastModel }}</div>
       <ConversationChannelSequence
         :channels="channelSequence"
@@ -767,7 +773,7 @@ function shortId(value: string): string {
       </div>
 
       <!-- Subagent Routing：为主对话与 subagent 分别指定渠道 -->
-      <div class="subagent-routing mt-3">
+      <div v-if="!routingActive" class="subagent-routing mt-3">
         <div class="mb-1 flex items-center">
           <span class="text-xs text-muted-foreground">{{ t('cockpit.subagentRouting') }}</span>
           <span v-if="hasSubagentOverride" class="ml-2 text-xs text-amber-500">[{{ t('cockpit.subagentOverride') }}]</span>

@@ -4,6 +4,7 @@ import { useStatus } from '@/composables/useStatus'
 import { useLanguage } from '@/composables/useLanguage'
 import { useReleaseCheck } from '@/composables/useReleaseCheck'
 import { useTheme } from '@/composables/useTheme'
+import { useAdminApi } from '@/composables/useAdminApi'
 import { openExternalLink } from '@/lib/external-link'
 import { GetVersion } from '@bindings/github.com/BenedictKing/ccx/desktop/desktopservice'
 import type { VersionInfo } from '@bindings/github.com/BenedictKing/ccx/desktop/models'
@@ -41,6 +42,7 @@ const themeOptions = computed(() => [
 ])
 
 const versionInfo = ref<VersionInfo | null>(null)
+const showCockpit = ref(true)
 const isStoreDistribution = computed(() => versionInfo.value?.distribution === 'store')
 const canInstallInAppUpdate = computed(() => !!versionInfo.value?.supportsInAppUpdate)
 
@@ -79,6 +81,17 @@ onMounted(async () => {
   } catch {
     // 版本信息获取失败不影响侧栏渲染
   }
+  const api = useAdminApi()
+  const kinds = ['messages', 'chat', 'responses', 'gemini'] as const
+  const states = await Promise.all(kinds.map(async kind => {
+    try {
+      return (await api.get<{ activated: boolean }>(`/api/${kind}/channels/subagent-routing`)).activated
+    } catch {
+      return false
+    }
+  }))
+  showCockpit.value = states.some(activated => !activated)
+  if (!showCockpit.value && modelValue.value === 'cockpit') modelValue.value = 'channels'
 })
 
 type MenuItem = {
@@ -99,7 +112,7 @@ const menuItems = computed<MenuItem[]>(() => [
 ])
 
 const primaryMenuItems = computed(() => menuItems.value.slice(0, 5))
-const managementMenuItems = computed(() => menuItems.value.slice(5))
+const managementMenuItems = computed(() => menuItems.value.slice(5).filter(item => item.id !== 'cockpit' || showCockpit.value))
 
 const statusLabel = computed(() => {
   if (status.value.running) return t('common.serviceHealthy')

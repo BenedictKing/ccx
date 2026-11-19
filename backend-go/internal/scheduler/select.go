@@ -73,10 +73,18 @@ func (s *ChannelScheduler) SelectChannelWithOptions(ctx context.Context, opts Se
 	routePrefix := opts.RoutePrefix
 	channelName := opts.ChannelName
 	trace := newSelectionTrace(opts)
+	upstreamFor := func(index int) *config.UpstreamConfig {
+		return config.WithSubagentRouting(s.getUpstreamByIndex(index, kind), opts.SubagentRouting, opts.ApplySubagentRouting)
+	}
 	traceErr := func(err error) error {
 		return newSelectionTraceError(err, trace)
 	}
 	finish := func(upstream *config.UpstreamConfig, channelIndex int, reason string) *SelectionResult {
+		applyPolicy := opts.ApplySubagentRouting
+		if opts.PreserveTraceAffinity && reason == "trace_affinity" {
+			applyPolicy = false
+		}
+		upstream = config.WithSubagentRouting(upstream, opts.SubagentRouting, applyPolicy)
 		upstream = config.WithAgentModel(model, upstream, opts.AgentRole)
 		result := s.selectionResultWithRecord(kind, upstream, channelIndex, reason, !opts.DryRun)
 		channelName := ""
@@ -89,7 +97,7 @@ func (s *ChannelScheduler) SelectChannelWithOptions(ctx context.Context, opts Se
 	}
 
 	// 获取活跃渠道列表（含模型过滤）
-	activeChannels := s.getActiveChannelsWithTrace(kind, model, opts.AgentRole, trace)
+	activeChannels := s.getActiveChannelsWithTrace(kind, model, opts.AgentRole, opts.SubagentRouting, opts.ApplySubagentRouting, trace)
 	trace.setStage("active_model_filter", len(activeChannels))
 	if len(activeChannels) == 0 {
 		// 区分"无活跃渠道"和"无渠道支持该模型"
@@ -117,7 +125,7 @@ func (s *ChannelScheduler) SelectChannelWithOptions(ctx context.Context, opts Se
 		// 有前缀：仅选择匹配的渠道
 		var filtered []ChannelInfo
 		for _, ch := range activeChannels {
-			upstream := s.getUpstreamByIndex(ch.Index, kind)
+			upstream := upstreamFor(ch.Index)
 			if upstream != nil && upstream.RoutePrefix == routePrefix {
 				filtered = append(filtered, ch)
 			} else {
@@ -138,7 +146,7 @@ func (s *ChannelScheduler) SelectChannelWithOptions(ctx context.Context, opts Se
 		// 无前缀：排除设了路由前缀的渠道（它们只能通过前缀访问）
 		var filtered []ChannelInfo
 		for _, ch := range activeChannels {
-			upstream := s.getUpstreamByIndex(ch.Index, kind)
+			upstream := upstreamFor(ch.Index)
 			if upstream != nil && upstream.RoutePrefix == "" {
 				filtered = append(filtered, ch)
 			} else {
@@ -170,7 +178,7 @@ func (s *ChannelScheduler) SelectChannelWithOptions(ctx context.Context, opts Se
 		trace.setStage("default_route_filter", len(activeChannels))
 	}
 
-	activeChannels, err := s.filterChannelsByContext(activeChannels, kind, model, opts.AgentRole, opts.ContextRequirement, trace)
+	activeChannels, err := s.filterChannelsByContext(activeChannels, kind, model, opts.AgentRole, opts.SubagentRouting, opts.ApplySubagentRouting, opts.ContextRequirement, trace)
 	if err != nil {
 		trace.setStage("context_filter", 0)
 		return nil, traceErr(err)
@@ -179,7 +187,7 @@ func (s *ChannelScheduler) SelectChannelWithOptions(ctx context.Context, opts Se
 	if opts.CandidateFilter != nil {
 		beforeFilter := append([]ChannelInfo(nil), activeChannels...)
 		activeChannels, err = opts.CandidateFilter(activeChannels, func(ch ChannelInfo) *config.UpstreamConfig {
-			return s.getUpstreamByIndex(ch.Index, kind)
+			return upstreamFor(ch.Index)
 		}, func(ch ChannelInfo, upstream *config.UpstreamConfig) bool {
 			return s.channelAvailableForCandidateFilter(ch, upstream, kind)
 		})
@@ -202,7 +210,7 @@ func (s *ChannelScheduler) SelectChannelWithOptions(ctx context.Context, opts Se
 					trace.skipChannel(ch, "channel_pin", "failed_in_request", "")
 					return nil, traceErr(fmt.Errorf("指定渠道 %q 在本次请求中已失败", channelName))
 				}
-				upstream := s.getUpstreamByIndex(ch.Index, kind)
+				upstream := upstreamFor(ch.Index)
 				if upstream == nil {
 					trace.skipChannel(ch, "channel_pin", "missing_upstream", "")
 					return nil, traceErr(fmt.Errorf("指定渠道 %q 配置异常", channelName))
@@ -219,7 +227,7 @@ func (s *ChannelScheduler) SelectChannelWithOptions(ctx context.Context, opts Se
 	}
 
 	// 0. 检查手动序列覆盖
-	if userID != "" && s.overrideManager != nil {
+	if userID != "" && s.overrideManager != nil && opts.SubagentRouting == nil {
 		if sequence, ok := s.overrideManager.GetOverrideForUserWithRole(string(kind), userID, opts.AgentRole); ok {
 			prefix := kindSchedulerLogPrefix(kind)
 			orderedChannels := applyManualOverrideOrder(activeChannels, sequence)
@@ -232,7 +240,7 @@ func (s *ChannelScheduler) SelectChannelWithOptions(ctx context.Context, opts Se
 					trace.skipChannel(ch, "manual_override", "inactive_status", ch.Status)
 					continue
 				}
-				upstream := s.getUpstreamByIndex(ch.Index, kind)
+				upstream := upstreamFor(ch.Index)
 				if upstream != nil && s.channelIsRuntimeAvailable(upstream, kind, ch.Index) {
 					log.Printf("[%s-Override] 按手动排序选择渠道: [%d] %s (user: %s, role=%s, sequenceHead=%s)", prefix, ch.Index, ch.Name, maskUserID(userID), schedulerAgentRoleForLog(opts.AgentRole), formatOverrideSequenceHead(sequence, 3))
 					// Idle 续期：对话活跃时延长 override TTL
@@ -253,9 +261,12 @@ func (s *ChannelScheduler) SelectChannelWithOptions(ctx context.Context, opts Se
 
 	// 1. 检查促销期渠道（手动覆盖之后，绕过健康检查）
 	promotedChannel := s.findPromotedChannel(activeChannels, kind)
+	if opts.ApplySubagentRouting {
+		promotedChannel = nil
+	}
 	if promotedChannel != nil && !failedChannels[promotedChannel.Index] {
 		// 促销渠道存在且未失败，直接使用（不检查健康状态，让用户设置的促销渠道有机会尝试）
-		upstream := s.getUpstreamByIndex(promotedChannel.Index, kind)
+		upstream := upstreamFor(promotedChannel.Index)
 		if upstream != nil && len(upstream.APIKeys) > 0 && !s.channelInRuntimeCooldown(kind, promotedChannel.Index) {
 			failureRate := s.channelFailureRate(upstream, kind)
 			prefix := kindSchedulerLogPrefix(kind)
@@ -275,7 +286,7 @@ func (s *ChannelScheduler) SelectChannelWithOptions(ctx context.Context, opts Se
 	// 1. 检查 Trace 亲和性（促销渠道失败时或无促销渠道时）
 	if userID != "" {
 		if preferredIdx, ok := s.preferredTraceChannel(opts, affinityUserID, activeChannels); ok {
-			bestPriority := s.findBestAvailableChannelPriority(activeChannels, failedChannels, kind, model, opts.AgentRole)
+			bestPriority := s.findBestAvailableChannelPriority(activeChannels, failedChannels, kind, model, opts.AgentRole, opts.SubagentRouting, opts.ApplySubagentRouting)
 			for _, ch := range activeChannels {
 				if ch.Index == preferredIdx && !failedChannels[preferredIdx] {
 					// 检查渠道状态：只有 active 状态才使用亲和性
@@ -293,7 +304,7 @@ func (s *ChannelScheduler) SelectChannelWithOptions(ctx context.Context, opts Se
 						continue
 					}
 					// 检查渠道是否健康且未处于运行态冷却
-					upstream := s.getUpstreamByIndex(preferredIdx, kind)
+					upstream := upstreamFor(preferredIdx)
 					if upstream != nil && s.channelIsRuntimeAvailable(upstream, kind, preferredIdx) {
 						prefix := kindSchedulerLogPrefix(kind)
 						log.Printf("[%s-Affinity] Trace亲和选择渠道: [%d] %s (user: %s)", prefix, preferredIdx, upstream.Name, maskUserID(userID))
@@ -326,7 +337,7 @@ func (s *ChannelScheduler) SelectChannelWithOptions(ctx context.Context, opts Se
 			continue
 		}
 
-		upstream := s.getUpstreamByIndex(ch.Index, kind)
+		upstream := upstreamFor(ch.Index)
 		if upstream == nil || len(upstream.APIKeys) == 0 {
 			trace.skipChannel(ch, "priority_order", "missing_upstream_or_keys", "")
 			continue
@@ -405,6 +416,7 @@ func (s *ChannelScheduler) SelectChannelWithOptions(ctx context.Context, opts Se
 	// 3. 所有健康渠道都失败，选择失败率最低的作为降级
 	result, err := s.selectFallbackChannelWithRecord(activeChannels, failedChannels, kind, !opts.DryRun)
 	if result != nil {
+		result.Upstream = config.WithSubagentRouting(result.Upstream, opts.SubagentRouting, opts.ApplySubagentRouting)
 		result.Upstream = config.WithAgentModel(model, result.Upstream, opts.AgentRole)
 		channelName := ""
 		if result.Upstream != nil {
@@ -695,7 +707,7 @@ func (s *ChannelScheduler) channelIsRuntimeAvailable(upstream *config.UpstreamCo
 	return !s.channelInRuntimeCooldown(kind, channelIndex)
 }
 
-func (s *ChannelScheduler) filterChannelsByContext(activeChannels []ChannelInfo, kind ChannelKind, model, agentRole string, requirement *ContextRequirement, trace *SelectionTrace) ([]ChannelInfo, error) {
+func (s *ChannelScheduler) filterChannelsByContext(activeChannels []ChannelInfo, kind ChannelKind, model, agentRole string, subagentRouting *config.SubagentRoutingPolicy, applySubagentRouting bool, requirement *ContextRequirement, trace *SelectionTrace) ([]ChannelInfo, error) {
 	if requirement == nil {
 		return activeChannels, nil
 	}
@@ -729,7 +741,8 @@ func (s *ChannelScheduler) filterChannelsByContext(activeChannels []ChannelInfo,
 			continue
 		}
 
-		effectiveUpstream := config.WithAgentModel(model, upstream, agentRole)
+		effectiveUpstream := config.WithSubagentRouting(upstream, subagentRouting, applySubagentRouting)
+		effectiveUpstream = config.WithAgentModel(model, effectiveUpstream, agentRole)
 		resolved := config.ResolveUpstreamCapability(model, effectiveUpstream, cfg.UpstreamModelCapabilities)
 		capability := resolved.Capability
 		if capability.ContextWindowTokens > maxKnownWindow {
@@ -1040,71 +1053,64 @@ type ChannelInfo struct {
 
 // getActiveChannels 获取活跃渠道列表（按优先级排序）
 func (s *ChannelScheduler) getActiveChannels(kind ChannelKind, model string) []ChannelInfo {
-	return s.getActiveChannelsWithTrace(kind, model, "", nil)
+	return s.getActiveChannelsWithTrace(kind, model, "", nil, false, nil)
 }
 
-func (s *ChannelScheduler) getActiveChannelsWithTrace(kind ChannelKind, model, agentRole string, trace *SelectionTrace) []ChannelInfo {
+func (s *ChannelScheduler) getActiveChannelsWithTrace(kind ChannelKind, model, agentRole string, subagentRouting *config.SubagentRoutingPolicy, applySubagentRouting bool, trace *SelectionTrace) []ChannelInfo {
 	cfg := s.configManager.GetConfig()
-
-	var upstreams []config.UpstreamConfig
-	switch kind {
-	case ChannelKindResponses:
-		upstreams = cfg.ResponsesUpstream
-	case ChannelKindGemini:
-		upstreams = cfg.GeminiUpstream
-	case ChannelKindChat:
-		upstreams = cfg.ChatUpstream
-	case ChannelKindImages:
-		upstreams = cfg.ImagesUpstream
-	case ChannelKindVectors:
-		upstreams = cfg.VectorsUpstream
-	default:
-		upstreams = cfg.Upstream
+	upstreams := config.UpstreamsForProtocol(cfg, string(kind))
+	policyByUID := map[string]config.SubagentRoutingChannel{}
+	policyOrder := map[string]int{}
+	if applySubagentRouting && subagentRouting != nil {
+		for i, entry := range subagentRouting.Channels {
+			policyByUID[entry.ChannelUID] = entry
+			policyOrder[entry.ChannelUID] = i
+		}
 	}
 
-	// 筛选活跃渠道
 	var activeChannels []ChannelInfo
 	for i, upstream := range upstreams {
 		status := upstream.Status
 		if status == "" {
-			status = "active" // 默认为活跃
+			status = "active"
 		}
 		priority := upstream.Priority
 		if priority == 0 {
-			priority = i // 默认优先级为索引
+			priority = i
 		}
-		ch := ChannelInfo{
-			Index:    i,
-			Name:     upstream.Name,
-			Priority: priority,
-			Status:   status,
-		}
-
-		// 只选择 active 状态的渠道（suspended 也算在活跃序列中，但会被健康检查过滤）
-		if status != "disabled" {
-			// 过滤不支持当前模型的渠道
-			requestModel := config.RequestModelForAgent(model, &upstream, agentRole)
-			if requestModel != "" {
-				supported, reason := upstream.ExplainModelSupport(requestModel)
-				if !supported {
-					prefix := kindSchedulerLogPrefix(kind)
-					log.Printf("[%s-ModelFilter] 跳过渠道 [%d] %s: 模型 %q 不被 supportedModels 支持 (%s)", prefix, i, upstream.Name, requestModel, reason)
-					trace.skipChannel(ch, "active_model_filter", "unsupported_model", reason)
-					continue
-				}
+		if applySubagentRouting && subagentRouting != nil {
+			entry, ok := policyByUID[upstream.ChannelUID]
+			if !ok || !entry.Enabled {
+				trace.skipChannel(ChannelInfo{Index: i, Name: upstream.Name, Priority: priority, Status: status}, "subagent_policy_filter", "not_enabled", upstream.ChannelUID)
+				continue
 			}
-
-			activeChannels = append(activeChannels, ch)
-		} else {
-			trace.skipChannel(ch, "active_model_filter", "disabled_status", status)
+			priority = policyOrder[upstream.ChannelUID]
+			if status == "disabled" {
+				status = "active"
+			}
 		}
+		ch := ChannelInfo{Index: i, Name: upstream.Name, Priority: priority, Status: status}
+		if status == "disabled" {
+			trace.skipChannel(ch, "active_model_filter", "disabled_status", status)
+			continue
+		}
+		effectiveUpstream := config.WithSubagentRouting(&upstream, subagentRouting, applySubagentRouting)
+		requestModel := config.RequestModelForAgent(model, effectiveUpstream, agentRole)
+		if requestModel != "" {
+			supported, reason := effectiveUpstream.ExplainModelSupport(requestModel)
+			if !supported {
+				prefix := kindSchedulerLogPrefix(kind)
+				log.Printf("[%s-ModelFilter] 跳过渠道 [%d] %s: 模型 %q 不被 supportedModels 支持 (%s)", prefix, i, upstream.Name, requestModel, reason)
+				trace.skipChannel(ch, "active_model_filter", "unsupported_model", reason)
+				continue
+			}
+		}
+		activeChannels = append(activeChannels, ch)
 	}
 
-	// 按优先级排序（数字越小优先级越高）
-	sort.Slice(activeChannels, func(i, j int) bool {
+	sort.SliceStable(activeChannels, func(i, j int) bool {
 		return activeChannels[i].Priority < activeChannels[j].Priority
 	})
-
 	return activeChannels
 }
 
@@ -1116,6 +1122,8 @@ func (s *ChannelScheduler) findBestAvailableChannelPriority(
 	kind ChannelKind,
 	model string,
 	agentRole string,
+	subagentRouting *config.SubagentRoutingPolicy,
+	applySubagentRouting bool,
 ) int {
 	bestPriority := -1
 
@@ -1131,7 +1139,8 @@ func (s *ChannelScheduler) findBestAvailableChannelPriority(
 		if !s.channelIsRuntimeAvailable(upstream, kind, ch.Index) {
 			continue
 		}
-		requestModel := config.RequestModelForAgent(model, upstream, agentRole)
+		effectiveUpstream := config.WithSubagentRouting(upstream, subagentRouting, applySubagentRouting)
+		requestModel := config.RequestModelForAgent(model, effectiveUpstream, agentRole)
 		if deferred, _, _, _ := s.channelRateLimitSoftDeferred(upstream, kind, ch.Index, requestModel, time.Now()); deferred {
 			continue
 		}

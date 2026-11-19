@@ -16,6 +16,7 @@ type schedulerDiagnoseRequest struct {
 	FailedChannels     []int                                `json:"failedChannels"`
 	HasImageContent    bool                                 `json:"hasImageContent"`
 	AgentRole          string                               `json:"agentRole"`
+	AgentConfidence    string                               `json:"agentConfidence"`
 	ContextRequirement *schedulerDiagnoseContextRequirement `json:"contextRequirement"`
 }
 
@@ -49,17 +50,28 @@ func DiagnoseSchedulerSelection(sch *scheduler.ChannelScheduler, kind scheduler.
 			}
 		}
 
+		agentRole := strings.TrimSpace(req.AgentRole)
+		agentConfidence := strings.TrimSpace(req.AgentConfidence)
+		if agentRole == "subagent" && agentConfidence == "" {
+			agentConfidence = "exact"
+		}
+		subagentRouting, applySubagentRouting := sch.ResolveSubagentRouting(kind, agentRole, agentConfidence)
+		contextRequirement := diagnoseContextRequirement(req.ContextRequirement)
+		sch.ApplySubagentRoutingProfile(contextRequirement, subagentRouting, applySubagentRouting)
 		result, err := sch.SelectChannelWithOptions(c.Request.Context(), scheduler.SelectionOptions{
-			UserID:             strings.TrimSpace(req.UserID),
-			FailedChannels:     failedChannels,
-			Kind:               kind,
-			Model:              strings.TrimSpace(req.Model),
-			RoutePrefix:        strings.TrimSpace(req.RoutePrefix),
-			ChannelName:        strings.TrimSpace(req.ChannelName),
-			ContextRequirement: diagnoseContextRequirement(req.ContextRequirement),
-			HasImageContent:    req.HasImageContent,
-			AgentRole:          strings.TrimSpace(req.AgentRole),
-			DryRun:             true,
+			UserID:               strings.TrimSpace(req.UserID),
+			FailedChannels:       failedChannels,
+			Kind:                 kind,
+			Model:                strings.TrimSpace(req.Model),
+			RoutePrefix:          strings.TrimSpace(req.RoutePrefix),
+			ChannelName:          strings.TrimSpace(req.ChannelName),
+			ContextRequirement:   contextRequirement,
+			HasImageContent:      req.HasImageContent,
+			AgentRole:            agentRole,
+			AgentConfidence:      agentConfidence,
+			SubagentRouting:      subagentRouting,
+			ApplySubagentRouting: applySubagentRouting,
+			DryRun:               true,
 		})
 		if err != nil {
 			resp := gin.H{

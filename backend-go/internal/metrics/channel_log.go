@@ -49,11 +49,13 @@ type ChannelLog struct {
 	MaxToolCallIdleMs     int64 `json:"maxToolCallIdleMs,omitempty"`     // 工具调用阶段最大上游空闲间隔
 
 	// 代理上下文观测（subagent 识别）
-	AgentRole       string `json:"agentRole,omitempty"`       // main | subagent
-	AgentType       string `json:"agentType,omitempty"`       // codex_subagent | claude_code_subagent
-	ParentThreadID  string `json:"parentThreadId,omitempty"`  // Codex parent thread id
-	AgentConfidence string `json:"agentConfidence,omitempty"` // exact | heuristic
-	SessionID       string `json:"sessionId,omitempty"`       // 扁平化会话标识（用于驾驶舱关联）
+	AgentRole             string `json:"agentRole,omitempty"`       // main | subagent
+	AgentType             string `json:"agentType,omitempty"`       // codex_subagent | claude_code_subagent
+	ParentThreadID        string `json:"parentThreadId,omitempty"`  // Codex parent thread id
+	AgentConfidence       string `json:"agentConfidence,omitempty"` // exact | heuristic
+	SubagentPolicyApplied bool   `json:"subagentPolicyApplied,omitempty"`
+	SubagentPolicyModel   string `json:"subagentPolicyModel,omitempty"`
+	SessionID             string `json:"sessionId,omitempty"` // 扁平化会话标识（用于驾驶舱关联）
 }
 
 const (

@@ -147,6 +147,9 @@ func startRoutingAttempt(c *gin.Context, req *http.Request, upstream *config.Ups
 	}
 	transform := ""
 	modelChangeKind := "model_fallback"
+	if c.GetBool("ccxSubagentRoutingApplied") {
+		modelChangeKind = "subagent_policy"
+	}
 	if auxiliary {
 		modelChangeKind = "compact_model"
 	}

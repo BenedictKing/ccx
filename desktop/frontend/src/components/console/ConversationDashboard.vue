@@ -38,6 +38,7 @@ const nowMs = ref(Date.now())
 const expandedCards = ref(new Set<string>())
 const pinnedConversationOrder = ref<string[]>([])
 const notice = ref<{ variant: 'success' | 'destructive'; message: string } | null>(null)
+const activatedRoutingKinds = ref(new Set<string>())
 const settingsReady = ref(false)
 let noticeTimer: ReturnType<typeof setTimeout> | undefined
 let refreshTimer: ReturnType<typeof setInterval> | undefined
@@ -303,8 +304,21 @@ function syncConversationTimer() {
   }, 3000)
 }
 
+async function loadRoutingStates() {
+  const kinds = ['messages', 'chat', 'responses', 'gemini'] as const
+  const states = await Promise.all(kinds.map(async kind => {
+    try {
+      const view = await api.get<{ activated: boolean }>(`/api/${kind}/channels/subagent-routing`)
+      return [kind, view.activated] as const
+    } catch {
+      return [kind, false] as const
+    }
+  }))
+  activatedRoutingKinds.value = new Set(states.filter(([, active]) => active).map(([kind]) => kind))
+}
+
 onMounted(async () => {
-  await loadSettings()
+  await Promise.all([loadSettings(), loadRoutingStates()])
   settingsReady.value = true
   syncClockTimer()
   syncConversationTimer()
@@ -454,6 +468,7 @@ onBeforeUnmount(() => {
                 :subagents="item.subagents"
                 :subagent-summary="item.subagentSummary"
                 :override="overrides[item.conversation.id]"
+                :routing-active="activatedRoutingKinds.has(item.conversation.kind)"
                 :available-channels="getChannelsForKind(item.conversation.kind)"
                 :expanded="expandedCards.has(item.conversation.id)"
                 :now-ms="nowMs"

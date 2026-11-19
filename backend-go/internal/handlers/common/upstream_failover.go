@@ -164,6 +164,7 @@ func TryUpstreamWithAllKeys(
 			opt(&tryOpts)
 		}
 	}
+	tryOpts.channelLogOptions = append(tryOpts.channelLogOptions, WithSubagentRoutingPolicy(c.GetBool("ccxSubagentRoutingApplied"), c.GetString("ccxSubagentRoutingModel")))
 
 	metricsServiceType := scheduler.NormalizedMetricsServiceType(kind, upstream.ServiceType)
 

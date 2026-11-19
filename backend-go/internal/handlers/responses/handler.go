@@ -74,7 +74,7 @@ func Handler(
 		isCompactionV2 := hasCompactionTrigger(responsesReq.Input)
 
 		// 检查是否为多渠道模式
-		isMultiChannel := channelScheduler.IsMultiChannelMode(scheduler.ChannelKindResponses)
+		isMultiChannel := common.ShouldUseMultiChannel(c, channelScheduler, scheduler.ChannelKindResponses)
 
 		if isMultiChannel {
 			handleMultiChannel(c, envCfg, cfgManager, channelScheduler, sessionManager, bodyBytes, responsesReq, userID, startTime, isCompactionV2)

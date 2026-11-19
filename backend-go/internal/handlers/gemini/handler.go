@@ -93,7 +93,7 @@ func Handler(
 		common.LogOriginalRequest(c, bodyBytes, envCfg, "Gemini")
 
 		// 检查是否为多渠道模式
-		isMultiChannel := channelScheduler.IsMultiChannelMode(scheduler.ChannelKindGemini)
+		isMultiChannel := common.ShouldUseMultiChannel(c, channelScheduler, scheduler.ChannelKindGemini)
 
 		if isMultiChannel {
 			handleMultiChannel(c, envCfg, cfgManager, channelScheduler, bodyBytes, &geminiReq, model, isStream, userID, startTime)

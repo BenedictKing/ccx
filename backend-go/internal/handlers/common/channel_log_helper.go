@@ -23,6 +23,13 @@ func GenerateRequestID() string {
 type ChannelLogOption func(*metrics.ChannelLog)
 
 // WithChannelSelectionTrace 记录本次渠道选择的可解释性摘要。
+func WithSubagentRoutingPolicy(applied bool, model string) ChannelLogOption {
+	return func(log *metrics.ChannelLog) {
+		log.SubagentPolicyApplied = applied
+		log.SubagentPolicyModel = model
+	}
+}
+
 func WithChannelSelectionTrace(reason, summary string) ChannelLogOption {
 	reason = strings.TrimSpace(reason)
 	summary = strings.TrimSpace(summary)

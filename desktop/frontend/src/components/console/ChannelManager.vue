@@ -11,6 +11,7 @@ import { useDesktopActivity } from '@/composables/useDesktopActivity'
 import { useStatus } from '@/composables/useStatus'
 import { useLanguage } from '@/composables/useLanguage'
 import ChannelCard from '@/components/console/ChannelCard.vue'
+import SubagentRoutingPanel from '@/components/console/SubagentRoutingPanel.vue'
 import ChannelEditDialog from '@/components/console/ChannelEditDialog.vue'
 import ChannelLogsDialog from '@/components/console/ChannelLogsDialog.vue'
 import CapabilityTestDialog from '@/components/console/CapabilityTestDialog.vue'
@@ -18,6 +19,7 @@ import CircuitBreakerDialog from '@/components/console/CircuitBreakerDialog.vue'
 import GlobalStatsChart from '@/components/console/charts/GlobalStatsChart.vue'
 import KeyTrendChart from '@/components/console/charts/KeyTrendChart.vue'
 import type { ManagedChannelType } from '@/utils/channel-type-api'
+import type { TextChannelKind } from '@/services/admin-api'
 import { selectDenseSamplingInterval } from '@/utils/chart-sampling'
 import type { Channel, ChannelMetrics, ChannelRecentActivity, GlobalStatsHistoryResponse, KeyHistoryData, GlobalStatsSummary } from '@/services/admin-api'
 
@@ -26,6 +28,16 @@ interface Props {
 }
 
 const props = defineProps<Props>()
+const channelMode = ref<'regular' | 'subagent'>('regular')
+const subagentRoutingPanel = ref<InstanceType<typeof SubagentRoutingPanel> | null>(null)
+
+function confirmDiscard() {
+  return channelMode.value !== 'subagent' || (subagentRoutingPanel.value?.confirmDiscard() ?? true)
+}
+function changeChannelMode(mode: 'regular' | 'subagent') {
+  if (mode !== channelMode.value && confirmDiscard()) channelMode.value = mode
+}
+defineExpose({ confirmDiscard })
 
 const { t } = useLanguage()
 const { status } = useStatus()
@@ -44,6 +56,7 @@ const {
 
 watch(() => props.type, (newType) => {
   activeTab.value = newType
+  channelMode.value = 'regular'
 }, { immediate: true })
 
 const channels = computed(() => channelsByType.value[props.type]?.channels || [])
@@ -51,6 +64,7 @@ const metrics = computed(() => dashboardCache.value[props.type]?.metrics || [])
 const activity = computed(() => dashboardCache.value[props.type]?.recentActivity || [])
 const stats = computed(() => dashboardCache.value[props.type]?.stats)
 const supportsCapability = computed(() => props.type !== 'images' && props.type !== 'vectors')
+const supportsSubagentRouting = computed(() => ['messages', 'chat', 'responses', 'gemini'].includes(props.type))
 
 const searchQuery = ref('')
 const normalizedSearch = computed(() => searchQuery.value.trim().toLowerCase())
@@ -655,11 +669,32 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <div v-if="isInitialLoading" class="space-y-2">
+    <div v-if="supportsSubagentRouting" class="flex gap-1 border border-border bg-card/60 p-1" role="tablist">
+      <button
+        type="button"
+        role="tab"
+        :aria-selected="channelMode === 'regular'"
+        class="flex-1 px-3 py-2 text-xs font-semibold transition-colors"
+        :class="channelMode === 'regular' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-secondary'"
+        @click="changeChannelMode('regular')"
+      >{{ t('subagentRouting.regularTab') }}</button>
+      <button
+        type="button"
+        role="tab"
+        :aria-selected="channelMode === 'subagent'"
+        class="flex-1 px-3 py-2 text-xs font-semibold transition-colors"
+        :class="channelMode === 'subagent' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-secondary'"
+        @click="changeChannelMode('subagent')"
+      >{{ t('subagentRouting.subagentTab') }}</button>
+    </div>
+
+    <SubagentRoutingPanel v-if="supportsSubagentRouting && channelMode === 'subagent'" ref="subagentRoutingPanel" :type="type as TextChannelKind" />
+
+    <div v-if="channelMode === 'regular' && isInitialLoading" class="space-y-2">
       <Skeleton v-for="i in 5" :key="i" class="h-16 w-full rounded-none" />
     </div>
 
-    <div v-else-if="activeChannels.length === 0 && inactiveChannels.length === 0" class="border border-dashed border-border bg-card/50 py-12 text-center">
+    <div v-else-if="channelMode === 'regular' && activeChannels.length === 0 && inactiveChannels.length === 0" class="border border-dashed border-border bg-card/50 py-12 text-center">
       <p class="text-sm text-muted-foreground">
         {{ searchQuery
           ? t('orchestration.noMatchingChannels')
@@ -668,7 +703,7 @@ onBeforeUnmount(() => {
       </p>
     </div>
 
-    <div v-else class="relative space-y-4" :class="{ 'pointer-events-none select-none': actionLoading }">
+    <div v-else-if="channelMode === 'regular'" class="relative space-y-4" :class="{ 'pointer-events-none select-none': actionLoading }">
       <div v-if="actionLoading" class="absolute inset-0 z-10 flex items-center justify-center bg-background/60 backdrop-blur-[1px]">
         <div class="flex items-center gap-2 border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground shadow-sm">
           <Loader2 class="h-3.5 w-3.5 animate-spin" />

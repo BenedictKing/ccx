@@ -101,6 +101,7 @@ func (cm *ConfigManager) AddGeminiUpstream(upstream UpstreamConfig) error {
 
 	upstream.ChannelUID = newChannelUID()
 	cm.config.GeminiUpstream = append([]UpstreamConfig{upstream}, cm.config.GeminiUpstream...)
+	appendSubagentChannelLocked(&cm.config, "gemini", upstream.ChannelUID)
 
 	if err := cm.saveConfigLocked(cm.config); err != nil {
 		return err
@@ -118,6 +119,9 @@ func (cm *ConfigManager) UpdateGeminiUpstream(index int, updates UpstreamUpdate)
 
 	if index < 0 || index >= len(cm.config.GeminiUpstream) {
 		return false, fmt.Errorf("无效的 Gemini 上游索引: %d", index)
+	}
+	if err := rejectLegacySubagentModelUpdate(cm.config, "gemini", updates); err != nil {
+		return false, err
 	}
 
 	if err := validateKeySettings(updates.APIKeyConfigs, updates.MaxGroupMultiplier.Value); err != nil {
@@ -393,6 +397,7 @@ func (cm *ConfigManager) RemoveGeminiUpstream(index int) (*UpstreamConfig, error
 
 	removed := cm.config.GeminiUpstream[index]
 	cm.config.GeminiUpstream = append(cm.config.GeminiUpstream[:index], cm.config.GeminiUpstream[index+1:]...)
+	removeSubagentChannelLocked(&cm.config, "gemini", removed.ChannelUID)
 
 	cm.clearFailedKeysForUpstream(&removed, "Gemini")
 

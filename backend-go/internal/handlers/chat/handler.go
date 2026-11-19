@@ -91,7 +91,7 @@ func Handler(
 		common.LogOriginalRequest(c, bodyBytes, envCfg, "Chat")
 
 		// 检查是否为多渠道模式
-		isMultiChannel := channelScheduler.IsMultiChannelMode(scheduler.ChannelKindChat)
+		isMultiChannel := common.ShouldUseMultiChannel(c, channelScheduler, scheduler.ChannelKindChat)
 
 		if isMultiChannel {
 			handleMultiChannel(c, envCfg, cfgManager, channelScheduler, bodyBytes, model, isStream, userID, startTime)
