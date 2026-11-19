@@ -11,7 +11,7 @@
         </div>
         <div class="text-body-2 text-medium-emphasis mt-1">{{ t('subagentRouting.description') }}</div>
       </div>
-      <v-btn variant="text" size="small" prepend-icon="mdi-refresh" :loading="loading" @click="load">
+      <v-btn variant="text" size="small" prepend-icon="mdi-refresh" :loading="loading" :disabled="saving" @click="load">
         {{ t('subagentRouting.reload') }}
       </v-btn>
     </div>
@@ -36,6 +36,7 @@
         item-title="title"
         item-value="value"
         :return-object="false"
+        :disabled="saving || loading"
         :label="t('subagentRouting.modelLabel')"
         :hint="t('subagentRouting.modelHint')"
         persistent-hint
@@ -81,7 +82,7 @@
                 <span class="font-weight-medium">{{ element.channelName }}</span>
                 <span class="text-caption text-disabled">{{ element.serviceType }}</span>
                 <v-chip v-if="element.status !== 'active'" size="x-small" color="warning" variant="tonal">
-                  {{ t(`status.${element.status}`) }}
+                  {{ t(`status.${element.status === 'suspended' ? 'paused' : element.status}`) }}
                 </v-chip>
               </div>
               <div class="text-caption text-medium-emphasis model-preview">
@@ -122,6 +123,7 @@ import { onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router'
 import draggable from 'vuedraggable'
 import { api, ApiError, type SubagentRoutingChannelView, type SubagentRoutingView, type TextChannelKind } from '../services/api'
 import { useI18n } from '../i18n'
+import { resolveMappedModel } from '../../../shared/model-mapping'
 
 const props = defineProps<{ channelType: TextChannelKind }>()
 const emit = defineEmits<{ success: [message: string]; error: [message: string] }>()
@@ -185,13 +187,11 @@ function matchesSearch(channel: SubagentRoutingChannelView) {
 function previewModel(channel: SubagentRoutingChannelView) {
   const model = normalizedModel.value
   if (!model) return t('subagentRouting.keepRequestModel')
-  const mapping = channel.modelMapping || {}
-  if (mapping[model]) return mapping[model]
-  const source = Object.keys(mapping).filter(key => model.includes(key)).sort((a, b) => b.length - a.length)[0]
-  return source ? mapping[source] : model
+  return resolveMappedModel(model, channel.modelMapping)
 }
 
 function move(index: number, offset: number) {
+  if (saving.value || loading.value) return
   const target = index + offset
   if (target < 0 || target >= channels.value.length) return
   const [channel] = channels.value.splice(index, 1)
@@ -209,6 +209,7 @@ function cancel() {
 
 async function save() {
   if (!canSave.value) return
+  const sequence = ++requestSequence
   saving.value = true
   errorMessage.value = ''
   try {
@@ -216,9 +217,11 @@ async function save() {
       model: normalizedModel.value,
       channels: channels.value.map(channel => ({ channelUid: channel.channelUid, enabled: channel.enabled }))
     })
+    if (sequence !== requestSequence) return
     applyView(view)
     emit('success', t('subagentRouting.saved'))
   } catch (error) {
+    if (sequence !== requestSequence) return
     errorMessage.value = error instanceof Error ? error.message : String(error)
     if (error instanceof ApiError && error.status === 409) {
       errorMessage.value = `${errorMessage.value} ${t('subagentRouting.conflictHint')}`

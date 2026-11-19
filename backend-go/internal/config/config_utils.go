@@ -135,7 +135,7 @@ func RedirectModelWithRule(model string, upstream *UpstreamConfig) (string, stri
 		return mapped, model, "exact"
 	}
 
-	// 模糊匹配：按源模型长度从长到短排序，确保最长匹配优先
+	// 模糊匹配：最长匹配优先，同长度按字典序固定选择，避免 map 遍历顺序影响结果。
 	type mapping struct {
 		source string
 		target string
@@ -145,6 +145,9 @@ func RedirectModelWithRule(model string, upstream *UpstreamConfig) (string, stri
 		mappings = append(mappings, mapping{source, target})
 	}
 	sort.Slice(mappings, func(i, j int) bool {
+		if len(mappings[i].source) == len(mappings[j].source) {
+			return mappings[i].source < mappings[j].source
+		}
 		return len(mappings[i].source) > len(mappings[j].source)
 	})
 

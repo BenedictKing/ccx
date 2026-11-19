@@ -284,3 +284,14 @@ desktop/frontend：bun run type-check；bun run test；bun run build（以当时
 - 隔离上游验证 HTTP 两轮、修改默认模型/映射后续聊、WebSocket 同连接改请求模型与重连，以及关闭来源后不跨渠道发送密文。
 - 后端全量测试、vet、相关包 race、全栈构建、Web 264 项和 Desktop 99 项测试及两端构建通过。
 - ego-browser 实测默认草稿直接启用、下拉选择 sol 后保存及刷新读回；验证实例已关闭，既有实例未重启。
+
+### 10.2 后续审查修复验收
+
+- Web/Desktop 保存期间锁定模型、渠道开关、排序和重新加载；保存失败恢复编辑并保留草稿，切换协议后忽略旧保存响应。
+- Desktop 搜索排序交换相邻匹配项，隐藏渠道保留原位置；按钮边界按匹配项序列计算。
+- 模型映射精确匹配优先，模糊匹配按 UTF-8 字节长度降序、同长度字典序升序选择；Web/Desktop 共用预览解析器，与后端保持一致。
+- 两端将 `suspended` 映射到现有 `status.paused` 文案，避免缺失翻译键。
+- 回归覆盖慢速保存、失败保留、延迟响应、过滤排序、固定映射平局，以及 Unicode 长度和排序差异。
+- 后端全量测试、vet、config 包 race、Web 274 项和 Desktop 102 项测试、两端类型检查及构建、根目录全栈构建通过。
+- ego-browser 在隔离组件页面使用模拟 API 验证保存锁定、失败重试、刷新读回与搜索排序；截图位于 `.oil-ui/subagent-routing/followup-web.png` 和 `followup-desktop.png`。
+- 本轮未修改 3399 的运行配置，修复生效仍需用户更新或重启运行实例。

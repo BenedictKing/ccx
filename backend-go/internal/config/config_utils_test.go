@@ -2,6 +2,35 @@ package config
 
 import "testing"
 
+func TestRedirectModelWithRuleDeterministic(t *testing.T) {
+	tests := []struct {
+		model   string
+		mapping map[string]string
+		target  string
+		source  string
+		match   string
+	}{
+		{"sol-sun", map[string]string{"sun": "sun-target", "sol": "sol-target"}, "sol-target", "sol", "contains"},
+		{"SOL-sol", map[string]string{"sol": "lower", "SOL": "upper"}, "upper", "SOL", "contains"},
+		{"gpt-sol", map[string]string{"sol": "short", "gpt-sol": "exact"}, "exact", "gpt-sol", "exact"},
+		{"模型-sol", map[string]string{"sol": "ascii", "模型": "unicode"}, "unicode", "模型", "contains"},
+		{"𐀀-\ue000a", map[string]string{"𐀀": "astral", "\ue000a": "bmp"}, "bmp", "\ue000a", "contains"},
+		{"sol", map[string]string{"sol": ""}, "", "sol", "exact"},
+		{"astra", map[string]string{"sol": "other"}, "astra", "", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.model, func(t *testing.T) {
+			// 重复查找覆盖 Go map 的不稳定遍历顺序，同时校验日志记录的命中规则。
+			for range 64 {
+				target, source, match := RedirectModelWithRule(tt.model, &UpstreamConfig{ModelMapping: tt.mapping})
+				if target != tt.target || source != tt.source || match != tt.match {
+					t.Fatalf("got (%q, %q, %q), want (%q, %q, %q)", target, source, match, tt.target, tt.source, tt.match)
+				}
+			}
+		})
+	}
+}
+
 func TestSupportsModel(t *testing.T) {
 	tests := []struct {
 		name            string

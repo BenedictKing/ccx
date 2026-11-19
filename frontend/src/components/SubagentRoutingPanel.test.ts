@@ -67,20 +67,24 @@ function mountPanel() {
             '<div><template v-for="(element, index) in modelValue" :key="element.channelUid"><slot name="item" :element="element" :index="index" /></template></div>'
         },
         'v-switch': {
-          props: ['modelValue'],
+          props: ['modelValue', 'disabled'],
           emits: ['update:modelValue'],
           template:
-            '<input type="checkbox" class="policy-switch" :checked="modelValue" @change="$emit(\'update:modelValue\', $event.target.checked)">'
+            '<input type="checkbox" class="policy-switch" :checked="modelValue" :disabled="disabled" @change="$emit(\'update:modelValue\', $event.target.checked)">'
         },
         'v-btn': {
           props: ['disabled'],
           emits: ['click'],
           template: '<button :disabled="disabled" @click="$emit(\'click\')"><slot /></button>'
         },
-        'v-combobox': true,
+        'v-combobox': {
+          props: ['modelValue', 'disabled'],
+          emits: ['update:modelValue'],
+          template: '<input class="policy-model" :value="modelValue" :disabled="disabled" @input="$emit(\'update:modelValue\', $event.target.value)">'
+        },
         'v-text-field': true,
         'v-icon': true,
-        'v-chip': true,
+        'v-chip': { template: '<div><slot /></div>' },
         'v-alert': { template: '<div><slot /></div>' },
         'v-card': { template: '<div><slot /></div>' },
         'v-spacer': true,
@@ -149,5 +153,54 @@ describe('SubagentRoutingPanel', () => {
     await flushPromises()
     expect((wrapper.findAll('.policy-switch')[0].element as unknown as { checked: boolean }).checked).toBe(false)
     expect(wrapper.text()).toContain('subagentRouting.conflictHint')
+  })
+
+  it('慢速保存期间锁定所有草稿操作，失败后恢复编辑并保留输入', async () => {
+    let rejectSave!: (_error: Error) => void
+    vi.mocked(api.updateSubagentRouting).mockImplementation(() => new Promise((_, reject) => { rejectSave = reject }))
+    const wrapper = mountPanel()
+    await flushPromises()
+    await wrapper.find('.policy-model').setValue('luna')
+    await wrapper.findAll('button').find(button => button.text().includes('app.actions.save'))!.trigger('click')
+    expect(wrapper.find('.policy-model').attributes('disabled')).toBeDefined()
+    expect(wrapper.findAll('.policy-switch').every(input => input.attributes('disabled') !== undefined)).toBe(true)
+    expect(wrapper.findAll('button').every(button => button.attributes('disabled') !== undefined)).toBe(true)
+    rejectSave(new Error('offline'))
+    await flushPromises()
+    expect(wrapper.find('.policy-model').attributes('disabled')).toBeUndefined()
+    expect((wrapper.find('.policy-model').element as unknown as { value: string }).value).toBe('luna')
+    expect(wrapper.text()).toContain('offline')
+  })
+
+  it('暂停状态复用已存在的翻译，映射平局采用固定规则', async () => {
+    const data = cloneView()
+    data.policy.model = 'sol-sun'
+    data.channels[0].status = 'suspended'
+    data.channels[0].modelMapping = { sun: 'sun-target', sol: 'sol-target' }
+    vi.mocked(api.getSubagentRouting).mockResolvedValue(data)
+    const wrapper = mountPanel()
+    await flushPromises()
+    expect(wrapper.text()).toContain('status.paused')
+    expect(wrapper.text()).not.toContain('status.suspended')
+    expect(wrapper.findAll('.model-preview')[0].text()).toContain('sol-target')
+  })
+
+  it('协议切换后忽略前一协议的延迟保存响应', async () => {
+    let resolveSave!: (_view: SubagentRoutingView) => void
+    vi.mocked(api.updateSubagentRouting).mockImplementation(() => new Promise(resolve => { resolveSave = resolve }))
+    const wrapper = mountPanel()
+    await flushPromises()
+    await wrapper.find('.policy-model').setValue('luna')
+    await wrapper.findAll('button').find(button => button.text().includes('app.actions.save'))!.trigger('click')
+    const nextView = cloneView()
+    nextView.protocol = 'messages'
+    nextView.policy.model = 'haiku'
+    vi.mocked(api.getSubagentRouting).mockResolvedValue(nextView)
+    await wrapper.setProps({ channelType: 'messages' })
+    await flushPromises()
+    resolveSave(cloneView())
+    await flushPromises()
+    expect((wrapper.find('.policy-model').element as unknown as { value: string }).value).toBe('haiku')
+    expect(wrapper.emitted('success')).toBeUndefined()
   })
 })
