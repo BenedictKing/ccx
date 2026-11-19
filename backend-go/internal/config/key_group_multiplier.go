@@ -38,6 +38,28 @@ func validateSiteChannelIdentity(upstream UpstreamConfig, updates UpstreamUpdate
 	return nil
 }
 
+// APIKeyGroupMultiplier 返回 Key 当前的计费倍率，未配置时按 1 计算。
+func (u *UpstreamConfig) APIKeyGroupMultiplier(key string) float64 {
+	if u == nil {
+		return 1
+	}
+	for _, c := range u.APIKeyConfigs {
+		if c.Key == key {
+			if c.GroupMultiplier != nil {
+				return *c.GroupMultiplier
+			}
+			return 1
+		}
+	}
+	// 拉黑后仍需按保存的倍率统计该 Key 的历史成本。
+	for _, disabled := range u.DisabledAPIKeys {
+		if disabled.Key == key && disabled.Config != nil && disabled.Config.GroupMultiplier != nil {
+			return *disabled.Config.GroupMultiplier
+		}
+	}
+	return 1
+}
+
 // IsAPIKeyGroupMultiplierAllowed 只在显式设定上限时要求可信的倍率值。
 func (u *UpstreamConfig) IsAPIKeyGroupMultiplierAllowed(key string) bool {
 	if u == nil {

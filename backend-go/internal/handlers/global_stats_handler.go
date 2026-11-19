@@ -164,25 +164,46 @@ func buildModelDataPointsFromAggregatedBuckets(buckets []metrics.ModelAggregated
 	return modelDataPoints
 }
 
-func globalCostCalculator(cfg config.Config, kind scheduler.ChannelKind) func(string, string, int64, int64, int64, int64) float64 {
-	upstreams := channelUpstreamsByKind(cfg, kind)
-	byMetricsKey := make(map[string]*config.UpstreamConfig)
+type tokenCostCalculator func(string, string, int64, int64, int64, int64) float64
+
+func globalCostCalculator(cfg config.Config, kind scheduler.ChannelKind) tokenCostCalculator {
+	return costCalculatorForUpstreams(channelUpstreamsByKind(cfg, kind), kind, cfg.UpstreamModelCapabilities)
+}
+
+func costCalculatorForUpstreams(upstreams []config.UpstreamConfig, kind scheduler.ChannelKind, global map[string]config.UpstreamModelCapability) tokenCostCalculator {
+	type keyCostConfig struct {
+		upstream   *config.UpstreamConfig
+		multiplier float64
+	}
+	byMetricsKey := make(map[string]keyCostConfig)
 	for i := range upstreams {
 		upstream := &upstreams[i]
 		serviceType := scheduler.NormalizedMetricsServiceType(kind, upstream.ServiceType)
 		for _, baseURL := range upstream.GetAllBaseURLs() {
 			for _, key := range channelStatsAPIKeys(*upstream) {
+				multiplier := upstream.APIKeyGroupMultiplier(key)
 				for _, identity := range metrics.GenerateMetricsLookupKeys(baseURL, key, serviceType) {
-					if previous, exists := byMetricsKey[identity]; exists && previous != upstream {
-						byMetricsKey[identity] = nil // 同一指标身份无法区分两个渠道价格。
+					if previous, exists := byMetricsKey[identity]; exists && previous.upstream != upstream {
+						previous.upstream = nil // 同一指标身份无法区分两个渠道价格。
+						if previous.multiplier != multiplier {
+							previous.multiplier = 1 // 倍率冲突时沿用未知倍率的默认值。
+						}
+						byMetricsKey[identity] = previous
 					} else if !exists {
-						byMetricsKey[identity] = upstream
+						byMetricsKey[identity] = keyCostConfig{upstream: upstream, multiplier: multiplier}
 					}
 				}
 			}
 		}
 	}
 	return func(metricsKey, model string, input, output, cacheCreate, cacheRead int64) float64 {
-		return metrics.CalculateTokenCostUSDWithConfig(model, byMetricsKey[metricsKey], cfg.UpstreamModelCapabilities, input, output, cacheCreate, cacheRead)
+		keyConfig, exists := byMetricsKey[metricsKey]
+		if !exists {
+			keyConfig.multiplier = 1
+		}
+		if keyConfig.multiplier == 0 {
+			return 0
+		}
+		return keyConfig.multiplier * metrics.CalculateTokenCostUSDWithConfig(model, keyConfig.upstream, global, input, output, cacheCreate, cacheRead)
 	}
 }

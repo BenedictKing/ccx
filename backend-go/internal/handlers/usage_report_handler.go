@@ -135,6 +135,12 @@ func GetUsageReportCSV(store *metrics.SQLiteStore, cfgManager *config.ConfigMana
 		writer := csv.NewWriter(c.Writer)
 		_ = writer.Write([]string{"month", "bucket_start", "timezone", "protocol", "channel", "service_type", "model", "requests", "successes", "failures", "success_rate_pct", "input_tokens", "output_tokens", "cache_creation_tokens", "cache_read_tokens", "avg_rpm", "avg_tpm", "estimated_cost_usd", "attribution"})
 		attribution := usageReportAttribution(channels)
+		costCalculators := make(map[string]tokenCostCalculator)
+		for _, channel := range channels {
+			if costCalculators[channel.APIType] == nil {
+				costCalculators[channel.APIType] = globalCostCalculator(cfg, scheduler.ChannelKind(channel.APIType))
+			}
+		}
 		for _, bucket := range buckets {
 			channel, known := attribution[bucket.APIType+":"+bucket.MetricsKey]
 			if selectedID != "all" && (channel == nil || channel.ID != selectedID) {
@@ -153,8 +159,13 @@ func GetUsageReportCSV(store *metrics.SQLiteStore, cfgManager *config.ConfigMana
 				minutes = next.Sub(bucket.Timestamp).Minutes()
 			}
 			successRate := 100 * float64(bucket.Successes) / float64(bucket.Requests)
-			cost := metrics.CalculateTokenCostUSDWithConfig(bucket.Model, upstream, cfg.UpstreamModelCapabilities,
-				bucket.InputTokens, bucket.OutputTokens, bucket.CacheCreationTokens, bucket.CacheReadTokens)
+			var cost float64
+			if calculateCost := costCalculators[bucket.APIType]; calculateCost != nil {
+				cost = calculateCost(bucket.MetricsKey, bucket.Model, bucket.InputTokens, bucket.OutputTokens, bucket.CacheCreationTokens, bucket.CacheReadTokens)
+			} else {
+				cost = metrics.CalculateTokenCostUSDWithConfig(bucket.Model, upstream, cfg.UpstreamModelCapabilities,
+					bucket.InputTokens, bucket.OutputTokens, bucket.CacheCreationTokens, bucket.CacheReadTokens)
+			}
 			row := []string{month, bucket.Timestamp.Format(time.RFC3339), zone, bucket.APIType,
 				csvSafeText(name), csvSafeText(serviceType), csvSafeText(bucket.Model),
 				strconv.FormatInt(bucket.Requests, 10), strconv.FormatInt(bucket.Successes, 10),

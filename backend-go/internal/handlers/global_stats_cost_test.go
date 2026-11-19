@@ -39,3 +39,74 @@ func TestGlobalCostKeepsSameModelChannelPricesSeparate(t *testing.T) {
 		t.Fatalf("merged model stats = %+v, want 2 requests and USD 4", got)
 	}
 }
+
+func TestGlobalCostAppliesKeyGroupMultipliers(t *testing.T) {
+	zero, discount, price := 0.0, 0.5, 2.0
+	upstream := config.UpstreamConfig{
+		BaseURL: "https://relay.example", APIKeys: []string{"free", "discount", "standard"},
+		APIKeyConfigs:   []config.APIKeyConfig{{Key: "free", GroupMultiplier: &zero}, {Key: "discount", GroupMultiplier: &discount}},
+		DisabledAPIKeys: []config.DisabledKeyInfo{{Key: "disabled-free", Config: &config.APIKeyConfig{Key: "disabled-free", GroupMultiplier: &zero}}},
+		ModelCapabilities: map[string]config.UpstreamModelCapability{
+			"private-model": {Pricing: &config.ModelPricing{Currency: "USD", InputCacheMissPrice: &price}},
+		},
+	}
+	cfg := config.Config{
+		Upstream: []config.UpstreamConfig{upstream}, ChatUpstream: []config.UpstreamConfig{upstream},
+		ResponsesUpstream: []config.UpstreamConfig{upstream}, GeminiUpstream: []config.UpstreamConfig{upstream},
+		ImagesUpstream: []config.UpstreamConfig{upstream}, VectorsUpstream: []config.UpstreamConfig{upstream},
+	}
+	for _, kind := range []scheduler.ChannelKind{
+		scheduler.ChannelKindMessages, scheduler.ChannelKindChat, scheduler.ChannelKindResponses,
+		scheduler.ChannelKindGemini, scheduler.ChannelKindImages, scheduler.ChannelKindVectors,
+	} {
+		t.Run(string(kind), func(t *testing.T) {
+			calculate := globalCostCalculator(cfg, kind)
+			serviceType := scheduler.NormalizedMetricsServiceType(kind, upstream.ServiceType)
+			for _, tc := range []struct {
+				key  string
+				want float64
+			}{{"free", 0}, {"discount", 1}, {"standard", 2}, {"disabled-free", 0}} {
+				for _, identity := range metrics.GenerateMetricsLookupKeys(upstream.BaseURL, tc.key, serviceType) {
+					if got := calculate(identity, "private-model", 1_000_000, 0, 0, 0); got != tc.want {
+						t.Errorf("key %s cost = %v, want %v", tc.key, got, tc.want)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestGlobalCostKeepsConsistentMultiplierForSharedKeys(t *testing.T) {
+	zero, discount, globalPrice := 0.0, 0.5, 3.0
+	for _, tc := range []struct {
+		name        string
+		multipliers []*float64
+		want        float64
+	}{
+		{"free", []*float64{&zero, &zero, &zero}, 0},
+		{"discount", []*float64{&discount, &discount}, 1.5},
+		{"unset", []*float64{nil, nil}, 3},
+		{"conflict", []*float64{&zero, &discount, &zero}, 3},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := config.Config{UpstreamModelCapabilities: map[string]config.UpstreamModelCapability{
+				"private-model": {Pricing: &config.ModelPricing{Currency: "USD", InputCacheMissPrice: &globalPrice}},
+			}}
+			for _, multiplier := range tc.multipliers {
+				cfg.ChatUpstream = append(cfg.ChatUpstream, config.UpstreamConfig{
+					BaseURL: "https://shared.example", APIKeys: []string{"sk-shared"}, ServiceType: "openai",
+					APIKeyConfigs: []config.APIKeyConfig{{Key: "sk-shared", GroupMultiplier: multiplier}},
+				})
+			}
+			calculate := globalCostCalculator(cfg, scheduler.ChannelKindChat)
+			for _, identity := range metrics.GenerateMetricsLookupKeys("https://shared.example", "sk-shared", "openai") {
+				if got := calculate(identity, "private-model", 1_000_000, 0, 0, 0); got != tc.want {
+					t.Errorf("shared cost = %v, want %v", got, tc.want)
+				}
+			}
+			if got := calculate("deleted-key", "private-model", 1_000_000, 0, 0, 0); got != 3 {
+				t.Errorf("unattributed cost = %v, want 3", got)
+			}
+		})
+	}
+}

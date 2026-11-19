@@ -32,6 +32,15 @@ func CalculateTokenCostUSDWithConfig(model string, upstream *config.UpstreamConf
 	return calcCostWithPricing(pricing, inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens)
 }
 
+// CalculateTokenCostUSDForKey 在模型成本上应用实际 Key 的分组倍率，未配置倍率按 1 计算。
+func CalculateTokenCostUSDForKey(model string, upstream *config.UpstreamConfig, apiKey string, global map[string]config.UpstreamModelCapability, inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens int64) float64 {
+	multiplier := upstream.APIKeyGroupMultiplier(apiKey)
+	if multiplier == 0 {
+		return 0
+	}
+	return multiplier * CalculateTokenCostUSDWithConfig(model, upstream, global, inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens)
+}
+
 // calcCostWithPricing 根据给定价格估算 token 成本（USD）。
 func calcCostWithPricing(pricing *config.ModelPricing, inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens int64) float64 {
 	if pricing == nil {
