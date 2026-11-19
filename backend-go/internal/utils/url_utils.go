@@ -36,9 +36,18 @@ func RedactURLCredentials(rawURL string) string {
 	return rawURL
 }
 
+var cloudMetadataIPs = []net.IP{
+	net.ParseIP("169.254.169.254"),
+	net.ParseIP("fd00:ec2::254"),
+}
+
 // ValidateBaseURL 验证 baseURL 是否安全，防止 SSRF 攻击
-// 仅拦截云元数据服务（169.254.169.254），允许其他内网地址（支持 Ollama、内网部署）
+// 仅拦截云元数据服务，允许其他内网地址（支持 Ollama、内网部署）
 func ValidateBaseURL(rawURL string) error {
+	return validateBaseURL(rawURL, net.LookupIP)
+}
+
+func validateBaseURL(rawURL string, lookupIP func(string) ([]net.IP, error)) error {
 	if rawURL == "" {
 		return fmt.Errorf("baseURL 不能为空")
 	}
@@ -59,25 +68,36 @@ func ValidateBaseURL(rawURL string) error {
 		return fmt.Errorf("URL 缺少主机名")
 	}
 
-	// 硬编码拦截云元数据服务（最关键的安全风险）
-	if host == "169.254.169.254" {
-		return fmt.Errorf("禁止访问云元数据服务")
+	if ip := net.ParseIP(host); ip != nil {
+		if isCloudMetadataIP(ip) {
+			return fmt.Errorf("禁止访问云元数据服务")
+		}
+		return nil
 	}
 
 	// 检查域名是否解析到云元数据服务
-	ips, err := net.LookupIP(host)
+	ips, err := lookupIP(host)
 	if err != nil {
 		// DNS 解析失败，允许通过（避免误杀）
 		return nil
 	}
 
 	for _, resolvedIP := range ips {
-		if resolvedIP.String() == "169.254.169.254" {
+		if isCloudMetadataIP(resolvedIP) {
 			return fmt.Errorf("域名 %s 解析到云元数据服务", host)
 		}
 	}
 
 	return nil
+}
+
+func isCloudMetadataIP(ip net.IP) bool {
+	for _, metadataIP := range cloudMetadataIPs {
+		if ip.Equal(metadataIP) {
+			return true
+		}
+	}
+	return false
 }
 
 // DefaultVersionPrefixForService 返回服务类型默认自动补齐的版本前缀。

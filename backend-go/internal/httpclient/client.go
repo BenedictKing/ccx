@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/BenedictKing/ccx/internal/config"
@@ -102,6 +103,7 @@ func (cm *ClientManager) getStandardClient(timeout time.Duration, responseHeader
 		Transport: transport,
 		Timeout:   timeout,
 	}
+	applySSRFProtection(client, transport)
 
 	if useCache {
 		cm.clients[key] = client
@@ -162,9 +164,53 @@ func (cm *ClientManager) GetStreamClientWithResponseHeaderTimeout(responseHeader
 		Transport: transport,
 		Timeout:   0, // 流式请求无超时
 	}
+	applySSRFProtection(client, transport)
 
 	cm.clients[key] = client
 	return client
+}
+
+func applySSRFProtection(client *http.Client, transport *http.Transport) {
+	if transport.DialContext == nil {
+		dialer := &net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}
+		// ControlContext 在 DNS 解析完成后、实际建连前拿到目标 IP，避免校验与连接之间的 DNS 重绑定。
+		dialer.ControlContext = func(_ context.Context, _, address string, _ syscall.RawConn) error {
+			return validateDialAddress(address)
+		}
+		transport.DialContext = dialer.DialContext
+	} else {
+		dialContext := transport.DialContext
+		transport.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
+			if err := validateDialAddress(address); err != nil {
+				return nil, err
+			}
+			return dialContext(ctx, network, address)
+		}
+	}
+
+	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		if len(via) >= 10 {
+			return fmt.Errorf("stopped after 10 redirects")
+		}
+		if err := utils.ValidateBaseURL(req.URL.String()); err != nil {
+			return fmt.Errorf("SSRF 防护拦截重定向: %w", err)
+		}
+		return nil
+	}
+}
+
+func validateDialAddress(address string) error {
+	if _, _, err := net.SplitHostPort(address); err != nil {
+		return fmt.Errorf("无效的上游连接地址: %w", err)
+	}
+	targetURL := (&url.URL{Scheme: "http", Host: address}).String()
+	if err := utils.ValidateBaseURL(targetURL); err != nil {
+		return fmt.Errorf("SSRF 防护拦截上游连接: %w", err)
+	}
+	return nil
 }
 
 func normalizeResponseHeaderTimeout(responseHeaderTimeout time.Duration) time.Duration {

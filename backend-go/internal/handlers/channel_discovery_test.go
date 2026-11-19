@@ -22,6 +22,31 @@ func TestBuildTransientDiscoveryChannelRequiresBaseURLAndKey(t *testing.T) {
 	}
 }
 
+func TestChannelDiscoveryRejectsIPv6Metadata(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.POST("/api/channel-discovery", ChannelDiscovery(nil))
+
+	body := []byte(`{
+		"channelKind":"responses",
+		"serviceType":"openai",
+		"baseUrl":"http://[fd00:ec2::254]",
+		"apiKey":"sk-test"
+	}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/channel-discovery", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+
+	router.ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+	if !strings.Contains(recorder.Body.String(), "云元数据") {
+		t.Fatalf("response does not explain metadata rejection: %s", recorder.Body.String())
+	}
+}
+
 func TestBuildTransientDiscoveryChannelDoesNotNeedConfigManager(t *testing.T) {
 	req := ChannelDiscoveryRequest{
 		ChannelKind:        "responses",
