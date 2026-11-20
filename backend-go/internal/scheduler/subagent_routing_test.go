@@ -73,6 +73,35 @@ func TestSubagentRoutingRequiresExactRole(t *testing.T) {
 	}
 }
 
+func TestSubagentRoutingIgnoresConversationOverride(t *testing.T) {
+	cfg := config.Config{ChatUpstream: []config.UpstreamConfig{
+		{Name: "global-first", ChannelUID: "uid-a", BaseURL: "https://a.example", APIKeys: []string{"a"}, Status: "active", ModelMapping: map[string]string{"sol": "actual-a"}},
+		{Name: "conversation-first", ChannelUID: "uid-b", BaseURL: "https://b.example", APIKeys: []string{"b"}, Status: "active", ModelMapping: map[string]string{"sol": "actual-b"}},
+	}}
+	s, cleanup := createTestScheduler(t, cfg)
+	defer cleanup()
+	overrideManager := conversation.NewOverrideManager(time.Hour)
+	defer overrideManager.Stop()
+	if err := overrideManager.SetOverride("conversation", string(ChannelKindChat), "user", []conversation.ChannelEntry{{ChannelIndex: 1, ChannelName: "conversation-first"}}, time.Hour); err != nil {
+		t.Fatalf("SetOverride() error = %v", err)
+	}
+	s.SetConversationComponents(nil, overrideManager)
+
+	policy := &config.SubagentRoutingPolicy{Model: "sol", Channels: []config.SubagentRoutingChannel{
+		{ChannelUID: "uid-a", Enabled: true}, {ChannelUID: "uid-b", Enabled: true},
+	}}
+	result, err := s.SelectChannelWithOptions(context.Background(), SelectionOptions{
+		UserID: "user", Kind: ChannelKindChat, Model: "astra", AgentRole: "subagent", AgentConfidence: "exact",
+		SubagentRouting: policy, ApplySubagentRouting: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.ChannelIndex != 0 || result.Reason == "manual_override" {
+		t.Fatalf("全局子代理策略应覆盖会话级排序，实际 channel=%d reason=%s", result.ChannelIndex, result.Reason)
+	}
+}
+
 func TestSubagentRoutingRejectsEmptyPool(t *testing.T) {
 	cfg := config.Config{ChatUpstream: []config.UpstreamConfig{{Name: "main", ChannelUID: "uid-a", BaseURL: "https://a.example", APIKeys: []string{"a"}, Status: "active"}}}
 	s, cleanup := createTestScheduler(t, cfg)

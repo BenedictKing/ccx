@@ -232,7 +232,9 @@ func (s *ChannelScheduler) SelectChannelWithOptions(ctx context.Context, opts Se
 	}
 
 	// 0. 检查手动序列覆盖
-	if userID != "" && s.overrideManager != nil && opts.SubagentRouting == nil {
+	// 全局子代理策略一旦实际应用，渠道顺序由协议级策略统一决定；
+	// 只有普通请求或未达到精确识别门槛的请求才允许使用驾驶舱的会话级覆盖。
+	if userID != "" && s.overrideManager != nil && !opts.ApplySubagentRouting {
 		if sequence, ok := s.overrideManager.GetOverrideForUserWithRole(string(kind), userID, opts.AgentRole); ok {
 			prefix := kindSchedulerLogPrefix(kind)
 			orderedChannels := applyManualOverrideOrder(activeChannels, sequence)

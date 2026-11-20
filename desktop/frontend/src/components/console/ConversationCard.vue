@@ -45,7 +45,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   toggleExpand: []
-  setOverride: [conversationId: string, sequence: ChannelSequenceEntry[], subagentSequence?: ChannelSequenceEntry[], clearSubagentSequence?: boolean]
+  setOverride: [conversationId: string, sequence: ChannelSequenceEntry[]]
   removeOverride: [conversationId: string]
   navigateConversation: [conversationId: string]
   success: [message: string]
@@ -342,38 +342,7 @@ const hiddenCount = computed(() => Math.max(0, channelSequence.value.length - vi
 const hiddenChannelsTooltip = computed(() => t('cockpit.tooltip.hiddenChannels', { count: String(hiddenCount.value) }))
 const moreSubagentsTooltip = computed(() => t('cockpit.tooltip.moreSubagents', { count: String(subagents.value.length - visibleSubagents.value.length) }))
 
-// subagent 渠道序列：优先用 override.subagentSequence，否则 fallback 到主序列
-const subagentSequence = computed((): ChannelInfo[] => {
-  if (props.override?.subagentSequence?.length) {
-    return props.override.subagentSequence.map(entry => {
-      const ch = normalizedAvailableChannels.value.find(c => c.index === entry.channelIndex)
-      return { index: entry.channelIndex, name: entry.channelName || ch?.name || `Channel ${entry.channelIndex}`, status: ch?.status || 'active', circuitOpen: ch?.circuitOpen }
-    })
-  }
-  return channelSequence.value
-})
-const hasSubagentOverride = computed(() => !!props.override?.subagentSequence?.length)
-const showSubagentSection = computed(() => hasSubagentActivity.value || hasSubagentOverride.value)
-const subagentCurrentChannel = computed(() => props.conversation.subagentChannel ?? -1)
-const subagentNextChannel = computed(() => {
-  const candidate = props.override?.subagentSequence?.[0]?.channelIndex ?? (hasOverride.value ? props.override?.sequence?.[0]?.channelIndex : undefined)
-  return candidate !== undefined && candidate !== subagentCurrentChannel.value ? candidate : undefined
-})
-
-const subagentNextChannelInfo = computed(() => {
-  if (subagentNextChannel.value === undefined) return undefined
-  const existing = subagentSequence.value.find(channel => channel.index === subagentNextChannel.value)
-    ?? normalizedAvailableChannels.value.find(channel => channel.index === subagentNextChannel.value)
-  if (existing) return existing
-  const entry = props.override?.subagentSequence?.[0]
-  return {
-    index: subagentNextChannel.value,
-    name: entry?.channelName || `Channel ${subagentNextChannel.value}`,
-    status: 'active',
-  }
-})
-
-const subagentNextChannelCircuitOpen = computed(() => subagentNextChannelInfo.value?.circuitOpen === true)
+const showSubagentSection = computed(() => hasSubagentActivity.value)
 
 function subagentStatusClass(status: ConversationInfo['status']): string {
   switch (status) {
@@ -428,26 +397,6 @@ function handleQuickOverride(channel: ChannelInfo) {
   }
   const rest = channelSequence.value.filter(item => item.index !== channel.index)
   emit('setOverride', props.conversation.id, buildSequence([channel, ...rest]))
-}
-
-function handleSubagentMoveToTop(channel: ChannelInfo, currentIndex: number) {
-  if (currentIndex === 0) return
-  const current = [...subagentSequence.value]
-  const [item] = current.splice(currentIndex, 1)
-  current.unshift(item)
-  emit('setOverride', props.conversation.id, [], buildSequence(current))
-}
-
-function handleSubagentDemote(index: number) {
-  const current = [...subagentSequence.value]
-  if (index >= current.length - 1) return
-  const [item] = current.splice(index, 1)
-  current.push(item)
-  emit('setOverride', props.conversation.id, [], buildSequence(current))
-}
-
-function handleClearSubagentOverride() {
-  emit('setOverride', props.conversation.id, [], [], true)
 }
 
 function handleMoveToTop(channel: ChannelInfo, currentIndex: number) {
@@ -772,31 +721,8 @@ function shortId(value: string): string {
         </Tooltip>
       </div>
 
-      <!-- Subagent Routing：为主对话与 subagent 分别指定渠道 -->
-      <div v-if="!routingActive" class="subagent-routing mt-3">
-        <div class="mb-1 flex items-center">
-          <span class="text-xs text-muted-foreground">{{ t('cockpit.subagentRouting') }}</span>
-          <span v-if="hasSubagentOverride" class="ml-2 text-xs text-amber-500">[{{ t('cockpit.subagentOverride') }}]</span>
-          <span v-else class="ml-2 text-xs text-muted-foreground">[{{ t('cockpit.subagentFollowMain') }}]</span>
-          <span class="flex-1" />
-          <Tooltip v-if="hasSubagentOverride">
-            <TooltipTrigger as-child>
-              <Button variant="ghost" size="sm" class="h-6 px-2 text-xs" @click.stop="handleClearSubagentOverride">
-                {{ t('cockpit.subagentClearOverride') }}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="top">{{ t('cockpit.tooltip.clearSubagentOverride') }}</TooltipContent>
-          </Tooltip>
-        </div>
-        <ConversationChannelSequence
-          :channels="subagentSequence"
-          :current-channel="subagentCurrentChannel"
-          :next-channel="subagentNextChannel"
-          :next-channel-circuit-open="subagentNextChannelCircuitOpen"
-          :override-active="hasSubagentOverride"
-          @move-to-top="handleSubagentMoveToTop"
-          @demote="handleSubagentDemote"
-        />
+      <div class="subagent-routing mt-3 text-xs text-muted-foreground">
+        {{ t('cockpit.subagentGlobalRouting') }}
       </div>
     </div>
 

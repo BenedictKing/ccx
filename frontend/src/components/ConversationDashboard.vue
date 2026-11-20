@@ -169,9 +169,7 @@ const boardSummary = computed(() => boardItems.value.reduce((summary, item) => {
   return summary
 }, { working: 0, idle: 0 }))
 
-const overrideCount = computed(() => Object.values(overrides.value).filter(override =>
-  override.hasMainSequence || (override.subagentSequence?.length ?? 0) > 0,
-).length)
+const overrideCount = computed(() => Object.values(overrides.value).filter(override => override.hasMainSequence).length)
 
 const visibleBoardItems = computed(() => {
   return filterConversationBoardItems(boardItems.value, kindFilter.value, searchQuery.value)
@@ -360,11 +358,9 @@ async function handleNavigateConversation(id: string) {
 async function handleSetOverride(
   convId: string,
   sequence: ChannelSequenceEntry[],
-  subagentSequence?: ChannelSequenceEntry[],
-  clearSubagentSequence = false,
 ) {
   try {
-    await api.setConversationOverride(convId, sequence, overrideDuration.value, subagentSequence, clearSubagentSequence)
+    await api.setConversationOverride(convId, sequence, overrideDuration.value)
     await fetchConversations()
   } catch (e) {
     console.error('[ConversationDashboard] set override error:', e)
