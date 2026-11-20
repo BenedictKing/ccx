@@ -33,7 +33,7 @@ export const openaiChatPresets: Record<string, OpenAIChatPreset> = {
     "normalizeSystemRoleToTopLevel": false,
     "stripImageGenerationTool": false,
     "normalizeNonstandardChatRoles": false,
-    "noVision": true,
+    "noVision": false,
     "noVisionModels": [],
     "visionFallbackModel": ""
   },

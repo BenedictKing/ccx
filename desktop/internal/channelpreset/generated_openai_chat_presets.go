@@ -4,7 +4,7 @@ package channelpreset
 
 func generatedOpenAIChatTargetConfigs() map[string]channelTargetConfig {
 	return map[string]channelTargetConfig{
-		"deepseek":     channelTargetConfig{ReasoningParamStyle: "reasoning", NoVision: true},
+		"deepseek":     channelTargetConfig{ReasoningParamStyle: "reasoning"},
 		"mimo":         channelTargetConfig{ReasoningParamStyle: "thinking", NoVisionModels: []string{"mimo-v2.5-pro"}, VisionFallbackModel: "mimo-v2.5", RateLimitRPM: 80},
 		"compshare":    channelTargetConfig{ReasoningParamStyle: "reasoning", NoVisionModels: []string{"glm-5.2", "deepseek-v4-flash"}, VisionFallbackModel: "MiniMax-M2.7"},
 		"runapi":       channelTargetConfig{},

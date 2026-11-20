@@ -2,8 +2,7 @@
   "schemaVersion": 1,
   "providers": {
     "deepseek": {
-      "reasoningParamStyle": "reasoning",
-      "noVision": true
+      "reasoningParamStyle": "reasoning"
     },
     "mimo": {
       "reasoningParamStyle": "thinking",

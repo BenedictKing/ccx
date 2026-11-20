@@ -3,10 +3,10 @@
   "providers": {
     "deepseek": {
       "modelMapping": {
-        "fable": "deepseek-v4-pro",
-        "haiku": "deepseek-v4-flash",
-        "opus": "deepseek-v4-pro",
-        "sonnet": "deepseek-v4-pro"
+        "fable": "deepseek-flash",
+        "haiku": "deepseek-flash",
+        "opus": "deepseek-flash",
+        "sonnet": "deepseek-flash"
       },
       "reasoningParamStyle": "reasoning",
       "passbackReasoningContent": false,
@@ -15,8 +15,7 @@
       "normalizeSystemRoleToTopLevel": true,
       "normalizeMetadataUserId": true,
       "stripBillingHeader": true,
-      "stripImageGenerationTool": true,
-      "noVision": true
+      "stripImageGenerationTool": true
     },
     "mimo": {
       "modelMapping": {
@@ -65,19 +64,19 @@
     "unity2": {},
     "kimi": {
       "modelMapping": {
-        "fable": "kimi-k2.6",
-        "haiku": "kimi-k2.6",
-        "opus": "kimi-k2.6",
-        "sonnet": "kimi-k2.6"
+        "fable": "kimi-k3.1-pro",
+        "haiku": "kimi-k3.1-pro",
+        "opus": "kimi-k3.1-pro",
+        "sonnet": "kimi-k3.1-pro"
       },
       "normalizeSystemRoleToTopLevel": true
     },
     "glm": {
       "modelMapping": {
-        "fable": "glm-5.2",
-        "haiku": "glm-5.2",
-        "opus": "glm-5.2",
-        "sonnet": "glm-5.2"
+        "fable": "glm-5.3",
+        "haiku": "glm-5.3",
+        "opus": "glm-5.3",
+        "sonnet": "glm-5.3"
       },
       "normalizeSystemRoleToTopLevel": true
     },

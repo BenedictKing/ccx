@@ -207,7 +207,7 @@ func Presets() []ProviderPreset {
 		newFullCapabilityPreset(
 			ProviderDeepSeek,
 			"DeepSeek",
-			"国产高性能推理模型，V4-Pro / V4-Flash 双旗舰，以极低成本实现顶级推理能力，完全开源（MIT），性价比极高。",
+			"国产高性能推理模型，当前推荐 DeepSeek V4.1 Flash，支持原生视觉、1M 上下文与思考模式，兼顾能力、速度和成本。",
 			10,
 			dualProtocolPlans("https://api.deepseek.com/anthropic", "https://api.deepseek.com/v1"),
 		),
@@ -258,7 +258,7 @@ func Presets() []ProviderPreset {
 			ID:                  ProviderKimi,
 			Order:               50,
 			Label:               "Kimi / Moonshot",
-			Description:         "月之暗面旗下智能助手平台，旗舰 Kimi K2.6 原生多模态，以超长上下文和 Agent 集群能力著称，深度研究表现突出。",
+			Description:         "月之暗面旗下大模型平台，最新旗舰 Kimi K3.1 Pro 支持原生视觉、1M 上下文与长程 Agent 任务。",
 			DirectAgent:         true,
 			NativeMessages:      true,
 			ChatCompatible:      true,
@@ -276,7 +276,7 @@ func Presets() []ProviderPreset {
 			ID:                  ProviderGLM,
 			Order:               60,
 			Label:               "GLM / BigModel",
-			Description:         "智谱 AI 大模型开放平台，旗舰 GLM-5.1 编程能力对标前沿闭源模型，港股上市公司，全程华为昇腾训练，性价比突出。",
+			Description:         "智谱 AI 大模型开放平台，最新旗舰 GLM-5.3 面向复杂编程与长程 Agent 任务，支持 1M 上下文和始终开启的思考模式。",
 			DirectAgent:         true,
 			NativeMessages:      true,
 			ChatCompatible:      true,
@@ -793,48 +793,26 @@ func boolRef(value bool) *bool {
 	return &value
 }
 
-// applyKimiPlanOverrides 根据 Kimi planID 覆盖模型映射。
-// coding plan 使用 kimi-for-coding，普通按量使用 kimi-k2.7。
+// applyKimiPlanOverrides 仅为 Coding Plan 覆盖模型映射，其他套餐继承共享预设。
 func applyKimiPlanOverrides(config channelTargetConfig, target string, planID string) channelTargetConfig {
-	isCodingPlan := strings.HasPrefix(planID, "coding-")
+	if !strings.HasPrefix(planID, "coding-") {
+		return config
+	}
 
 	if target == TargetMessages {
-		if isCodingPlan {
-			// Coding Plan: 使用 kimi-for-coding
-			config.ModelMapping = map[string]string{
-				"fable":  "kimi-for-coding",
-				"haiku":  "kimi-for-coding",
-				"opus":   "kimi-for-coding",
-				"sonnet": "kimi-for-coding",
-			}
-		} else {
-			// 普通按量: 使用 kimi-k2.7
-			config.ModelMapping = map[string]string{
-				"fable":  "kimi-k2.7",
-				"haiku":  "kimi-k2.7",
-				"opus":   "kimi-k2.7",
-				"sonnet": "kimi-k2.7",
-			}
+		config.ModelMapping = map[string]string{
+			"fable":  "kimi-for-coding",
+			"haiku":  "kimi-for-coding",
+			"opus":   "kimi-for-coding",
+			"sonnet": "kimi-for-coding",
 		}
 	} else if target == TargetResponses {
-		if isCodingPlan {
-			// Coding Plan: 使用 kimi-for-coding
-			config.ModelMapping = map[string]string{
-				"astra":             "kimi-for-coding",
-				"codex-auto-review": "kimi-for-coding",
-				"luna":              "kimi-for-coding",
-				"sol":               "kimi-for-coding",
-				"terra":             "kimi-for-coding",
-			}
-		} else {
-			// 普通按量: 使用 kimi-k2.7
-			config.ModelMapping = map[string]string{
-				"astra":             "kimi-k2.7",
-				"codex-auto-review": "kimi-k2.7",
-				"luna":              "kimi-k2.7",
-				"sol":               "kimi-k2.7",
-				"terra":             "kimi-k2.7",
-			}
+		config.ModelMapping = map[string]string{
+			"astra":             "kimi-for-coding",
+			"codex-auto-review": "kimi-for-coding",
+			"luna":              "kimi-for-coding",
+			"sol":               "kimi-for-coding",
+			"terra":             "kimi-for-coding",
 		}
 	}
 

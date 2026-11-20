@@ -22,11 +22,11 @@ export interface CodexResponsesPreset {
 export const codexResponsesPresets: Record<string, CodexResponsesPreset> = {
   "deepseek": {
     "modelMapping": {
-      "astra": "deepseek-v4-pro",
-      "codex-auto-review": "deepseek-v4-pro",
-      "luna": "deepseek-v4-flash",
-      "sol": "deepseek-v4-flash",
-      "terra": "deepseek-v4-flash"
+      "astra": "deepseek-flash",
+      "codex-auto-review": "deepseek-flash",
+      "luna": "deepseek-flash",
+      "sol": "deepseek-flash",
+      "terra": "deepseek-flash"
     },
     "reasoningMapping": {
       "astra": "max",
@@ -38,7 +38,7 @@ export const codexResponsesPresets: Record<string, CodexResponsesPreset> = {
     "stripCodexClientTools": false,
     "stripImageGenerationTool": false,
     "normalizeNonstandardChatRoles": true,
-    "noVision": true,
+    "noVision": false,
     "noVisionModels": [],
     "visionFallbackModel": ""
   },
@@ -224,11 +224,11 @@ export const codexResponsesPresets: Record<string, CodexResponsesPreset> = {
   },
   "kimi": {
     "modelMapping": {
-      "astra": "kimi-k2.7",
-      "codex-auto-review": "kimi-k2.7",
-      "luna": "kimi-k2.7",
-      "sol": "kimi-k2.7",
-      "terra": "kimi-k2.7"
+      "astra": "kimi-k3.1-pro",
+      "codex-auto-review": "kimi-k3.1-pro",
+      "luna": "kimi-k3.1-pro",
+      "sol": "kimi-k3.1-pro",
+      "terra": "kimi-k3.1-pro"
     },
     "reasoningMapping": {},
     "reasoningParamStyle": "",
@@ -243,11 +243,11 @@ export const codexResponsesPresets: Record<string, CodexResponsesPreset> = {
   },
   "glm": {
     "modelMapping": {
-      "astra": "glm-5.2",
-      "codex-auto-review": "glm-5.2",
-      "luna": "glm-5.2",
-      "sol": "glm-5.2",
-      "terra": "glm-5.2"
+      "astra": "glm-5.3",
+      "codex-auto-review": "glm-5.3",
+      "luna": "glm-5.3",
+      "sol": "glm-5.3",
+      "terra": "glm-5.3"
     },
     "reasoningMapping": {},
     "reasoningParamStyle": "",

@@ -26,10 +26,10 @@ export interface ClaudeMessagesPreset {
 export const claudeMessagesPresets: Record<string, ClaudeMessagesPreset> = {
   "deepseek": {
     "modelMapping": {
-      "fable": "deepseek-v4-pro",
-      "haiku": "deepseek-v4-flash",
-      "opus": "deepseek-v4-pro",
-      "sonnet": "deepseek-v4-pro"
+      "fable": "deepseek-flash",
+      "haiku": "deepseek-flash",
+      "opus": "deepseek-flash",
+      "sonnet": "deepseek-flash"
     },
     "reasoningMapping": {},
     "reasoningParamStyle": "reasoning",
@@ -40,7 +40,7 @@ export const claudeMessagesPresets: Record<string, ClaudeMessagesPreset> = {
     "normalizeSystemRoleToTopLevel": true,
     "stripImageGenerationTool": true,
     "normalizeNonstandardChatRoles": false,
-    "noVision": true,
+    "noVision": false,
     "noVisionModels": [],
     "visionFallbackModel": "",
     "normalizeMetadataUserId": true,
@@ -136,10 +136,10 @@ export const claudeMessagesPresets: Record<string, ClaudeMessagesPreset> = {
   },
   "kimi": {
     "modelMapping": {
-      "fable": "kimi-k2.6",
-      "haiku": "kimi-k2.6",
-      "opus": "kimi-k2.6",
-      "sonnet": "kimi-k2.6"
+      "fable": "kimi-k3.1-pro",
+      "haiku": "kimi-k3.1-pro",
+      "opus": "kimi-k3.1-pro",
+      "sonnet": "kimi-k3.1-pro"
     },
     "reasoningMapping": {},
     "reasoningParamStyle": "",
@@ -156,10 +156,10 @@ export const claudeMessagesPresets: Record<string, ClaudeMessagesPreset> = {
   },
   "glm": {
     "modelMapping": {
-      "fable": "glm-5.2",
-      "haiku": "glm-5.2",
-      "opus": "glm-5.2",
-      "sonnet": "glm-5.2"
+      "fable": "glm-5.3",
+      "haiku": "glm-5.3",
+      "opus": "glm-5.3",
+      "sonnet": "glm-5.3"
     },
     "reasoningMapping": {},
     "reasoningParamStyle": "",
