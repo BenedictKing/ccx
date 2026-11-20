@@ -14,6 +14,7 @@
   <SubagentRoutingPanel
     v-if="isSubagentTab"
     :channel-type="channelType as TextChannelKind"
+    :available-channels="channelStore.currentChannelsData.channels"
     v-bind="$attrs"
   />
 

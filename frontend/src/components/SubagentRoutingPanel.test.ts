@@ -2,14 +2,14 @@
 
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { ApiError, type SubagentRoutingView } from '../services/api'
+import { ApiError, type Channel, type SubagentRoutingView } from '../services/api'
 import SubagentRoutingPanel from './SubagentRoutingPanel.vue'
 
 vi.mock('../i18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }))
 vi.mock('vue-router', () => ({ onBeforeRouteLeave: vi.fn(), onBeforeRouteUpdate: vi.fn() }))
 vi.mock('../services/api', async importOriginal => {
   const actual = await importOriginal<typeof import('../services/api')>()
-  return { ...actual, api: { getSubagentRouting: vi.fn(), updateSubagentRouting: vi.fn() } }
+  return { ...actual, api: { getSubagentRouting: vi.fn(), updateSubagentRouting: vi.fn(), getProtocolChannelModels: vi.fn() } }
 })
 const { api } = await import('../services/api')
 const cloneView = () => JSON.parse(JSON.stringify(view)) as SubagentRoutingView
@@ -55,9 +55,9 @@ const view: SubagentRoutingView = {
 }
 
 const wrappers: ReturnType<typeof mount>[] = []
-function mountPanel() {
+function mountPanel(availableChannels: Channel[] = []) {
   const wrapper = mount(SubagentRoutingPanel, {
-    props: { channelType: 'responses' },
+    props: { channelType: 'responses', availableChannels },
     attachTo: document.body,
     global: {
       stubs: {
@@ -77,9 +77,10 @@ function mountPanel() {
           emits: ['click'],
           template: '<button :disabled="disabled" @click="$emit(\'click\')"><slot /></button>'
         },
-        'v-combobox': {
-          props: ['modelValue', 'disabled'],
-          emits: ['update:modelValue'],
+        'v-autocomplete': {
+          name: 'ModelSelect',
+          props: ['modelValue', 'disabled', 'items'],
+          emits: ['update:modelValue', 'update:menu', 'update:search'],
           template: '<input class="policy-model" :value="modelValue" :disabled="disabled" @input="$emit(\'update:modelValue\', $event.target.value)">'
         },
         'v-text-field': true,
@@ -88,6 +89,7 @@ function mountPanel() {
         'v-alert': { template: '<div><slot /></div>' },
         'v-card': { template: '<div><slot /></div>' },
         'v-spacer': true,
+        'v-divider': true,
         'v-skeleton-loader': true
       }
     }
@@ -102,8 +104,9 @@ describe('SubagentRoutingPanel', () => {
     vi.unstubAllGlobals()
   })
   beforeEach(() => {
-    vi.mocked(api.getSubagentRouting).mockResolvedValue(cloneView())
+    vi.mocked(api.getSubagentRouting).mockReset().mockResolvedValue(cloneView())
     vi.mocked(api.updateSubagentRouting).mockReset()
+    vi.mocked(api.getProtocolChannelModels).mockReset()
   })
 
   it('接受未改动的迁移草稿也可直接启用', async () => {
@@ -140,7 +143,7 @@ describe('SubagentRoutingPanel', () => {
     expect(wrapper.emitted('success')).toHaveLength(1)
   })
 
-  it('保存冲突时保留草稿并提示重新加载', async () => {
+  it('保存冲突时保留草稿并自动获取最新配置', async () => {
     vi.mocked(api.updateSubagentRouting).mockRejectedValue(new ApiError('conflict', 409))
     const wrapper = mountPanel()
     await flushPromises()
@@ -153,6 +156,7 @@ describe('SubagentRoutingPanel', () => {
     await flushPromises()
     expect((wrapper.findAll('.policy-switch')[0].element as unknown as { checked: boolean }).checked).toBe(false)
     expect(wrapper.text()).toContain('subagentRouting.conflictHint')
+    expect(api.getSubagentRouting).toHaveBeenCalledTimes(2)
   })
 
   it('慢速保存期间锁定所有草稿操作，失败后恢复编辑并保留输入', async () => {
@@ -202,5 +206,66 @@ describe('SubagentRoutingPanel', () => {
     await flushPromises()
     expect((wrapper.find('.policy-model').element as unknown as { value: string }).value).toBe('haiku')
     expect(wrapper.emitted('success')).toBeUndefined()
+  })
+
+  it('后台更新渠道时保留模型、开关与顺序，取消后使用最新配置', async () => {
+    const wrapper = mountPanel()
+    await flushPromises()
+    await wrapper.find('.policy-model').setValue('luna')
+    await wrapper.findAll('.policy-switch')[0].setValue(false)
+    const next = cloneView()
+    next.revision = 'r2'
+    next.policy.model = 'astra'
+    next.policy.channels.reverse()
+    next.channels.reverse()
+    next.channels[1].channelName = 'A updated'
+    vi.mocked(api.getSubagentRouting).mockResolvedValue(next)
+    await wrapper.setProps({ availableChannels: [] })
+    await flushPromises()
+    expect(wrapper.text()).toContain('A updated')
+    expect(wrapper.find('.policy-model').element).toHaveProperty('value', 'luna')
+    expect(wrapper.findAll('.policy-switch')[0].element).toHaveProperty('checked', false)
+    expect(wrapper.text().indexOf('A updated')).toBeLessThan(wrapper.text().indexOf('B'))
+    await wrapper.findAll('button').find(button => button.text().includes('app.actions.cancel'))!.trigger('click')
+    expect(wrapper.find('.policy-model').element).toHaveProperty('value', 'astra')
+    await wrapper.findAll('.policy-switch')[0].setValue(false)
+    vi.mocked(api.updateSubagentRouting).mockResolvedValue(next)
+    await wrapper.findAll('button').find(button => button.text().includes('app.actions.save'))!.trigger('click')
+    await flushPromises()
+    expect(api.updateSubagentRouting).toHaveBeenCalledWith('responses', 'r2', expect.objectContaining({ model: 'astra' }))
+  })
+
+  it('干净页面自动采用后端变化，刷新途中开始编辑也不会被覆盖', async () => {
+    const wrapper = mountPanel()
+    await flushPromises()
+    const next = cloneView()
+    next.policy.model = 'astra'
+    vi.mocked(api.getSubagentRouting).mockResolvedValue(next)
+    await wrapper.setProps({ availableChannels: [] })
+    await flushPromises()
+    expect(wrapper.find('.policy-model').element).toHaveProperty('value', 'astra')
+    let resolveLoad!: (_view: SubagentRoutingView) => void
+    vi.mocked(api.getSubagentRouting).mockImplementation(() => new Promise(resolve => { resolveLoad = resolve }))
+    await wrapper.setProps({ availableChannels: [] })
+    expect(wrapper.find('.policy-model').attributes('disabled')).toBeUndefined()
+    await wrapper.find('.policy-model').setValue('luna')
+    resolveLoad(cloneView())
+    await flushPromises()
+    expect(wrapper.find('.policy-model').element).toHaveProperty('value', 'luna')
+  })
+
+  it('模型搜索不修改保存值，清空选择保存为空而非占位文案', async () => {
+    const wrapper = mountPanel()
+    await flushPromises()
+    const select = wrapper.findComponent({ name: 'ModelSelect' })
+    select.vm.$emit('update:search', 'uuu')
+    await flushPromises()
+    expect(wrapper.find('.policy-model').element).toHaveProperty('value', 'sol')
+    select.vm.$emit('update:modelValue', null)
+    await flushPromises()
+    vi.mocked(api.updateSubagentRouting).mockResolvedValue({ ...cloneView(), policy: { ...view.policy, model: '' } })
+    await wrapper.findAll('button').find(button => button.text().includes('app.actions.save'))!.trigger('click')
+    await flushPromises()
+    expect(api.updateSubagentRouting).toHaveBeenCalledWith('responses', 'r1', expect.objectContaining({ model: '' }))
   })
 })

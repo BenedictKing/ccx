@@ -21,6 +21,7 @@ import { VTextField } from 'vuetify/components/VTextField'
 import { VTextarea } from 'vuetify/components/VTextarea'
 import { VSelect } from 'vuetify/components/VSelect'
 import { VCombobox } from 'vuetify/components/VCombobox'
+import { VAutocomplete } from 'vuetify/components/VAutocomplete'
 import { VSwitch } from 'vuetify/components/VSwitch'
 import { VCheckboxBtn } from 'vuetify/components/VCheckbox'
 import { VBtn } from 'vuetify/components/VBtn'
@@ -578,6 +579,7 @@ export default createVuetify({
     VTextarea,
     VSelect,
     VCombobox,
+    VAutocomplete,
     VSwitch,
     VCheckboxBtn,
     VBtn,

@@ -197,6 +197,13 @@ export class ApiService {
     return this.request(`/${type}/channels/subagent-routing`)
   }
 
+  async getProtocolChannelModels(type: TextChannelKind, id: number, request: ChannelModelsRequest): Promise<ModelsResponse> {
+    return this.request(`/${type}/channels/${id}/models`, {
+      method: 'POST',
+      body: JSON.stringify(request)
+    })
+  }
+
   async updateSubagentRouting(type: TextChannelKind, revision: string, policy: SubagentRoutingView['policy']): Promise<SubagentRoutingView> {
     return this.request(`/${type}/channels/subagent-routing`, {
       method: 'PUT',
