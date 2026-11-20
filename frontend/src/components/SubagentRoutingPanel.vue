@@ -47,9 +47,10 @@
       />
 
       <div class="list-toolbar">
-        <div class="d-flex align-center ga-2">
-          <span class="text-subtitle-2">{{ t('subagentRouting.channelSequence') }}</span>
-          <v-chip size="x-small" variant="tonal">{{ enabledCount }}/{{ channels.length }}</v-chip>
+        <div class="text-subtitle-2 text-medium-emphasis d-flex align-center flex-shrink-0 text-no-wrap">
+          <v-icon size="small" class="mr-1" color="success">mdi-play-circle</v-icon>
+          {{ t('subagentRouting.channelSequence') }}
+          <v-chip size="x-small" class="ml-2">{{ enabledCount }}</v-chip>
         </div>
         <v-text-field
           v-model="searchQuery"
