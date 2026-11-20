@@ -360,6 +360,9 @@ func (p *ResponsesProvider) buildResponsesProviderRequestBody(c *gin.Context, bo
 		providerReq = convertedReq
 	}
 
+	if reqMap, ok := providerReq.(map[string]interface{}); ok {
+		config.NormalizeReasoningRequestForModel(reqMap, upstream)
+	}
 	if upstream.NormalizeNonstandardChatRoles {
 		if reqMap, ok := providerReq.(map[string]interface{}); ok {
 			converters.NormalizeNonstandardChatRolesInRequest(reqMap)

@@ -2846,7 +2846,6 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
     "thinkingMode": "thinking",
     "reasoningEfforts": [
       "low",
-      "medium",
       "high",
       "max"
     ],

@@ -146,7 +146,8 @@
         "luna": "kimi-k3.1-pro",
         "sol": "kimi-k3.1-pro",
         "terra": "kimi-k3.1-pro"
-      }
+      },
+      "reasoningParamStyle": "reasoning_effort"
     },
     "glm": {
       "modelMapping": {
@@ -155,7 +156,9 @@
         "luna": "glm-5.3",
         "sol": "glm-5.3",
         "terra": "glm-5.3"
-      }
+      },
+      "reasoningParamStyle": "reasoning_effort",
+      "noVision": true
     },
     "sensenova": {
       "modelMapping": {

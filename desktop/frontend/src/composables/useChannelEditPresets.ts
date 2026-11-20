@@ -54,12 +54,16 @@ export function useChannelEditPresets(options: ChannelEditPresetOptions) {
   function applyClaudePreset(name: string) {
     const preset = claudeChannelPresets[name.toLowerCase()]
     if (!preset) return
+    // 映射源名称取决于客户端入口，上游协议只决定兼容选项。
+    const mappingPreset = options.channelType() === 'responses'
+      ? codexResponsesPresets[name.toLowerCase()] || preset
+      : preset
     const noVisionSet = new Set(preset.noVisionModels)
-    options.modelMappingRows.value = Object.entries(preset.modelMapping).map(([source, target]) => ({
+    options.modelMappingRows.value = Object.entries(mappingPreset.modelMapping).map(([source, target]) => ({
       id: options.nextRowId(),
       source,
       target,
-      reasoning: preset.reasoningMapping[source] || '',
+      reasoning: mappingPreset.reasoningMapping[source] || '',
       noVision: noVisionSet.has(target),
     }))
     options.form.reasoningParamStyle = preset.reasoningParamStyle as typeof options.form.reasoningParamStyle

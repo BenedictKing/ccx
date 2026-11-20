@@ -282,9 +282,9 @@ func Presets() []ProviderPreset {
 			ChatCompatible:      true,
 			ResponsesCompatible: true,
 			Plans: []ProviderPlan{
-				{ID: "anthropic", Label: "Anthropic-compatible", BaseURL: "https://open.bigmodel.cn/api/anthropic", Description: "Claude Messages 原生入口", Recommended: true},
-				{ID: "coding", Label: "Coding Plan (OpenAI)", BaseURL: "https://open.bigmodel.cn/api/coding/paas/v4#", Description: "Coding Plan Chat / Responses 通用入口"},
-				{ID: "openai-chat", Label: "通用 (OpenAI)", BaseURL: "https://open.bigmodel.cn/api/paas/v4#", Description: "通用 Chat / Responses 入口"},
+				{ID: "openai-chat", Label: "通用 (OpenAI)", BaseURL: "https://open.bigmodel.cn/api/paas/v4#", Description: "GLM-5.3 通用入口，Messages / Responses 由网关转换", Recommended: true},
+				{ID: "coding", Label: "Coding Plan (OpenAI)", BaseURL: "https://open.bigmodel.cn/api/coding/paas/v4#", Description: "Coding Plan Chat 入口，Messages / Responses 由网关转换"},
+				{ID: "anthropic", Label: "Anthropic-compatible", BaseURL: "https://open.bigmodel.cn/api/anthropic", Description: "仅适用于未订阅过 Coding Plan 的账户"},
 			},
 			Targets:       defaultTargets(),
 			DefaultTarget: TargetMessages,
@@ -677,7 +677,7 @@ func FilterPlansForTarget(preset ProviderPreset, target string) []ProviderPlan {
 }
 
 func usesChatUpstreamForMessages(provider string) bool {
-	return provider == ProviderOpenCodeZen || provider == ProviderOpenCodeGo
+	return provider == ProviderOpenCodeZen || provider == ProviderOpenCodeGo || provider == ProviderGLM
 }
 
 func isChatUpstreamPlan(plan ProviderPlan) bool {
@@ -858,6 +858,9 @@ func applyTargetDefaults(payload *ChannelPayload, provider string, target string
 	switch target {
 	case TargetMessages:
 		payload.ServiceType = "claude"
+		if provider == ProviderGLM && planID != "anthropic" {
+			payload.ServiceType = "openai"
+		}
 		payload.StripEmptyTextBlocks = true
 		payload.StripThoughtSignature = true
 		if provider == ProviderOpenCodeGo {

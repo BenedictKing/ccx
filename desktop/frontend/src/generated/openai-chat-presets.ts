@@ -73,6 +73,36 @@ export const openaiChatPresets: Record<string, OpenAIChatPreset> = {
     ],
     "visionFallbackModel": "MiniMax-M2.7"
   },
+  "kimi": {
+    "modelMapping": {},
+    "reasoningMapping": {},
+    "reasoningParamStyle": "reasoning_effort",
+    "authHeader": "",
+    "passbackReasoningContent": false,
+    "passbackThinkingBlocks": false,
+    "stripEmptyTextBlocks": false,
+    "normalizeSystemRoleToTopLevel": false,
+    "stripImageGenerationTool": false,
+    "normalizeNonstandardChatRoles": false,
+    "noVision": false,
+    "noVisionModels": [],
+    "visionFallbackModel": ""
+  },
+  "glm": {
+    "modelMapping": {},
+    "reasoningMapping": {},
+    "reasoningParamStyle": "reasoning_effort",
+    "authHeader": "",
+    "passbackReasoningContent": false,
+    "passbackThinkingBlocks": false,
+    "stripEmptyTextBlocks": false,
+    "normalizeSystemRoleToTopLevel": false,
+    "stripImageGenerationTool": false,
+    "normalizeNonstandardChatRoles": false,
+    "noVision": true,
+    "noVisionModels": [],
+    "visionFallbackModel": ""
+  },
   "runapi": {
     "modelMapping": {},
     "reasoningMapping": {},

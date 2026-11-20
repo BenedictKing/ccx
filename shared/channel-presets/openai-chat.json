@@ -15,6 +15,13 @@
       "noVisionModels": ["glm-5.2", "deepseek-v4-flash"],
       "visionFallbackModel": "MiniMax-M2.7"
     },
+    "kimi": {
+      "reasoningParamStyle": "reasoning_effort"
+    },
+    "glm": {
+      "reasoningParamStyle": "reasoning_effort",
+      "noVision": true
+    },
     "runapi": {},
     "unity2": {},
     "openrouter": {},

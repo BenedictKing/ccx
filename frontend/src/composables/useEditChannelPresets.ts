@@ -1,5 +1,4 @@
 import { computed, type ComputedRef } from 'vue'
-import type { Channel } from '../services/api'
 import { claudeMessagesPresets } from '../generated/claudeMessagesPresets'
 import { codexResponsesPresets } from '../generated/codexResponsesPresets'
 
@@ -56,6 +55,11 @@ export function useEditChannelPresets(options: EditChannelPresetOptions) {
 
   const applyClaudeChannelPreset = (preset: keyof typeof claudeChannelPresets) => {
     const presetConfig = claudeChannelPresets[preset]
+    if (!presetConfig) return
+    // 映射源名称取决于客户端入口，上游协议只决定兼容选项。
+    const mappingConfig = options.channelType.value === 'responses'
+      ? codexResponsesPresets[preset] || presetConfig
+      : presetConfig
     options.form.passbackReasoningContent = presetConfig.passbackReasoningContent
     options.form.passbackThinkingBlocks = presetConfig.passbackThinkingBlocks
     options.form.stripEmptyTextBlocks = presetConfig.stripEmptyTextBlocks
@@ -69,8 +73,8 @@ export function useEditChannelPresets(options: EditChannelPresetOptions) {
     options.form.noVisionModels = [...presetConfig.noVisionModels]
     options.form.visionFallbackModel = presetConfig.visionFallbackModel
     options.form.visionFallbackReasoningEffort = ''
-    options.form.modelMapping = { ...presetConfig.modelMapping }
-    options.form.reasoningMapping = { ...(presetConfig.reasoningMapping || {}) } as FormLike['reasoningMapping']
+    options.form.modelMapping = { ...mappingConfig.modelMapping }
+    options.form.reasoningMapping = { ...mappingConfig.reasoningMapping } as FormLike['reasoningMapping']
     options.form.reasoningParamStyle = presetConfig.reasoningParamStyle as FormLike['reasoningParamStyle']
     if (presetConfig.serviceType) {
       options.form.serviceType = presetConfig.serviceType as FormLike['serviceType']

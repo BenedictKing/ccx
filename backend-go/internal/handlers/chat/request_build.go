@@ -43,7 +43,7 @@ func buildChatCompletionRequestBody(
 	includeAdvancedOptions bool,
 ) ([]byte, error) {
 	needsAdvancedOptions := includeAdvancedOptions && (config.ResolveReasoningEffort(model, upstream) != "" || upstream.TextVerbosity != "" || upstream.FastMode)
-	needsRewrite := needsAdvancedOptions || mappedModel != model || upstream.NormalizeNonstandardChatRoles || upstream.StripImageGenerationTool
+	needsRewrite := needsAdvancedOptions || mappedModel != model || upstream.NormalizeNonstandardChatRoles || upstream.StripImageGenerationTool || upstream.ReasoningParamStyle == "reasoning_effort"
 	if !needsRewrite {
 		return bodyBytes, nil
 	}
@@ -72,6 +72,7 @@ func buildChatCompletionRequestBody(
 		}
 	}
 
+	config.NormalizeReasoningRequestForModel(reqMap, upstream)
 	if upstream.NormalizeNonstandardChatRoles {
 		converters.NormalizeNonstandardChatRolesInRequest(reqMap)
 	}

@@ -269,17 +269,19 @@ func TestBuildPayload(t *testing.T) {
 		{
 			name:          "glm chat",
 			req:           CreateChannelRequest{Provider: ProviderGLM, Target: TargetChat, APIKey: "sk-test"},
-			wantBaseURL:   "https://open.bigmodel.cn/api/coding/paas/v4#",
+			wantBaseURL:   "https://open.bigmodel.cn/api/paas/v4#",
 			wantService:   "openai",
 			wantNormalize: true,
+			wantVision:    true,
 		},
 		{
 			name:           "glm responses",
 			req:            CreateChannelRequest{Provider: ProviderGLM, Target: TargetResponses, APIKey: "sk-test"},
-			wantBaseURL:    "https://open.bigmodel.cn/api/coding/paas/v4#",
+			wantBaseURL:    "https://open.bigmodel.cn/api/paas/v4#",
 			wantService:    "openai",
 			wantCodex:      true,
 			wantStripCodex: true,
+			wantVision:     true,
 		},
 		{
 			name:          "minimax chat",
@@ -530,10 +532,11 @@ func TestBuildPayload(t *testing.T) {
 		{
 			name:           "glm responses auto-review redirect",
 			req:            CreateChannelRequest{Provider: ProviderGLM, Target: TargetResponses, APIKey: "sk-test"},
-			wantBaseURL:    "https://open.bigmodel.cn/api/coding/paas/v4#",
+			wantBaseURL:    "https://open.bigmodel.cn/api/paas/v4#",
 			wantService:    "openai",
 			wantCodex:      true,
 			wantStripCodex: true,
+			wantVision:     true,
 			wantModelMap:   map[string]string{"sol": "glm-5.3", "astra": "glm-5.3"},
 		},
 		{

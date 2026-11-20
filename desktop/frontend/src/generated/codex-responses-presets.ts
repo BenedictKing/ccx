@@ -231,7 +231,7 @@ export const codexResponsesPresets: Record<string, CodexResponsesPreset> = {
       "terra": "kimi-k3.1-pro"
     },
     "reasoningMapping": {},
-    "reasoningParamStyle": "",
+    "reasoningParamStyle": "reasoning_effort",
     "codexNativeToolPassthrough": false,
     "codexToolCompat": true,
     "stripCodexClientTools": true,
@@ -250,13 +250,13 @@ export const codexResponsesPresets: Record<string, CodexResponsesPreset> = {
       "terra": "glm-5.3"
     },
     "reasoningMapping": {},
-    "reasoningParamStyle": "",
+    "reasoningParamStyle": "reasoning_effort",
     "codexNativeToolPassthrough": false,
     "codexToolCompat": true,
     "stripCodexClientTools": true,
     "stripImageGenerationTool": false,
     "normalizeNonstandardChatRoles": false,
-    "noVision": false,
+    "noVision": true,
     "noVisionModels": [],
     "visionFallbackModel": ""
   },

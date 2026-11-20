@@ -142,7 +142,7 @@ export const claudeMessagesPresets: Record<string, ClaudeMessagesPreset> = {
       "sonnet": "kimi-k3.1-pro"
     },
     "reasoningMapping": {},
-    "reasoningParamStyle": "",
+    "reasoningParamStyle": "reasoning_effort",
     "authHeader": "",
     "passbackReasoningContent": false,
     "passbackThinkingBlocks": false,
@@ -162,7 +162,7 @@ export const claudeMessagesPresets: Record<string, ClaudeMessagesPreset> = {
       "sonnet": "glm-5.3"
     },
     "reasoningMapping": {},
-    "reasoningParamStyle": "",
+    "reasoningParamStyle": "reasoning_effort",
     "authHeader": "",
     "passbackReasoningContent": false,
     "passbackThinkingBlocks": false,
@@ -170,7 +170,7 @@ export const claudeMessagesPresets: Record<string, ClaudeMessagesPreset> = {
     "normalizeSystemRoleToTopLevel": true,
     "stripImageGenerationTool": false,
     "normalizeNonstandardChatRoles": false,
-    "noVision": false,
+    "noVision": true,
     "noVisionModels": [],
     "visionFallbackModel": ""
   },

@@ -69,6 +69,7 @@
         "opus": "kimi-k3.1-pro",
         "sonnet": "kimi-k3.1-pro"
       },
+      "reasoningParamStyle": "reasoning_effort",
       "normalizeSystemRoleToTopLevel": true
     },
     "glm": {
@@ -78,7 +79,9 @@
         "opus": "glm-5.3",
         "sonnet": "glm-5.3"
       },
-      "normalizeSystemRoleToTopLevel": true
+      "reasoningParamStyle": "reasoning_effort",
+      "normalizeSystemRoleToTopLevel": true,
+      "noVision": true
     },
     "sensenova": {
       "modelMapping": {

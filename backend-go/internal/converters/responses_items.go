@@ -161,15 +161,20 @@ func responsesContentBlockToOpenAIChatPart(block map[string]interface{}) map[str
 			return nil
 		}
 		return map[string]interface{}{"type": "text", "text": text}
-	case "input_image", "image_url":
-		imageURL := normalizeResponsesImageURL(block)
-		if imageURL == nil {
-			return nil
-		}
-		return map[string]interface{}{"type": "image_url", "image_url": imageURL}
+	case "input_image", "image_url", "image":
+		return ImageToOpenAIChatPart(block)
 	default:
 		return nil
 	}
+}
+
+// ImageToOpenAIChatPart 复用 Claude/Responses 的 URL 与 base64 图片来源转换。
+func ImageToOpenAIChatPart(block map[string]interface{}) map[string]interface{} {
+	imageURL := normalizeResponsesImageURL(block)
+	if imageURL == nil {
+		return nil
+	}
+	return map[string]interface{}{"type": "image_url", "image_url": imageURL}
 }
 
 func normalizeResponsesImageURL(block map[string]interface{}) map[string]interface{} {

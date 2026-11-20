@@ -59,8 +59,12 @@ func (p *OpenAIProvider) ConvertToProviderRequest(c *gin.Context, upstream *conf
 		"model":                 openaiReq.Model,
 		"messages":              openaiReq.Messages,
 		"stream":                openaiReq.Stream,
-		"temperature":           openaiReq.Temperature,
 		"max_completion_tokens": openaiReq.MaxCompletionTokens,
+	}
+	// 未指定温度时使用上游默认值，避免给始终思考模型注入零值。
+	var rawRequest map[string]json.RawMessage
+	if json.Unmarshal(originalBodyBytes, &rawRequest) == nil && rawRequest["temperature"] != nil {
+		requestMap["temperature"] = openaiReq.Temperature
 	}
 	if len(openaiReq.Tools) > 0 {
 		requestMap["tools"] = openaiReq.Tools
@@ -70,8 +74,9 @@ func (p *OpenAIProvider) ConvertToProviderRequest(c *gin.Context, upstream *conf
 		requestMap["user_id"] = userID
 	}
 	if effort := config.ResolveReasoningEffort(claudeReq.Model, upstream); effort != "" {
-		requestMap["reasoning"] = map[string]interface{}{"effort": effort}
+		config.ApplyReasoningParamStyle(requestMap, upstream.ReasoningParamStyle, effort)
 	}
+	config.NormalizeReasoningRequestForModel(requestMap, upstream)
 	if upstream.TextVerbosity != "" {
 		requestMap["text"] = map[string]interface{}{"verbosity": upstream.TextVerbosity}
 	}
@@ -166,6 +171,8 @@ func (p *OpenAIProvider) convertMessage(msg types.ClaudeMessage) []types.OpenAIM
 	}
 
 	textContents := []string{}
+	contentParts := []map[string]interface{}{}
+	hasImage := false
 	reasoningContents := []string{}
 	toolCalls := []types.OpenAIToolCall{}
 	toolResults := []types.OpenAIMessage{}
@@ -187,6 +194,12 @@ func (p *OpenAIProvider) convertMessage(msg types.ClaudeMessage) []types.OpenAIM
 		case "text":
 			if text, ok := content["text"].(string); ok {
 				textContents = append(textContents, text)
+				contentParts = append(contentParts, map[string]interface{}{"type": "text", "text": text})
+			}
+		case "image":
+			if part := converters.ImageToOpenAIChatPart(content); part != nil {
+				contentParts = append(contentParts, part)
+				hasImage = true
 			}
 
 		case "tool_use":
@@ -216,10 +229,32 @@ func (p *OpenAIProvider) convertMessage(msg types.ClaudeMessage) []types.OpenAIM
 				contentStr = string(contentJSON)
 			}
 
+			var toolContent interface{} = contentStr
+			if blocks, ok := resultContent.([]interface{}); ok {
+				parts := []map[string]interface{}{}
+				containsImage := false
+				for _, raw := range blocks {
+					block, ok := raw.(map[string]interface{})
+					if !ok {
+						continue
+					}
+					if block["type"] == "text" {
+						parts = append(parts, map[string]interface{}{"type": "text", "text": block["text"]})
+					} else if block["type"] == "image" {
+						if part := converters.ImageToOpenAIChatPart(block); part != nil {
+							parts = append(parts, part)
+							containsImage = true
+						}
+					}
+				}
+				if containsImage {
+					toolContent = parts
+				}
+			}
 			toolResults = append(toolResults, types.OpenAIMessage{
 				Role:       "tool",
 				ToolCallID: toolUseID,
-				Content:    contentStr,
+				Content:    toolContent,
 			})
 		}
 	}
@@ -228,14 +263,16 @@ func (p *OpenAIProvider) convertMessage(msg types.ClaudeMessage) []types.OpenAIM
 	messages = append(messages, toolResults...)
 
 	// 添加文本和工具调用
-	if len(textContents) > 0 || len(reasoningContents) > 0 || len(toolCalls) > 0 {
+	if len(contentParts) > 0 || len(reasoningContents) > 0 || len(toolCalls) > 0 {
 		role := normalizeRole(msg.Role)
 		if role != "tool" {
 			openaiMsg := types.OpenAIMessage{
 				Role: role,
 			}
 
-			if len(textContents) > 0 {
+			if hasImage {
+				openaiMsg.Content = contentParts
+			} else if len(textContents) > 0 {
 				openaiMsg.Content = strings.Join(textContents, "\n")
 			} else {
 				openaiMsg.Content = nil

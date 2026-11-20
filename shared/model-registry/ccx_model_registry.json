@@ -1956,7 +1956,6 @@
       "thinkingMode": "thinking",
       "reasoningEfforts": [
         "low",
-        "medium",
         "high",
         "max"
       ],

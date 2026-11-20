@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -194,7 +195,7 @@ func ResolveReasoningEffort(model string, upstream *UpstreamConfig) string {
 		return ""
 	}
 	if effort, ok := upstream.ReasoningMapping[model]; ok {
-		return NormalizeReasoningEffortForUpstream(upstream, effort)
+		return normalizeModelReasoningEffort(RedirectModel(model, upstream), NormalizeReasoningEffortForUpstream(upstream, effort))
 	}
 	type mapping struct {
 		source string
@@ -209,7 +210,7 @@ func ResolveReasoningEffort(model string, upstream *UpstreamConfig) string {
 	})
 	for _, m := range mappings {
 		if strings.Contains(model, m.source) {
-			return NormalizeReasoningEffortForUpstream(upstream, m.effort)
+			return normalizeModelReasoningEffort(RedirectModel(model, upstream), NormalizeReasoningEffortForUpstream(upstream, m.effort))
 		}
 	}
 	return ""
@@ -243,6 +244,58 @@ func NormalizeReasoningObjectForUpstream(req map[string]interface{}, upstream *U
 	effort, _ := reasoning["effort"].(string)
 	if normalized := NormalizeReasoningEffortForUpstream(upstream, effort); normalized != effort {
 		reasoning["effort"] = normalized
+	}
+}
+
+// NormalizeReasoningRequestForModel 仅在渠道显式选择 reasoning_effort 兼容样式时转换客户端参数。
+func NormalizeReasoningRequestForModel(req map[string]interface{}, upstream *UpstreamConfig) {
+	if req == nil || upstream == nil || upstream.ReasoningParamStyle != "reasoning_effort" {
+		return
+	}
+	effort, _ := req["reasoning_effort"].(string)
+	if effort == "" {
+		if reasoning, ok := req["reasoning"].(map[string]interface{}); ok {
+			effort, _ = reasoning["effort"].(string)
+		}
+	}
+	model, _ := req["model"].(string)
+	capability := ResolveUpstreamCapability(model, nil, nil).Capability
+	if capability.Provider == "zai" && capability.ThinkingMode == "thinking" &&
+		slices.Equal(capability.ReasoningEfforts, []string{"low", "high", "max"}) {
+		if thinking, ok := req["thinking"].(map[string]interface{}); ok && thinking["type"] == "disabled" {
+			thinking["type"] = "enabled"
+			if effort == "" {
+				effort = "low"
+			}
+		}
+	}
+	normalized := normalizeModelReasoningEffort(model, effort)
+	ApplyReasoningParamStyle(req, "reasoning_effort", normalized)
+	if effort != "" && normalized == "" {
+		delete(req, "reasoning_effort")
+	}
+}
+
+func normalizeModelReasoningEffort(model, effort string) string {
+	if effort == "" {
+		return ""
+	}
+	capability := ResolveUpstreamCapability(model, nil, nil).Capability
+	if (capability.Provider != "moonshot" && capability.Provider != "zai") ||
+		!slices.Equal(capability.ReasoningEfforts, []string{"low", "high", "max"}) {
+		return effort
+	}
+	switch effort {
+	case "none", "off", "minimal":
+		return "low"
+	case "medium":
+		return "high"
+	case "xhigh":
+		return "max"
+	case "auto":
+		return ""
+	default:
+		return effort
 	}
 }
 

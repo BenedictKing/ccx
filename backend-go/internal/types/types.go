@@ -130,7 +130,7 @@ type OpenAIRequest struct {
 // OpenAIMessage OpenAI 消息
 type OpenAIMessage struct {
 	Role             string           `json:"role"`
-	Content          interface{}      `json:"content"` // string 或 null
+	Content          interface{}      `json:"content"` // string、图文 content 数组或 null
 	ReasoningContent string           `json:"reasoning_content,omitempty"`
 	Reasoning        string           `json:"reasoning,omitempty"` // vLLM 兼容：新版 vLLM 使用 reasoning 而非 reasoning_content
 	ToolCalls        []OpenAIToolCall `json:"tool_calls,omitempty"`
