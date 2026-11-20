@@ -22,34 +22,6 @@
         <div v-if="showModelMappingPresets" class="d-flex align-center flex-wrap ga-2 mb-4">
           <div class="text-caption text-medium-emphasis">{{ t('addChannel.oneClickSetup') }}</div>
           <v-btn
-            size="small"
-            variant="tonal"
-            color="primary"
-            prepend-icon="mdi-lightning-bolt"
-            @click="$emit('apply-preset', 'gpt-5.5')"
-          >
-            gpt-5.5
-          </v-btn>
-          <v-btn
-            size="small"
-            variant="tonal"
-            color="secondary"
-            prepend-icon="mdi-lightning-bolt"
-            @click="$emit('apply-preset', 'gpt-5.4')"
-          >
-            gpt-5.4
-          </v-btn>
-          <v-btn
-            v-if="showMessagesOpenAIChannelPresets"
-            size="small"
-            variant="tonal"
-            color="secondary"
-            prepend-icon="mdi-lightning-bolt"
-            @click="$emit('apply-preset', 'mimo')"
-          >
-            MiMo
-          </v-btn>
-          <v-btn
             v-if="showMessagesOpenAIChannelPresets"
             size="small"
             variant="tonal"
@@ -58,6 +30,26 @@
             @click="$emit('apply-preset', 'deepseek')"
           >
             DeepSeek
+          </v-btn>
+          <v-btn
+            v-if="showMessagesOpenAIChannelPresets"
+            size="small"
+            variant="tonal"
+            color="secondary"
+            prepend-icon="mdi-lightning-bolt"
+            @click="$emit('apply-preset', 'kimi')"
+          >
+            Kimi
+          </v-btn>
+          <v-btn
+            v-if="showMessagesOpenAIChannelPresets"
+            size="small"
+            variant="tonal"
+            color="secondary"
+            prepend-icon="mdi-lightning-bolt"
+            @click="$emit('apply-preset', 'glm')"
+          >
+            GLM
           </v-btn>
         </div>
 
@@ -68,15 +60,6 @@
             variant="tonal"
             color="secondary"
             prepend-icon="mdi-lightning-bolt"
-            @click="$emit('apply-preset', 'mimo')"
-          >
-            MiMo
-          </v-btn>
-          <v-btn
-            size="small"
-            variant="tonal"
-            color="secondary"
-            prepend-icon="mdi-lightning-bolt"
             @click="$emit('apply-preset', 'deepseek')"
           >
             DeepSeek
@@ -86,9 +69,18 @@
             variant="tonal"
             color="secondary"
             prepend-icon="mdi-lightning-bolt"
-            @click="$emit('apply-preset', 'minimax')"
+            @click="$emit('apply-preset', 'kimi')"
           >
-            MiniMax
+            Kimi
+          </v-btn>
+          <v-btn
+            size="small"
+            variant="tonal"
+            color="secondary"
+            prepend-icon="mdi-lightning-bolt"
+            @click="$emit('apply-preset', 'glm')"
+          >
+            GLM
           </v-btn>
         </div>
 
@@ -99,15 +91,6 @@
             variant="tonal"
             color="secondary"
             prepend-icon="mdi-lightning-bolt"
-            @click="$emit('apply-preset', 'mimo')"
-          >
-            MiMo
-          </v-btn>
-          <v-btn
-            size="small"
-            variant="tonal"
-            color="secondary"
-            prepend-icon="mdi-lightning-bolt"
             @click="$emit('apply-preset', 'deepseek')"
           >
             DeepSeek
@@ -117,9 +100,18 @@
             variant="tonal"
             color="secondary"
             prepend-icon="mdi-lightning-bolt"
-            @click="$emit('apply-preset', 'minimax')"
+            @click="$emit('apply-preset', 'kimi')"
           >
-            MiniMax
+            Kimi
+          </v-btn>
+          <v-btn
+            size="small"
+            variant="tonal"
+            color="secondary"
+            prepend-icon="mdi-lightning-bolt"
+            @click="$emit('apply-preset', 'glm')"
+          >
+            GLM
           </v-btn>
         </div>
 

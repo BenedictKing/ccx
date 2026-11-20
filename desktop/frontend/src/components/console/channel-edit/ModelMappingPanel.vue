@@ -150,22 +150,9 @@ function fromSelectValue(value: string): ReasoningEffort | '' {
         <Zap class="h-3 w-3 text-primary" />
         {{ t('addChannel.oneClickSetup') }}
       </div>
-      <template v-if="showModelMappingPresets">
-        <Button
-          v-for="tag in ['gpt-5.5', 'gpt-5.4']"
-          :key="'openai-' + tag"
-          type="button"
-          variant="outline"
-          size="sm"
-          class="h-6 rounded-md border border-border/70 bg-background px-2.5 text-[10px] font-medium text-muted-foreground hover:border-primary/40 hover:text-primary hover:bg-primary/5 shadow-3xs"
-          @click="emit('applyPreset', tag)"
-        >
-          {{ tag }}
-        </Button>
-      </template>
       <template v-if="showMessagesOpenAIChannelPresets">
         <Button
-          v-for="tag in ['MiMo', 'DeepSeek']"
+          v-for="tag in ['DeepSeek', 'Kimi', 'GLM']"
           :key="'messages-openai-' + tag"
           type="button"
           variant="outline"
@@ -178,7 +165,7 @@ function fromSelectValue(value: string): ReasoningEffort | '' {
       </template>
       <template v-if="showClaudeChannelPresets">
         <Button
-          v-for="tag in ['MiMo', 'DeepSeek', 'MiniMax']"
+          v-for="tag in ['DeepSeek', 'Kimi', 'GLM']"
           :key="'claude-' + tag"
           type="button"
           variant="outline"
@@ -191,7 +178,7 @@ function fromSelectValue(value: string): ReasoningEffort | '' {
       </template>
       <template v-if="showCodexResponsesPresets">
         <Button
-          v-for="tag in ['MiMo', 'DeepSeek', 'MiniMax']"
+          v-for="tag in ['DeepSeek', 'Kimi', 'GLM']"
           :key="'codex-' + tag"
           type="button"
           variant="outline"

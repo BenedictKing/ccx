@@ -26,6 +26,7 @@ const passthroughStub = defineComponent({
 
 const buttonStub = defineComponent({
   name: 'VBtn',
+  emits: ['click'],
   template: '<button @click="$emit(\'click\')"><slot /></button>',
 })
 
@@ -137,5 +138,31 @@ describe('ModelMappingSection', () => {
       noVision: true,
     })
     expect(emittedRows[1]).toMatchObject({ id: 2, source: 'astra' })
+  })
+
+  it.each([
+    {
+      props: { showModelMappingPresets: true, showMessagesOpenAIChannelPresets: true },
+      presets: [['DeepSeek', 'deepseek'], ['Kimi', 'kimi'], ['GLM', 'glm']],
+    },
+    {
+      props: { showClaudeChannelPresets: true },
+      presets: [['DeepSeek', 'deepseek'], ['Kimi', 'kimi'], ['GLM', 'glm']],
+    },
+    {
+      props: { showCodexResponsesChannelPresets: true },
+      presets: [['DeepSeek', 'deepseek'], ['Kimi', 'kimi'], ['GLM', 'glm']],
+    },
+  ])('按网关约定展示并触发一键预设', async ({ props, presets }) => {
+    const wrapper = mountSection([])
+    await wrapper.setProps(props)
+
+    const presetButtons = wrapper.findAll('button').filter(button => !button.text().includes('app.actions.add'))
+    expect(presetButtons.map(button => button.text())).toEqual(presets.map(([label]) => label))
+
+    for (const button of presetButtons) {
+      await button.trigger('click')
+    }
+    expect(wrapper.emitted('apply-preset')).toEqual(presets.map(([, preset]) => [preset]))
   })
 })

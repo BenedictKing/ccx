@@ -2,7 +2,6 @@ import { computed, type ComputedRef } from 'vue'
 import type { Channel } from '../services/api'
 import { claudeMessagesPresets } from '../generated/claudeMessagesPresets'
 import { codexResponsesPresets } from '../generated/codexResponsesPresets'
-import { openaiMessagesPresets } from '../generated/openaiMessagesPresets'
 
 type ChannelType = 'messages' | 'chat' | 'responses' | 'gemini' | 'images' | 'vectors'
 type FormLike = {
@@ -47,23 +46,6 @@ export function useEditChannelPresets(options: EditChannelPresetOptions) {
     return options.channelType.value === 'messages'
       && (options.form.serviceType === 'openai' || options.form.serviceType === 'responses')
   })
-
-  const modelMappingPresets = openaiMessagesPresets
-
-  const applyModelMappingPreset = (preset: keyof typeof modelMappingPresets) => {
-    const presetConfig = modelMappingPresets[preset]
-    options.form.modelMapping = { ...presetConfig.modelMapping }
-    options.form.fastMode = presetConfig.fastMode
-    options.form.textVerbosity = presetConfig.textVerbosity
-
-    if (options.supportsOpenAIAdvancedOptions.value) {
-      options.form.reasoningMapping = { ...(presetConfig.reasoningMapping || {}) } as FormLike['reasoningMapping']
-    } else {
-      options.form.reasoningMapping = {}
-    }
-
-    options.syncModelMappingRowsFromForm()
-  }
 
   const showClaudeChannelPresets = computed(() => {
     return options.form.serviceType === 'claude'
@@ -127,9 +109,7 @@ export function useEditChannelPresets(options: EditChannelPresetOptions) {
   }
 
   const applyPreset = (presetName: string) => {
-    if (presetName === 'gpt-5.5' || presetName === 'gpt-5.4') {
-      applyModelMappingPreset(presetName)
-    } else if (options.form.serviceType === 'claude') {
+    if (options.form.serviceType === 'claude') {
       applyClaudeChannelPreset(presetName as keyof typeof claudeChannelPresets)
     } else if (options.channelType.value === 'responses') {
       applyCodexResponsesChannelPreset(presetName)
@@ -141,8 +121,6 @@ export function useEditChannelPresets(options: EditChannelPresetOptions) {
   return {
     showModelMappingPresets,
     showMessagesOpenAIChannelPresets,
-    modelMappingPresets,
-    applyModelMappingPreset,
     showClaudeChannelPresets,
     claudeChannelPresets,
     applyClaudeChannelPreset,
