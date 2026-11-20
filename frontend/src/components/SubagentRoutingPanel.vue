@@ -46,7 +46,7 @@
         class="model-field"
       />
 
-      <div class="list-toolbar">
+      <div class="sa-sequence-toolbar">
         <div class="text-subtitle-2 text-medium-emphasis d-flex align-center flex-shrink-0 text-no-wrap">
           <v-icon size="small" class="mr-1" color="success">mdi-play-circle</v-icon>
           {{ t('subagentRouting.channelSequence') }}
@@ -251,7 +251,7 @@ onBeforeRouteLeave(() => confirmDiscard())
 .subagent-panel { border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); }
 .panel-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
 .model-field { max-width: 720px; margin-bottom: 20px; }
-.list-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 0; border-top: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); }
+.sa-sequence-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 8px; }
 .channel-search { max-width: 320px; }
 .channel-list { display: flex; flex-direction: column; gap: 6px; }
 .channel-row { display: grid; grid-template-columns: 24px 32px minmax(0, 1fr) auto auto; align-items: center; gap: 10px; min-height: 64px; padding: 8px 12px; border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); border-radius: 8px; background: rgb(var(--v-theme-surface)); transition: border-color 160ms ease, opacity 160ms ease; }
@@ -266,7 +266,7 @@ onBeforeRouteLeave(() => confirmDiscard())
 .empty-list { padding: 32px; text-align: center; color: rgba(var(--v-theme-on-surface), 0.6); border: 1px dashed rgba(var(--v-border-color), var(--v-border-opacity)); }
 .panel-actions { display: flex; align-items: center; gap: 8px; margin-top: 16px; }
 @media (max-width: 700px) {
-  .panel-heading, .list-toolbar { align-items: stretch; flex-direction: column; }
+  .panel-heading, .sa-sequence-toolbar { align-items: stretch; flex-direction: column; }
   .channel-search { max-width: none; }
   .channel-row { grid-template-columns: 20px 24px minmax(0, 1fr) auto; gap: 6px; padding: 8px; }
   .move-actions { grid-column: 3; }
