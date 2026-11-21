@@ -119,4 +119,43 @@ describe('渠道日志列表', () => {
       wrapper.unmount()
     }
   })
+
+  it('无 usage 的 400 错误在摘要、详情及复制日志中保留上下文估算', async () => {
+    const failedLog: ChannelLogEntry = {
+      ...logs[1]!, interfaceType: 'Responses', statusCode: 400, estimatedContextTokens: 120000,
+      errorInfo: 'Your input exceeds the context window of this model.',
+    }
+    vi.mocked(api.getChannelLogs).mockResolvedValue({ channelIndex: 1, logs: [failedLog] })
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
+    const wrapper = await openDialog()
+    try {
+      expect(wrapper.find('.log-summary').text()).toContain('channelLogs.estimatedContextTokens')
+      expect(wrapper.find('.log-summary').text()).toContain((120000).toLocaleString())
+      await wrapper.find('.log-item').trigger('click')
+      const details = wrapper.find('#channel-log-details-0')
+      expect(details.text()).toContain('channelLogs.estimatedContextTokens')
+      expect(details.text()).not.toContain('channelLogs.input')
+      expect(details.text()).not.toContain('channelLogs.output')
+      await wrapper.find('button[aria-label="channelLogs.copyEntry"]').trigger('click')
+      const copied = JSON.parse(writeText.mock.calls[0]![0]!)
+      expect(copied.estimatedContextTokens).toBe(120000)
+      expect(copied.inputTokens).toBeUndefined()
+    } finally {
+      wrapper.unmount()
+    }
+  })
+
+  it('有 usage 时显示上游计数，旧失败日志不会显示虚构的估算', async () => {
+    vi.mocked(api.getChannelLogs).mockResolvedValue({ channelIndex: 1, logs: [{ ...logs[0]!, estimatedContextTokens: 120000 }, logs[1]!] })
+    const wrapper = await openDialog()
+    try {
+      expect(wrapper.text()).not.toContain('channelLogs.estimatedContextTokens')
+      await wrapper.find('.log-item').trigger('click')
+      expect(wrapper.find('#channel-log-details-0').text()).toContain('1,800')
+      expect(wrapper.find('#channel-log-details-0').text()).not.toContain('channelLogs.estimatedContextTokens')
+    } finally {
+      wrapper.unmount()
+    }
+  })
 })

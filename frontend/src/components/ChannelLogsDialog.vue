@@ -100,6 +100,9 @@
                     <span class="log-metric">{{ t('channelLogs.input') }} {{ formatTokenCount(log.inputTokens || 0) }}</span>
                     <span class="log-metric">{{ t('channelLogs.output') }} {{ formatTokenCount(log.outputTokens || 0) }}</span>
                   </template>
+                  <span v-if="fallbackContextTokens(log) > 0" class="log-metric" :title="t('channelLogs.estimatedContextTokensDetail')">
+                    {{ t('channelLogs.estimatedContextTokens') }} {{ formatTokenCount(fallbackContextTokens(log)) }}
+                  </span>
                   <span v-if="log.tokensPerSecond" class="log-metric" :title="t('channelLogs.tpsDetail', { output: formatTokenCount(log.outputTokens || 0) })">
                     {{ formatTokensPerSecond(log.tokensPerSecond) }} TPS
                   </span>
@@ -223,11 +226,16 @@
                     </dl>
                   </section>
 
-                  <section v-if="(log.inputTokens || 0) > 0 || (log.outputTokens || 0) > 0 || log.contextTokens" class="log-detail-section">
+                  <section v-if="(log.inputTokens || 0) > 0 || (log.outputTokens || 0) > 0 || log.contextTokens || fallbackContextTokens(log) > 0" class="log-detail-section">
                     <div class="log-detail-title">{{ t('channelLogs.details.tokens') }}</div>
                     <dl class="log-detail-list">
-                      <div class="log-detail-row"><dt>{{ t('channelLogs.input') }}</dt><dd>{{ formatTokenCount(log.inputTokens || 0) }}</dd></div>
-                      <div class="log-detail-row"><dt>{{ t('channelLogs.output') }}</dt><dd>{{ formatTokenCount(log.outputTokens || 0) }}</dd></div>
+                      <template v-if="(log.inputTokens || 0) > 0 || (log.outputTokens || 0) > 0 || log.contextTokens">
+                        <div class="log-detail-row"><dt>{{ t('channelLogs.input') }}</dt><dd>{{ formatTokenCount(log.inputTokens || 0) }}</dd></div>
+                        <div class="log-detail-row"><dt>{{ t('channelLogs.output') }}</dt><dd>{{ formatTokenCount(log.outputTokens || 0) }}</dd></div>
+                      </template>
+                      <div v-if="fallbackContextTokens(log) > 0" class="log-detail-row" :title="t('channelLogs.estimatedContextTokensDetail')">
+                        <dt>{{ t('channelLogs.estimatedContextTokens') }}</dt><dd>{{ formatTokenCount(fallbackContextTokens(log)) }}</dd>
+                      </div>
                       <div v-if="log.contextTokens && log.contextTokens !== (log.inputTokens || 0)" class="log-detail-row" :title="t('channelLogs.contextTokensDetail', { input: formatTokenCount(log.inputTokens || 0), cacheCreation: formatTokenCount(log.cacheCreationTokens || 0), cacheRead: formatTokenCount(log.cacheReadTokens || 0) })">
                         <dt>{{ t('channelLogs.contextTokens') }}</dt><dd>{{ formatTokenCount(log.contextTokens) }}</dd>
                       </div>
@@ -422,6 +430,11 @@ const formatDurationSeconds = (durationMs: number): string => {
 }
 
 const formatTokenCount = (value: number): string => value.toLocaleString()
+
+const fallbackContextTokens = (log: ChannelLogEntry): number => {
+  if (log.contextTokens || log.inputTokens || log.cacheCreationTokens || log.cacheReadTokens) return 0
+  return Math.max(0, log.estimatedContextTokens || 0)
+}
 
 const formatTokensPerSecond = (value: number): string => {
   return value >= 100 ? value.toFixed(0) : value.toFixed(1)

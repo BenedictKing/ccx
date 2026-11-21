@@ -521,6 +521,8 @@
   "channelLogs.duration.maxToolCallIdle": "Tool Idle",
   "channelLogs.duration.total": "Total",
   "channelLogs.contextTokens": "Context",
+  "channelLogs.estimatedContextTokens": "Context (estimated)",
+  "channelLogs.estimatedContextTokensDetail": "Context tokens estimated from the original request, excluding the output reserve; may differ from upstream counts or server-side history.",
   "channelLogs.contextTokensDetail": "Input {input} + cache creation {cacheCreation} + cache read {cacheRead}",
   "channelLogs.cacheRead": "Cache↓",
   "channelLogs.cacheReadDetail": "Cache read {tokens} tokens",

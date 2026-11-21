@@ -729,6 +729,61 @@ func TestDisabledCircuitBreakerStillAttemptsOpenKey(t *testing.T) {
 	}
 }
 
+func TestTryUpstreamWithAllKeysLogsContextEstimateWithoutUsage(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"error":{"message":"Your input exceeds the context window of this model.","type":"invalid_request_error"}}`))
+	}))
+	defer server.Close()
+	upstream := config.UpstreamConfig{Name: "context-test", BaseURL: server.URL, APIKeys: []string{"sk-test"}, Status: "active", ServiceType: "responses"}
+	cfgManager, channelScheduler, _, cleanup := newTestFailoverDependencies(t, upstream)
+	defer cleanup()
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	body := []byte(`{"model":"gpt-test","input":"test context","max_output_tokens":8192}`)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(string(body)))
+	requirement := BuildResponsesContextRequirement(body, config.ContextRoutingConfig{})
+	store := channelScheduler.GetChannelLogStore(scheduler.ChannelKindResponses)
+	_, _, _, _, _, lastErr := TryUpstreamWithAllKeys(
+		c, config.NewEnvConfig(), cfgManager, channelScheduler, scheduler.ChannelKindResponses, "Responses",
+		channelScheduler.GetResponsesMetricsManager(), &upstream,
+		[]warmup.URLLatencyResult{{URL: server.URL, OriginalIdx: 0}}, body, requirement, false,
+		func(*config.UpstreamConfig, map[string]bool) (string, error) { return "sk-test", nil },
+		func(c *gin.Context, upstream *config.UpstreamConfig, key string) (*http.Request, error) {
+			return http.NewRequestWithContext(c.Request.Context(), http.MethodPost, upstream.BaseURL, strings.NewReader(string(body)))
+		},
+		nil, nil, nil,
+		func(*gin.Context, *http.Response, *config.UpstreamConfig, string, []byte) (*types.Usage, error) {
+			t.Fatal("HTTP 400 must not enter the success handler")
+			return nil, nil
+		},
+		"gpt-test", "", 0, store,
+	)
+	if lastErr != nil {
+		t.Fatal(lastErr)
+	}
+	serviceType := scheduler.NormalizedMetricsServiceType(scheduler.ChannelKindResponses, upstream.ServiceType)
+	logs := store.Get(metrics.GenerateMetricsIdentityKey(server.URL, "sk-test", serviceType))
+	if len(logs) != 1 {
+		t.Fatalf("logs count = %d, want 1", len(logs))
+	}
+	log := logs[0]
+	if log.StatusCode != 400 || log.Status != metrics.StatusFailed || log.EstimatedContextTokens != requirement.InputTokens || log.EstimatedContextTokens <= 0 {
+		t.Fatalf("HTTP 400 log must preserve request input estimate: %+v", log)
+	}
+	if log.ContextTokens != 0 || log.InputTokens != 0 || log.OutputTokens != 0 {
+		t.Fatalf("estimate must remain separate from reported usage: %+v", log)
+	}
+	data, err := json.Marshal(log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), `"estimatedContextTokens":`) || strings.Contains(string(data), `"inputTokens":`) {
+		t.Fatalf("frontend JSON must expose the estimate without inventing usage: %s", data)
+	}
+}
+
 func newTestFailoverDependencies(t *testing.T, upstream config.UpstreamConfig) (*config.ConfigManager, *scheduler.ChannelScheduler, *metrics.MetricsManager, func()) {
 	t.Helper()
 

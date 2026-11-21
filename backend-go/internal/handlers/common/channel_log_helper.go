@@ -22,6 +22,15 @@ func GenerateRequestID() string {
 // ChannelLogOption 为 pending 渠道日志补充可选观测字段。
 type ChannelLogOption func(*metrics.ChannelLog)
 
+// WithEstimatedContextTokens 保留请求上下文估算，供上游未返回 usage 时排查。
+func WithEstimatedContextTokens(tokens int) ChannelLogOption {
+	return func(log *metrics.ChannelLog) {
+		if log != nil && tokens > 0 {
+			log.EstimatedContextTokens = tokens
+		}
+	}
+}
+
 // WithChannelSelectionTrace 记录本次渠道选择的可解释性摘要。
 func WithSubagentRoutingPolicy(applied bool, model string) ChannelLogOption {
 	return func(log *metrics.ChannelLog) {

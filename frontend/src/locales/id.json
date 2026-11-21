@@ -521,6 +521,8 @@
   "channelLogs.duration.maxToolCallIdle": "Idle Tool",
   "channelLogs.duration.total": "Total",
   "channelLogs.contextTokens": "Konteks",
+  "channelLogs.estimatedContextTokens": "Konteks (estimasi)",
+  "channelLogs.estimatedContextTokensDetail": "Estimasi token konteks dari permintaan asli, tanpa cadangan output; dapat berbeda dari hitungan upstream atau riwayat di server.",
   "channelLogs.contextTokensDetail": "Input {input} + pembuatan cache {cacheCreation} + pembacaan cache {cacheRead}",
   "channelLogs.cacheRead": "Cache↓",
   "channelLogs.cacheReadDetail": "Pembacaan cache {tokens} tokens",

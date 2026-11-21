@@ -25,6 +25,7 @@ type ChannelLog struct {
 	CacheCreationTokens     int       `json:"cacheCreationTokens,omitempty"`
 	CacheReadTokens         int       `json:"cacheReadTokens,omitempty"`
 	ContextTokens           int       `json:"contextTokens,omitempty"`
+	EstimatedContextTokens  int       `json:"estimatedContextTokens,omitempty"` // 原始请求上下文估算，不含输出预留；独立于上游 usage
 	TokensPerSecond         float64   `json:"tokensPerSecond,omitempty"`
 	Success                 bool      `json:"success"`
 	KeyMask                 string    `json:"keyMask"`

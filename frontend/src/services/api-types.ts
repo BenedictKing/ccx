@@ -676,6 +676,7 @@ export interface ChannelLogEntry {
   cacheCreationTokens?: number
   cacheReadTokens?: number
   contextTokens?: number
+  estimatedContextTokens?: number
   tokensPerSecond?: number
   success: boolean
   keyMask: string

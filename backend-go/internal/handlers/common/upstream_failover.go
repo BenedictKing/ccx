@@ -159,6 +159,9 @@ func TryUpstreamWithAllKeys(
 	}
 
 	tryOpts := tryUpstreamOptions{}
+	if contextRequirement != nil {
+		tryOpts.channelLogOptions = append(tryOpts.channelLogOptions, WithEstimatedContextTokens(contextRequirement.InputTokens))
+	}
 	for _, opt := range opts {
 		if opt != nil {
 			opt(&tryOpts)

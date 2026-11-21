@@ -521,6 +521,8 @@
   "channelLogs.duration.maxToolCallIdle": "工具空窗",
   "channelLogs.duration.total": "总计",
   "channelLogs.contextTokens": "上下文",
+  "channelLogs.estimatedContextTokens": "上下文（估算）",
+  "channelLogs.estimatedContextTokensDetail": "基于原始请求估算的上下文 token 数，不含输出预留；可能与上游实际计数或上游保存的历史上下文不同。",
   "channelLogs.contextTokensDetail": "输入 {input} + 缓存创建 {cacheCreation} + 缓存读取 {cacheRead}",
   "channelLogs.cacheRead": "缓存↓",
   "channelLogs.cacheReadDetail": "缓存读取 {tokens} tokens",

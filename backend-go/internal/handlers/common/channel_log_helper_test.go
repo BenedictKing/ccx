@@ -234,3 +234,28 @@ func TestApplyChannelLogUsage_WithoutFirstByteOmitsTPS(t *testing.T) {
 		t.Fatalf("tokensPerSecond = %v, want omitted", logEntry.TokensPerSecond)
 	}
 }
+
+func TestCompleteLog_PreservesContextEstimateSeparatelyFromUsage(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		usage *types.Usage
+		want  int
+	}{
+		{name: "missing usage"},
+		{name: "empty usage", usage: &types.Usage{}},
+		{name: "reported usage", usage: &types.Usage{InputTokens: 100, CacheReadInputTokens: 80}, want: 180},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			store := metrics.NewChannelLogStore()
+			requestID := CreatePendingLog(store, "context-estimate", 0, "test", "model", "", "", "", "sk-test", "https://example.com", "Responses", "", metrics.RequestSourceProxy, nil, "", WithEstimatedContextTokens(120000))
+			CompleteLog(store, "context-estimate", requestID, 400, false, "context window exceeded", true, tc.usage)
+			log := store.Get("context-estimate")[0]
+			if log.EstimatedContextTokens != 120000 || log.ContextTokens != tc.want {
+				t.Fatalf("estimated/reported context = %d/%d, want 120000/%d", log.EstimatedContextTokens, log.ContextTokens, tc.want)
+			}
+			if log.InputTokens != 0 && tc.usage == nil {
+				t.Fatalf("missing usage must not record estimated tokens as input usage: %+v", log)
+			}
+		})
+	}
+}
