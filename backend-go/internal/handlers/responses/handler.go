@@ -61,7 +61,7 @@ func Handler(
 		agentCtx := utils.ExtractAgentContext(c, bodyBytes)
 		c.Set("agentContext", agentCtx)
 
-		// 统计 user 输入用于驾驶舱标题与轮数
+		// 统计 user 输入用于会话标题与轮数
 		lastUserMessages := extractRecentResponsesUserInputs(responsesReq.Input)
 		c.Set("lastUserMessages", lastUserMessages)
 		c.Set("lastUserMessage", strings.Join(lastUserMessages, " / "))
@@ -341,7 +341,7 @@ func handleSingleChannel(
 		channelScheduler.GetChannelLogStore(scheduler.ChannelKindResponses),
 	)
 
-	// 追踪对话（驾驶舱显示）
+	// 追踪对话状态
 	if handled && successKey != "" {
 		lastUserMsg, _ := c.Get("lastUserMessage")
 		lastUserMsgStr, _ := lastUserMsg.(string)

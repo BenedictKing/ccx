@@ -4,10 +4,8 @@ import (
 	"context"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/BenedictKing/ccx/internal/config"
-	"github.com/BenedictKing/ccx/internal/conversation"
 )
 
 func TestSelectChannelFiltersByContextWindowStableOrder(t *testing.T) {
@@ -493,66 +491,6 @@ func TestSelectChannelUnknownContextPolicy(t *testing.T) {
 	}
 	if large.Upstream.Name != "premium-1m" {
 		t.Fatalf("large selected channel = %q, want premium-1m", large.Upstream.Name)
-	}
-}
-
-func TestSelectChannelManualOverridePreservedWhenContextFiltersChannel(t *testing.T) {
-	cfg := config.Config{
-		Upstream: []config.UpstreamConfig{
-			{
-				Name:     "manual-cheap-200k",
-				BaseURL:  "https://cheap.example.com",
-				APIKeys:  []string{"sk-cheap"},
-				Status:   "active",
-				Priority: 1,
-				ModelMapping: map[string]string{
-					"agent": "claude-sonnet-4-5",
-				},
-			},
-			{
-				Name:     "fallback-1m",
-				BaseURL:  "https://premium.example.com",
-				APIKeys:  []string{"sk-premium"},
-				Status:   "active",
-				Priority: 2,
-				ModelMapping: map[string]string{
-					"agent": "claude-sonnet-4-6",
-				},
-			},
-		},
-	}
-
-	scheduler, cleanup := createTestScheduler(t, cfg)
-	defer cleanup()
-
-	overrideMgr := conversation.NewOverrideManager(time.Hour)
-	defer overrideMgr.Stop()
-	if err := overrideMgr.SetOverride("conv-1", string(ChannelKindMessages), "user-override", []conversation.ChannelEntry{
-		{ChannelIndex: 0, ChannelName: "manual-cheap-200k"},
-	}, time.Hour); err != nil {
-		t.Fatalf("SetOverride() error = %v", err)
-	}
-	scheduler.SetConversationComponents(nil, overrideMgr)
-
-	result, err := scheduler.SelectChannelWithOptions(context.Background(), SelectionOptions{
-		UserID:         "user-override",
-		FailedChannels: map[int]bool{},
-		Kind:           ChannelKindMessages,
-		Model:          "agent",
-		ContextRequirement: &ContextRequirement{
-			InputTokens:    491808,
-			OutputTokens:   8192,
-			RequiredTokens: 500000,
-		},
-	})
-	if err != nil {
-		t.Fatalf("SelectChannelWithOptions() error = %v", err)
-	}
-	if result.Upstream.Name != "fallback-1m" {
-		t.Fatalf("selected channel = %q, want fallback-1m", result.Upstream.Name)
-	}
-	if _, ok := overrideMgr.GetOverrideForUser(string(ChannelKindMessages), "user-override"); !ok {
-		t.Fatal("manual override was cleared; want preserved")
 	}
 }
 

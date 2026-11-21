@@ -592,9 +592,6 @@ type Config struct {
 	// 各文本协议的独立子代理默认模型与渠道序列。
 	SubagentRouting map[string]SubagentRoutingPolicy `json:"subagentRouting,omitempty"`
 
-	// 驾驶舱 override 默认有效期（分钟，1-1440；0 或未设置时使用环境变量 OVERRIDE_TTL_MINUTES）
-	OverrideTTLMinutes int `json:"overrideTtlMinutes,omitempty"`
-
 	// Claude thinking 回填缓存配置
 	ThinkingCache ThinkingCacheConfig `json:"thinkingCache,omitempty"`
 
@@ -992,42 +989,6 @@ func NormalizeChannelHistoricalImageTurnLimit(limit int) int {
 		return HistoricalImageTurnLimitMax
 	}
 	return limit
-}
-
-// SetOverrideTTLMinutes 设置驾驶舱 override 默认有效期（分钟）
-func (cm *ConfigManager) SetOverrideTTLMinutes(minutes int) error {
-	cm.mu.Lock()
-
-	// 标准化为界面提供的固定选项，不合适的值使用默认 30 分钟
-	// 有效选项：-1（永不恢复）, 15, 30, 60, 120, 240, 480, 720, 1440 分钟
-	validOptions := []int{-1, 15, 30, 60, 120, 240, 480, 720, 1440}
-	normalized := 30 // 默认 30 分钟
-	for _, option := range validOptions {
-		if minutes == option {
-			normalized = minutes
-			break
-		}
-	}
-
-	cm.config.OverrideTTLMinutes = normalized
-
-	if err := cm.saveConfigLocked(cm.config); err != nil {
-		cm.mu.Unlock()
-		return err
-	}
-
-	if normalized == -1 {
-		log.Printf("[Config-OverrideTTL] 驾驶舱 override 默认有效期已设置为永不恢复")
-	} else {
-		if minutes != normalized {
-			log.Printf("[Config-OverrideTTL] 驾驶舱 override 默认有效期已标准化为 %d 分钟（原值: %d）", normalized, minutes)
-		} else {
-			log.Printf("[Config-OverrideTTL] 驾驶舱 override 默认有效期已设置为 %d 分钟", normalized)
-		}
-	}
-
-	cm.fireConfigChangeCallbacks()
-	return nil
 }
 
 // ============== API Key 拉黑相关方法 ==============

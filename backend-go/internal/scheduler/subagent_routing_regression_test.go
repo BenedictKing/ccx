@@ -19,7 +19,7 @@ func TestSubagentRoutingEncryptedSecondTurnKeepsActualModel(t *testing.T) {
 	defer close()
 	tracker := conversation.NewConversationTracker(time.Hour, 24*time.Hour)
 	defer tracker.Stop()
-	s.SetConversationComponents(tracker, nil)
+	s.SetConversationTracker(tracker)
 	p := &config.SubagentRoutingPolicy{Model: "sol", Channels: []config.SubagentRoutingChannel{{ChannelUID: "uid-a", Enabled: true}, {ChannelUID: "uid-b", Enabled: true}}}
 	opts := SelectionOptions{UserID: "child", Kind: ChannelKindResponses, Model: "astra", AgentRole: "subagent", AgentConfidence: "exact", SubagentRouting: p, ApplySubagentRouting: true}
 	first, err := s.SelectChannelWithOptions(context.Background(), opts)
@@ -46,7 +46,7 @@ func TestSubagentRoutingClosedEncryptedSourceFails(t *testing.T) {
 	tracker := conversation.NewConversationTracker(time.Hour, 24*time.Hour)
 	defer tracker.Stop()
 	tracker.Track("responses", "child", "astra", 0, "A", "", "hello", 1, "subagent")
-	s.SetConversationComponents(tracker, nil)
+	s.SetConversationTracker(tracker)
 	source := s.ConfigSnapshot().ResponsesUpstream[0].Clone()
 	source.SubagentModel = "sol"
 	s.RecordSuccessfulResponse("child", "astra", "subagent", 0, source, "cheap-actual", source.BaseURL)

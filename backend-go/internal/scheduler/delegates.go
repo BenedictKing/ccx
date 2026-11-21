@@ -64,7 +64,7 @@ func (s *ChannelScheduler) TrackConversation(kind ChannelKind, userID, model str
 	s.TrackConversationWithMessages(kind, userID, model, channelIndex, channelName, sessionID, lastUserMessage, nil, userMessageCount, agentRole, agentCtx)
 }
 
-// TrackConversationWithMessages 追踪对话，并保存结构化用户轮次用于驾驶舱展示。
+// TrackConversationWithMessages 追踪对话，并保存结构化用户轮次用于会话追踪。
 func (s *ChannelScheduler) TrackConversationWithMessages(kind ChannelKind, userID, model string, channelIndex int, channelName, sessionID, lastUserMessage string, lastUserMessages []string, userMessageCount int, agentRole string, agentCtx *types.AgentContext) {
 	if s.conversationTracker != nil && userID != "" {
 		s.conversationTracker.TrackWithMessages(string(kind), userID, model, channelIndex, channelName, sessionID, lastUserMessage, lastUserMessages, userMessageCount, agentRole, agentCtx)

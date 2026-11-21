@@ -14,7 +14,7 @@ const routes = [
   },
   {
     path: '/conversations',
-    component: () => import('@/views/ConversationsView.vue'),
+    redirect: '/channels/messages',
     meta: { requiresAuth: true }
   },
   {

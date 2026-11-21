@@ -128,7 +128,7 @@ func TestEncryptedResponsesAffinityRestoresSuccessfulChannel(t *testing.T) {
 			tracker.Stop()
 			restored := conversation.NewConversationTracker(time.Hour, 24*time.Hour, path)
 			defer restored.Stop()
-			s.SetConversationComponents(restored, nil)
+			s.SetConversationTracker(restored)
 			got, err := s.SelectChannelWithOptions(context.Background(), opts)
 			if err != nil {
 				t.Fatal(err)
@@ -151,7 +151,7 @@ func TestEncryptedResponsesAffinitySeparatesAgentRoles(t *testing.T) {
 	defer tracker.Stop()
 	tracker.Track("responses", "user", "gpt-6.1-sol", 0, "primary", "", "main", 1, "main")
 	tracker.Track("responses", "user", "gpt-6.1-sol", 1, "subagent", "", "child", 1, "subagent")
-	s.SetConversationComponents(tracker, nil)
+	s.SetConversationTracker(tracker)
 	for _, role := range []string{"", "main", "subagent"} {
 		got, err := s.SelectChannelWithOptions(context.Background(), SelectionOptions{
 			UserID: "user", Kind: ChannelKindResponses, Model: "gpt-6.1-sol", PreserveTraceAffinity: true, AgentRole: role,

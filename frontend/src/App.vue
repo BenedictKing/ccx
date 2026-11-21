@@ -121,10 +121,6 @@
           <router-link to="/channels/gemini" class="api-type-text" :class="{ active: route.path === '/channels/gemini' }">
             {{ t('app.tabs.gemini') }}
           </router-link>
-          <span v-if="showCockpit" class="api-type-text separator">/</span>
-          <router-link v-if="showCockpit" to="/conversations" class="api-type-text" :class="{ active: route.path === '/conversations' }">
-            {{ t('app.tabs.conversations') }}
-          </router-link>
           <span class="api-type-text separator">/</span>
           <router-link to="/site-onboarding" class="api-type-text" :class="{ active: route.path === '/site-onboarding' }">
             {{ t('app.tabs.siteOnboarding') }}
@@ -732,7 +728,6 @@ const {
   currentLocale,
   currentLanguageShortLabel,
   translatedApiTabOptions,
-  showCockpit,
   isDesktopWebUI,
   activeTrafficTitle,
   systemStatusText,

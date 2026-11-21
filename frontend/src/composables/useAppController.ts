@@ -56,7 +56,6 @@ export function useAppController() {
   })
 
   // API 类型 Tab 选项（移动端下拉菜单使用）
-  const showCockpit = ref(true)
   const apiTabOptions = [
     { value: 'messages', labelKey: 'app.tabs.messages', route: '/channels/messages', icon: 'mdi-code-braces' },
     { value: 'responses', labelKey: 'app.tabs.responses', route: '/channels/responses', icon: 'mdi-console' },
@@ -64,27 +63,15 @@ export function useAppController() {
     { value: 'images', labelKey: 'app.tabs.images', route: '/channels/images', icon: 'mdi-image-outline' },
     { value: 'vectors', labelKey: 'app.tabs.vectors', route: '/channels/vectors', icon: 'mdi-vector-point' },
     { value: 'gemini', labelKey: 'app.tabs.gemini', route: '/channels/gemini', icon: 'mdi-google' },
-    { value: 'conversations', labelKey: 'app.tabs.conversations', route: '/conversations', icon: 'mdi-view-dashboard-outline' },
     { value: 'site-onboarding', labelKey: 'app.tabs.siteOnboarding', route: '/site-onboarding', icon: 'mdi-web' },
   ] as const
 
   const translatedApiTabOptions = computed(() => {
-    return apiTabOptions.filter(tab => tab.value !== 'conversations' || showCockpit.value).map(tab => ({
+    return apiTabOptions.map(tab => ({
       ...tab,
       label: t(tab.labelKey),
     }))
   })
-  const loadCockpitVisibility = async () => {
-    const kinds = ['messages', 'chat', 'responses', 'gemini'] as const
-    const states = await Promise.all(kinds.map(async kind => {
-      try {
-        return (await api.getSubagentRouting(kind)).activated
-      } catch {
-        return false
-      }
-    }))
-    showCockpit.value = states.some(activated => !activated)
-  }
   const isDesktopWebUI = new URLSearchParams(window.location.search).get('ccx_desktop') === '1'
 
   const currentTabLabel = computed(() => {
@@ -817,7 +804,6 @@ export function useAppController() {
     const authenticated = await autoAuthenticate()
 
     if (authenticated) {
-      await loadCockpitVisibility()
       // 加载渠道数据
       await refreshChannels()
       // 加载 Fuzzy 模式状态
@@ -853,7 +839,6 @@ export function useAppController() {
   // 监听认证状态变化
   watch(isAuthenticated, newValue => {
     if (newValue) {
-      void loadCockpitVisibility()
       startAutoRefresh()
     } else {
       stopAutoRefresh()
@@ -893,7 +878,6 @@ export function useAppController() {
     currentLocale,
     currentLanguageShortLabel,
     translatedApiTabOptions,
-    showCockpit,
     isDesktopWebUI,
     activeTrafficTitle,
     systemStatusText,

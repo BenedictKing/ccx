@@ -13,6 +13,12 @@ import (
 	"github.com/BenedictKing/ccx/internal/types"
 )
 
+// ChannelEntry 保存成功来源的渠道位置与名称，保持已有持久化记录格式。
+type ChannelEntry struct {
+	ChannelIndex int    `json:"channelIndex"`
+	ChannelName  string `json:"channelName"`
+}
+
 // SuccessfulChannel 保存可恢复的成功来源；旧记录允许缺少新增字段。
 type SuccessfulChannel struct {
 	ChannelEntry
@@ -129,7 +135,7 @@ func (ct *ConversationTracker) TrackWithMessages(kind, userID, model string, cha
 	ct.TrackWithStatusAndMessages(kind, userID, model, channelIndex, channelName, sessionID, lastUserMessage, lastUserMessages, userMessageCount, agentRole, "active", agentCtx...)
 }
 
-// TrackWithStatus 追踪对话并写入指定状态，用于流式请求开始时让驾驶舱立即可见。
+// TrackWithStatus 追踪对话并写入指定状态，用于及时记录流式请求的运行状态。
 func (ct *ConversationTracker) TrackWithStatus(kind, userID, model string, channelIndex int, channelName, sessionID, lastUserMessage string, userMessageCount int, agentRole, status string, agentCtx ...*types.AgentContext) {
 	ct.TrackWithStatusAndMessages(kind, userID, model, channelIndex, channelName, sessionID, lastUserMessage, nil, userMessageCount, agentRole, status, agentCtx...)
 }

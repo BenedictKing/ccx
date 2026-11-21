@@ -295,3 +295,16 @@ desktop/frontend：bun run type-check；bun run test；bun run build（以当时
 - 后端全量测试、vet、config 包 race、Web 274 项和 Desktop 102 项测试、两端类型检查及构建、根目录全栈构建通过。
 - ego-browser 在隔离组件页面使用模拟 API 验证保存锁定、失败重试、刷新读回与搜索排序；截图位于 `.oil-ui/subagent-routing/followup-web.png` 和 `followup-desktop.png`。
 - 本轮未修改 3399 的运行配置，修复生效仍需用户更新或重启运行实例。
+
+## 11. 驾驶舱全面退役（2026-11-21）
+
+用户明确要求全面删除驾驶舱，本节替代第 6 节中保留未迁移协议入口及旧 override API 的过渡安排。
+
+- 删除 Web/Desktop 驾驶舱页面、导航、会话卡片、专用轮询、预览工具、API 客户端类型和翻译。
+- 旧 Web `/conversations` 跳转 `/channels/messages`；Desktop 旧 `cockpit` 导航事件转到渠道页，未知控制台持久值仍按既有规则回到默认渠道页。
+- 删除 `/api/conversations` 及其 override、settings 子接口，删除会话级人工排序管理器和 TTL 配置；旧排序不再影响普通请求。
+- 保留会话追踪、成功来源及实际模型持久化、日志会话标识和加密续聊亲和；`ChannelEntry` 移入 tracker，持久化 JSON 格式保持兼容。
+- 新子代理策略仍由用户明确保存后启用，未启用协议继续普通渠道调度和既有渠道模型映射。
+- 补 Web 旧地址跳转、Desktop 旧导航与事件卸载回归；模型下拉测试补充渠道模型来源，原有面板草稿保持未提交状态。
+- 验证：后端及 Desktop Go 全量测试、后端 vet、会话/调度/Responses race、两端类型检查、Web 291 项测试、Desktop 110 项测试、两端构建及根目录全栈构建通过；变更 Web 文件 lint 无错误。
+- 隔离新构建实例验证 5 个退役 API 均返回 JSON 404，旧 Web 地址跳转及桌面/390px 页面截图已检查；既有运行实例未重启，未调用生产上游。

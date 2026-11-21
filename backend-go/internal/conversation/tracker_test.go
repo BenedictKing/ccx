@@ -112,7 +112,7 @@ func TestConversationTracker_PersistAndRestore(t *testing.T) {
 
 	ct := NewConversationTracker(1*time.Hour, 2*time.Hour, path)
 	ct.TrackWithMessages("messages", "user-abc", "claude-opus-4-7", 0, "primary", "", "你好世界", []string{"你好世界"}, 1, "")
-	ct.UpdateTitle("messages", "user-abc", "确认驾驶舱对话卡片保存时长")
+	ct.UpdateTitle("messages", "user-abc", "确认会话记录保存时长")
 	ct.UpdateRecap("messages", "user-abc", "已完成保存逻辑，下一步验证重启恢复。")
 	ct.Stop()
 
@@ -123,7 +123,7 @@ func TestConversationTracker_PersistAndRestore(t *testing.T) {
 	if len(convs) != 1 {
 		t.Fatalf("expected 1 conversation after restore, got %d", len(convs))
 	}
-	if convs[0].Title != "确认驾驶舱对话卡片保存时长 — 你好世界" {
+	if convs[0].Title != "确认会话记录保存时长 — 你好世界" {
 		t.Errorf("expected restored title, got %q", convs[0].Title)
 	}
 	if convs[0].CreatedAt.IsZero() {
@@ -299,14 +299,14 @@ func TestConversationTracker_ShortTitleConcatenation(t *testing.T) {
 	ct := NewConversationTracker(1*time.Hour, 2*time.Hour)
 	defer ct.Stop()
 
-	ct.Track("messages", "user-x", "model", 0, "ch", "", "驾驶舱对话卡片保存时长", 1, "")
+	ct.Track("messages", "user-x", "model", 0, "ch", "", "会话记录保存时长", 1, "")
 	ct.UpdateTitle("messages", "user-x", "Hi")
 
 	convs := ct.GetActiveConversations("")
 	if len(convs) != 1 {
 		t.Fatalf("expected 1 conversation, got %d", len(convs))
 	}
-	if convs[0].Title != "Hi — 驾驶舱对话卡片保存时长" {
+	if convs[0].Title != "Hi — 会话记录保存时长" {
 		t.Errorf("expected concatenated title, got %q", convs[0].Title)
 	}
 }
@@ -347,10 +347,10 @@ func TestConversationTracker_ShortTitleNoDuplicate(t *testing.T) {
 	ct := NewConversationTracker(1*time.Hour, 2*time.Hour)
 	defer ct.Stop()
 
-	ct.Track("messages", "user-x", "model", 0, "ch", "", "驾驶舱对话卡片保存时长", 1, "")
+	ct.Track("messages", "user-x", "model", 0, "ch", "", "会话记录保存时长", 1, "")
 	ct.UpdateTitle("messages", "user-x", "OK")
 	first := ct.GetActiveConversations("")[0].Title
-	if first != "OK — 驾驶舱对话卡片保存时长" {
+	if first != "OK — 会话记录保存时长" {
 		t.Fatalf("expected first concatenation, got %q", first)
 	}
 	ct.UpdateTitle("messages", "user-x", "OK")

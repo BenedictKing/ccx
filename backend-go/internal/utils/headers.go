@@ -15,7 +15,7 @@ import (
 // 注意：此函数适用于Claude类型渠道，对于其他类型请使用 PrepareMinimalHeaders
 // ExtractUnifiedSessionID 统一提取会话/缓存标识，供 Messages/Responses/Chat/Gemini 复用。
 // 优先级: Conversation_id > Session_id > X-Claude-Code-Session-Id > user > user_id > prompt_cache_key > metadata.user_id > X-Gemini-Api-Privileged-User-Id > X-Client-Request-Id
-// X-Client-Request-Id 通常是逐请求 ID，只作为最终兜底，避免把同一会话拆成多张驾驶舱卡片。
+// X-Client-Request-Id 通常是逐请求 ID，只作为最终兜底，避免将同一会话拆成多个追踪标识。
 func ExtractUnifiedSessionID(c *gin.Context, bodyBytes []byte) string {
 	if c != nil {
 		if convID := c.GetHeader("Conversation_id"); convID != "" {

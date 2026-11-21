@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/BenedictKing/ccx/internal/config"
-	"github.com/BenedictKing/ccx/internal/conversation"
 	"github.com/BenedictKing/ccx/internal/keypool"
 	"github.com/BenedictKing/ccx/internal/metrics"
 	"github.com/BenedictKing/ccx/internal/ratelimit"
@@ -231,42 +230,7 @@ func (s *ChannelScheduler) SelectChannelWithOptions(ctx context.Context, opts Se
 		return nil, traceErr(fmt.Errorf("指定渠道 %q 不满足当前模型、路由前缀或上下文要求", channelName))
 	}
 
-	// 0. 检查手动序列覆盖
-	// 全局子代理策略一旦实际应用，渠道顺序由协议级策略统一决定；
-	// 只有普通请求或未达到精确识别门槛的请求才允许使用驾驶舱的会话级覆盖。
-	if userID != "" && s.overrideManager != nil && !opts.ApplySubagentRouting {
-		if sequence, ok := s.overrideManager.GetOverrideForUserWithRole(string(kind), userID, opts.AgentRole); ok {
-			prefix := kindSchedulerLogPrefix(kind)
-			orderedChannels := applyManualOverrideOrder(activeChannels, sequence)
-			for _, ch := range orderedChannels {
-				if failedChannels[ch.Index] {
-					trace.skipChannel(ch, "manual_override", "failed_in_request", "")
-					continue
-				}
-				if ch.Status != "active" {
-					trace.skipChannel(ch, "manual_override", "inactive_status", ch.Status)
-					continue
-				}
-				upstream := upstreamFor(ch.Index)
-				if upstream != nil && s.channelIsRuntimeAvailable(upstream, kind, ch.Index) {
-					log.Printf("[%s-Override] 按手动排序选择渠道: [%d] %s (user: %s, role=%s, sequenceHead=%s)", prefix, ch.Index, ch.Name, maskUserID(userID), schedulerAgentRoleForLog(opts.AgentRole), formatOverrideSequenceHead(sequence, 3))
-					// Idle 续期：对话活跃时延长 override TTL
-					if !opts.DryRun {
-						s.overrideManager.RefreshOverrideForUser(string(kind), userID)
-					}
-					return finish(upstream, ch.Index, "manual_override"), nil
-				}
-				if upstream == nil {
-					trace.skipChannel(ch, "manual_override", "missing_upstream", "")
-				} else {
-					trace.skipChannel(ch, "manual_override", "runtime_unavailable", "")
-				}
-			}
-			log.Printf("[%s-Override] 手动排序序列中无当前可用渠道，保留排序并回退默认调度 (user: %s, role=%s, sequenceHead=%s)", prefix, maskUserID(userID), schedulerAgentRoleForLog(opts.AgentRole), formatOverrideSequenceHead(sequence, 3))
-		}
-	}
-
-	// 1. 检查促销期渠道（手动覆盖之后，绕过健康检查）
+	// 1. 检查促销期渠道（绕过健康检查）
 	promotedChannel := s.findPromotedChannel(cfg, activeChannels, kind)
 	if opts.ApplySubagentRouting {
 		promotedChannel = nil
@@ -850,61 +814,6 @@ func (s *ChannelScheduler) ValidateUpstreamContext(kind ChannelKind, model strin
 	}
 	return fmt.Errorf("渠道 %q 的实际模型 %q 上下文能力未知，当前请求输入估算 %d tokens 超过未知安全窗口 %d tokens",
 		upstream.Name, resolved.ActualModel, channelRequiredWindow, cfg.ContextRouting.EffectiveUnknownSafeWindowTokens())
-}
-
-func applyManualOverrideOrder(activeChannels []ChannelInfo, sequence []conversation.ChannelEntry) []ChannelInfo {
-	if len(activeChannels) == 0 || len(sequence) == 0 {
-		return activeChannels
-	}
-	byIndex := make(map[int]ChannelInfo, len(activeChannels))
-	for _, ch := range activeChannels {
-		byIndex[ch.Index] = ch
-	}
-
-	ordered := make([]ChannelInfo, 0, len(activeChannels))
-	used := make(map[int]bool, len(activeChannels))
-	for _, entry := range sequence {
-		ch, ok := byIndex[entry.ChannelIndex]
-		if !ok || used[ch.Index] {
-			continue
-		}
-		ordered = append(ordered, ch)
-		used[ch.Index] = true
-	}
-	for _, ch := range activeChannels {
-		if !used[ch.Index] {
-			ordered = append(ordered, ch)
-		}
-	}
-	return ordered
-}
-
-func schedulerAgentRoleForLog(role string) string {
-	if strings.TrimSpace(role) == "" {
-		return "unknown"
-	}
-	return role
-}
-
-func formatOverrideSequenceHead(sequence []conversation.ChannelEntry, limit int) string {
-	if len(sequence) == 0 {
-		return "[]"
-	}
-	if limit <= 0 || limit > len(sequence) {
-		limit = len(sequence)
-	}
-	parts := make([]string, 0, limit+1)
-	for _, entry := range sequence[:limit] {
-		name := entry.ChannelName
-		if name == "" {
-			name = "unknown"
-		}
-		parts = append(parts, fmt.Sprintf("%d:%s", entry.ChannelIndex, name))
-	}
-	if len(sequence) > limit {
-		parts = append(parts, fmt.Sprintf("+%d", len(sequence)-limit))
-	}
-	return "[" + strings.Join(parts, ",") + "]"
 }
 
 // preferredTraceChannel 对加密续轮优先恢复成功渠道，普通亲和仍按上下文桶和 TTL 隔离。

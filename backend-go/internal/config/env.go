@@ -42,8 +42,6 @@ type EnvConfig struct {
 	MetricsRetentionDays      int  // 数据保留天数（3-366）
 	// HTTP 客户端配置
 	ResponseHeaderTimeout int // 等待响应头超时时间（秒）
-	// 驾驶舱 override 默认有效期
-	OverrideTTLMinutes int // 驾驶舱 override 默认有效期（分钟，1-1440，默认 30）
 	// 日志文件相关配置
 	LogDir        string
 	LogFile       string
@@ -96,8 +94,6 @@ func NewEnvConfig() *EnvConfig {
 		MetricsRetentionDays:      clampInt(getEnvAsInt("METRICS_RETENTION_DAYS", 366), 3, 366),
 		// HTTP 客户端配置
 		ResponseHeaderTimeout: clampInt(getEnvAsInt("RESPONSE_HEADER_TIMEOUT", 120), 30, 300), // 30-300 秒
-		// 驾驶舱 override 默认有效期
-		OverrideTTLMinutes: clampInt(getEnvAsInt("OVERRIDE_TTL_MINUTES", 30), 1, 1440),
 		// 日志文件配置
 		LogDir:        getEnv("LOG_DIR", "logs"),
 		LogFile:       getEnv("LOG_FILE", "app.log"),

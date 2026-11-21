@@ -14,9 +14,10 @@ export function useWailsEvents(
 
   onMounted(() => {
     unsubscribeTab = Events.On('desktop:show-tab', (event: { data: string }) => {
-      const validTabs: TabValue[] = ['status', 'agent', 'channels', 'subscriptions', 'cockpit', 'env', 'dashboard']
-      if (validTabs.includes(event.data as TabValue)) {
-        activeTab.value = event.data as TabValue
+      const tab = event.data === 'cockpit' ? 'channels' : event.data
+      const validTabs: TabValue[] = ['status', 'agent', 'channels', 'subscriptions', 'env', 'dashboard']
+      if (validTabs.includes(tab as TabValue)) {
+        activeTab.value = tab as TabValue
       }
     })
     unsubscribeTrayError = Events.On('desktop:tray-error', (event: { data: string }) => {

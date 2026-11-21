@@ -496,27 +496,10 @@ func main() {
 	log.Printf("[Scheduler-Init] 多渠道调度器已初始化 (失败率阈值: %.0f%%, 滑动窗口: %d, 连续失败阈值: %d)",
 		messagesMetricsManager.GetFailureThreshold()*100, messagesMetricsManager.GetWindowSize(), messagesMetricsManager.GetConsecutiveRetryableFailuresThreshold())
 
-	// 初始化对话追踪器和覆盖管理器
+	// 初始化对话追踪器，持久保存成功来源供续聊恢复。
 	conversationTracker := conversation.NewConversationTracker(1*time.Hour, 24*time.Hour, paths.ConversationStatePath)
-
-	// 获取 override TTL：优先使用配置文件中的值，否则使用环境变量
-	cfg := cfgManager.GetConfig()
-	overrideTTLMinutes := cfg.OverrideTTLMinutes
-	if overrideTTLMinutes == 0 {
-		overrideTTLMinutes = envCfg.OverrideTTLMinutes
-	}
-
-	var overrideTTL time.Duration
-	if overrideTTLMinutes == -1 {
-		overrideTTL = -1 // 永不过期
-		log.Printf("[Conversation-Init] 对话追踪器和覆盖管理器已初始化 (idle: 1h, expire: 2h, override TTL: 永不恢复)")
-	} else {
-		overrideTTL = time.Duration(overrideTTLMinutes) * time.Minute
-		log.Printf("[Conversation-Init] 对话追踪器和覆盖管理器已初始化 (idle: 1h, expire: 2h, override TTL: %dm)", overrideTTLMinutes)
-	}
-
-	overrideManager := conversation.NewOverrideManager(overrideTTL)
-	channelScheduler.SetConversationComponents(conversationTracker, overrideManager)
+	channelScheduler.SetConversationTracker(conversationTracker)
+	log.Printf("[Conversation-Init] 对话追踪器已初始化 (idle: 1h, expire: 24h)")
 
 	// 启动 loadShed 后台 reaper（30s 推进到期状态）
 	channelScheduler.Start()
@@ -914,19 +897,6 @@ func main() {
 		// 熔断器运行时设置
 		apiGroup.GET("/settings/circuit-breaker", handlers.GetCircuitBreaker(messagesMetricsManager.GetCircuitBreakerConfig, envCfg))
 		apiGroup.PUT("/settings/circuit-breaker", handlers.SetCircuitBreaker(cfgManager))
-
-		// 会话调度看板 API
-		convDeps := &handlers.ConversationHandlerDeps{
-			Tracker:          conversationTracker,
-			OverrideManager:  overrideManager,
-			ChannelScheduler: channelScheduler,
-			ConfigManager:    cfgManager,
-		}
-		apiGroup.GET("/conversations", handlers.GetConversations(convDeps))
-		apiGroup.POST("/conversations/:id/override", handlers.SetConversationOverride(convDeps))
-		apiGroup.DELETE("/conversations/:id/override", handlers.RemoveConversationOverride(convDeps))
-		apiGroup.GET("/conversations/settings", handlers.GetConversationSettings(convDeps))
-		apiGroup.PUT("/conversations/settings", handlers.UpdateConversationSettings(convDeps))
 	}
 
 	// 代理端点 - Messages API

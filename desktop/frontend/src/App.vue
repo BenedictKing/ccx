@@ -7,7 +7,6 @@ import EnvTab from '@/components/env/EnvTab.vue'
 import ConsoleTab from '@/components/console/ConsoleTab.vue'
 import ChannelTab from '@/components/channel/ChannelTab.vue'
 import SubscriptionTab from '@/components/subscriptions/SubscriptionTab.vue'
-import ConversationDashboard from '@/components/console/ConversationDashboard.vue'
 import SetupLoading from '@/components/setup/SetupLoading.vue'
 import SetupView from '@/components/setup/SetupView.vue'
 import { TooltipProvider } from '@/components/ui/tooltip'
@@ -22,7 +21,6 @@ import {
   useDesktopActivity,
 } from '@/composables/useDesktopActivity'
 import { useConsoleChannels } from '@/composables/useConsoleChannels'
-import { useConversations } from '@/composables/useConversations'
 import {
   useConsoleSelection,
   type ConsoleSelection,
@@ -49,19 +47,14 @@ const { t, initializeLanguage } = useLanguage()
 const { init: initTheme } = useTheme()
 const { consoleSelection, setConsoleSelection } = useConsoleSelection()
 const { refreshChannels } = useConsoleChannels()
-const { fetchConversations } = useConversations()
 const {
   windowVisible,
   isConsoleChannelsActive,
-  isConsoleConversationsActive,
 } = useDesktopActivity()
 
 const CONSOLE_CHANNEL_REFRESH_INTERVAL_MS = 5000
-const CONVERSATION_REFRESH_INTERVAL_MS = 3000
 let channelRefreshTimer: ReturnType<typeof setInterval> | undefined
-let conversationRefreshTimer: ReturnType<typeof setInterval> | undefined
 let channelRefreshPromise: Promise<void> | null = null
-let conversationRefreshPromise: Promise<void> | null = null
 
 useWailsEvents(activeTab, actionError, syncStatus)
 
@@ -99,23 +92,10 @@ async function refreshVisibleChannels() {
   return channelRefreshPromise
 }
 
-async function refreshVisibleConversations() {
-  if (!status.value.running || !isConsoleConversationsActive.value || conversationRefreshPromise) return
-  conversationRefreshPromise = fetchConversations()
-    .finally(() => {
-      conversationRefreshPromise = null
-    })
-  return conversationRefreshPromise
-}
-
 function updateDashboardPolling() {
   if (channelRefreshTimer) {
     clearInterval(channelRefreshTimer)
     channelRefreshTimer = undefined
-  }
-  if (conversationRefreshTimer) {
-    clearInterval(conversationRefreshTimer)
-    conversationRefreshTimer = undefined
   }
 
   if (isConsoleChannelsActive.value && status.value.running) {
@@ -123,13 +103,6 @@ function updateDashboardPolling() {
     channelRefreshTimer = setInterval(() => {
       void refreshVisibleChannels()
     }, CONSOLE_CHANNEL_REFRESH_INTERVAL_MS)
-  }
-
-  if (isConsoleConversationsActive.value && status.value.running) {
-    void refreshVisibleConversations()
-    conversationRefreshTimer = setInterval(() => {
-      void refreshVisibleConversations()
-    }, CONVERSATION_REFRESH_INTERVAL_MS)
   }
 }
 
@@ -139,7 +112,6 @@ const tabTitles = computed<Record<TabValue, string>>(() => ({
   agent: t('tab.agentTitle'),
   channels: t('tab.channelsTitle'),
   subscriptions: t('tab.subscriptionsTitle'),
-  cockpit: t('tab.cockpitTitle'),
   env: t('tab.envTitle'),
   dashboard: t('tab.dashboardTitle'),
 }))
@@ -160,7 +132,6 @@ watch(
 
 onBeforeUnmount(() => {
   if (channelRefreshTimer) clearInterval(channelRefreshTimer)
-  if (conversationRefreshTimer) clearInterval(conversationRefreshTimer)
 })
 </script>
 
@@ -260,9 +231,6 @@ onBeforeUnmount(() => {
           </div>
           <div v-show="activeTab === 'subscriptions'" class="h-full">
             <SubscriptionTab @configure-agent="configureOnboardedAgent" />
-          </div>
-          <div v-show="activeTab === 'cockpit'" class="h-full">
-            <ConversationDashboard />
           </div>
           <div v-show="activeTab === 'dashboard'" class="h-full">
             <ConsoleTab

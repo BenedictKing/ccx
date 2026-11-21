@@ -17,13 +17,11 @@ import type {
   ChannelLogsResponse,
   ChannelMetrics,
   ChannelModelsRequest,
-  ChannelSequenceEntry,
   ChannelsResponse,
   ChannelStatus,
   CopilotDeviceCodeResponse,
   CopilotTokenResponse,
   CopilotUserResponse,
-  ConversationsResponse,
   GlobalStatsHistoryResponse,
   GroupModelMutationResponse,
   MetricsHistoryResponse,
@@ -1219,42 +1217,6 @@ export class ApiService {
     await this.request(`/gemini/channels/${id}/mappings`, {
       method: 'PUT',
       body: JSON.stringify({ source_pattern: sourcePattern, target_model: targetModel, reasoning })
-    })
-  }
-
-  // ============== 会话调度看板 API ==============
-
-  async getConversations(kind?: string): Promise<ConversationsResponse> {
-    const params = kind ? `?kind=${kind}` : ''
-    return this.request(`/conversations${params}`)
-  }
-
-  async setConversationOverride(
-    id: string,
-    sequence: ChannelSequenceEntry[],
-    duration?: number,
-    subagentSequence?: ChannelSequenceEntry[],
-    clearSubagentSequence = false
-  ): Promise<void> {
-    const body: Record<string, unknown> = { sequence }
-    if (duration !== undefined) {
-      body.duration = duration
-    }
-    if (subagentSequence && subagentSequence.length > 0) {
-      body.subagentSequence = subagentSequence
-    }
-    if (clearSubagentSequence) {
-      body.clearSubagentSequence = true
-    }
-    await this.request(`/conversations/${id}/override`, {
-      method: 'POST',
-      body: JSON.stringify(body)
-    })
-  }
-
-  async removeConversationOverride(id: string): Promise<void> {
-    await this.request(`/conversations/${id}/override`, {
-      method: 'DELETE'
     })
   }
 

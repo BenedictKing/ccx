@@ -65,8 +65,6 @@
             <span class="demo-tab">Codex</span>
             <span class="demo-sep">/</span>
             <span class="demo-tab">Gemini</span>
-            <span class="demo-sep">/</span>
-            <span class="demo-tab">Cockpit</span>
           </div>
           <p class="guide-section-body">{{ t('guide.protocol.body1') }}</p>
           <p class="guide-section-body">{{ t('guide.protocol.body2') }}</p>

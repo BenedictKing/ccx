@@ -55,7 +55,21 @@ it('真实模型下拉框选中 sol 后保存字符串模型值', async () => {
   update.mockResolvedValue({ ...view, policy: { ...view.policy, model: 'sol' } })
   const container = document.createElement('div')
   document.body.append(container)
-  const app = createApp({ render: () => h(SubagentRoutingPanel, { channelType: 'responses' }) })
+  const app = createApp({
+    render: () => h(SubagentRoutingPanel, {
+      channelType: 'responses',
+      availableChannels: [{
+        index: 0,
+        name: 'configured-model-source',
+        serviceType: 'responses',
+        baseUrl: 'https://models.example',
+        apiKeys: [],
+        status: 'active',
+        priority: 1,
+        supportedModels: ['sol'],
+      }],
+    }),
+  })
   app.use(createVuetify({ components })).mount(container)
   cleanup = () => {
     app.unmount()

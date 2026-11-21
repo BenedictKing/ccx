@@ -800,66 +800,6 @@ export interface ModelsResponse {
   data: ModelEntry[]
 }
 
-// ============== 对话类型 ==============
-
-export interface ChannelSequenceEntry {
-  channelIndex: number
-  channelName: string
-}
-
-export interface ConversationChannelInfo {
-  index: number
-  name: string
-  priority: number
-  status: string
-  circuitOpen?: boolean
-}
-
-export interface SequenceOverrideInfo {
-  sequence: ChannelSequenceEntry[]
-  hasMainSequence?: boolean
-  subagentSequence?: ChannelSequenceEntry[]  // subagent 专用序列（为空时 fallback 到 sequence）
-  setAt: string
-  expiresAt: string
-  isPerpetual?: boolean
-}
-
-export interface ConversationInfo {
-  id: string
-  kind: 'messages' | 'responses' | 'chat' | 'gemini' | 'images' | 'vectors'
-  userId: string
-  rawUserId?: string
-  title?: string
-  currentChannel: number
-  status: 'active' | 'streaming' | 'idle'
-  models: string[]
-  lastModel: string
-  requestCount: number
-  channelName: string
-  lastRequestId: string
-  lastUserMessage?: string
-  lastRecap?: string
-  lastRecapAt?: string
-  createdAt: string
-  lastActiveAt: string
-  parentThreadId?: string
-  parentConversationId?: string
-  childConversationIds?: string[]
-
-  // subagent 观测（仅展示）
-  hasSubagents?: boolean
-  subagentCount?: number
-  mainChannel?: number
-  subagentChannel?: number
-}
-
-export interface ConversationsResponse {
-  conversations: ConversationInfo[]
-  total: number
-  channelsByKind?: Record<string, ConversationChannelInfo[]>
-  overrides: Record<string, SequenceOverrideInfo>
-}
-
 // ============== 健康检查 ==============
 
 export interface HealthResponse {

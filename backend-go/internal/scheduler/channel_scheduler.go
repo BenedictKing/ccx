@@ -31,7 +31,6 @@ type ChannelScheduler struct {
 	imagesChannelLogStore    *metrics.ChannelLogStore // Images 渠道请求日志
 	vectorsChannelLogStore   *metrics.ChannelLogStore // Vectors 渠道请求日志
 	conversationTracker      *conversation.ConversationTracker
-	overrideManager          *conversation.OverrideManager
 	rateLimitManager         *ratelimit.Manager
 	loadShedMu               sync.Mutex
 	loadShedStates           map[string]rateLimitLoadShedState
@@ -93,20 +92,14 @@ func NewChannelScheduler(
 	}
 }
 
-// SetConversationComponents 设置对话追踪和覆盖管理组件
-func (s *ChannelScheduler) SetConversationComponents(tracker *conversation.ConversationTracker, overrideMgr *conversation.OverrideManager) {
+// SetConversationTracker 设置对话追踪器，供成功来源持久化与续聊恢复使用。
+func (s *ChannelScheduler) SetConversationTracker(tracker *conversation.ConversationTracker) {
 	s.conversationTracker = tracker
-	s.overrideManager = overrideMgr
 }
 
 // GetConversationTracker 获取对话追踪器
 func (s *ChannelScheduler) GetConversationTracker() *conversation.ConversationTracker {
 	return s.conversationTracker
-}
-
-// GetOverrideManager 获取覆盖管理器
-func (s *ChannelScheduler) GetOverrideManager() *conversation.OverrideManager {
-	return s.overrideManager
 }
 
 // SetRateLimitManager 设置主动限速管理器

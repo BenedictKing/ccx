@@ -55,7 +55,7 @@ type ChannelLog struct {
 	AgentConfidence       string `json:"agentConfidence,omitempty"` // exact | heuristic
 	SubagentPolicyApplied bool   `json:"subagentPolicyApplied,omitempty"`
 	SubagentPolicyModel   string `json:"subagentPolicyModel,omitempty"`
-	SessionID             string `json:"sessionId,omitempty"` // 扁平化会话标识（用于驾驶舱关联）
+	SessionID             string `json:"sessionId,omitempty"` // 扁平化会话标识（用于请求关联）
 }
 
 const (

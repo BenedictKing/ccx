@@ -57,7 +57,7 @@ func newResponsesTestRouterWithConversationTracker(t *testing.T, upstream config
 		nil,
 	)
 	if tracker != nil {
-		channelScheduler.SetConversationComponents(tracker, nil)
+		channelScheduler.SetConversationTracker(tracker)
 	}
 	envCfg := &config.EnvConfig{
 		ProxyAccessKey:     "secret-key",
@@ -279,7 +279,7 @@ func TestResponsesHandler_SingleChannelTracksConversation(t *testing.T) {
 		Status:      "active",
 	}, sessionManager, tracker)
 
-	w := performResponsesHandlerRequest(t, router, `{"model":"gpt-5","input":"hello cockpit","user":"user-single-channel"}`)
+	w := performResponsesHandlerRequest(t, router, `{"model":"gpt-5","input":"hello conversation","user":"user-single-channel"}`)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d, body=%s", w.Code, http.StatusOK, w.Body.String())
 	}
@@ -304,8 +304,8 @@ func TestResponsesHandler_SingleChannelTracksConversation(t *testing.T) {
 	if conv.RequestCount != 1 {
 		t.Fatalf("RequestCount = %d, want 1", conv.RequestCount)
 	}
-	if conv.FallbackTitle != "hello cockpit" {
-		t.Fatalf("FallbackTitle = %q, want hello cockpit", conv.FallbackTitle)
+	if conv.FallbackTitle != "hello conversation" {
+		t.Fatalf("FallbackTitle = %q, want hello conversation", conv.FallbackTitle)
 	}
 }
 
