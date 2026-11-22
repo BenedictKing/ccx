@@ -16,6 +16,9 @@ export interface TimeWindowStats {
   firstByteLatencySamples?: number
   firstByteLatencyP50Ms?: number
   firstByteLatencyP95Ms?: number
+  firstContentLatencySamples?: number
+  firstContentLatencyP50Ms?: number
+  firstContentLatencyP95Ms?: number
 }
 
 export type CircuitState = 'closed' | 'open' | 'half_open'

@@ -671,6 +671,11 @@ func TryUpstreamWithAllKeys(
 			}
 			if isStream {
 				FinishStreamTimeoutObservation(c)
+				if observer := GetStreamTimeoutObserver(c); observer != nil {
+					if latency, observed := observer.firstContentLatency(logRequestID); observed {
+						metricsManager.RecordRequestFirstContent(currentBaseURL, apiKey, metricsServiceType, requestID, latency)
+					}
+				}
 			}
 			if err != nil {
 				if isStream && streamingUserID != "" {

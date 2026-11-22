@@ -68,17 +68,18 @@ type PersistentCircuitState struct {
 
 // PersistentRecord 持久化记录结构
 type PersistentRecord struct {
-	MetricsKey          string       // hash(baseURL + apiKey)
-	BaseURL             string       // 上游 BaseURL
-	KeyMask             string       // 脱敏的 API Key
-	Timestamp           time.Time    // 请求时间
-	Success             bool         // 是否成功
-	FailureClass        FailureClass // 失败分类（用于重建 breaker 窗口）
-	FirstByteLatencyMs  float64      // 实际请求首个响应字节延迟，毫秒
-	InputTokens         int64        // 输入 Token 数
-	OutputTokens        int64        // 输出 Token 数
-	CacheCreationTokens int64        // 缓存创建 Token
-	CacheReadTokens     int64        // 缓存读取 Token
-	Model               string       // 请求模型
-	APIType             string       // "messages"、"responses"、"gemini" 或 "chat"
+	MetricsKey            string       // hash(baseURL + apiKey)
+	BaseURL               string       // 上游 BaseURL
+	KeyMask               string       // 脱敏的 API Key
+	Timestamp             time.Time    // 请求时间
+	Success               bool         // 是否成功
+	FailureClass          FailureClass // 失败分类（用于重建 breaker 窗口）
+	FirstByteLatencyMs    float64      // 实际请求首个响应字节延迟，毫秒
+	FirstContentLatencyMs *float64     // HTTP 200 后首个有效流内容耗时，毫秒；nil 表示未观测
+	InputTokens           int64        // 输入 Token 数
+	OutputTokens          int64        // 输出 Token 数
+	CacheCreationTokens   int64        // 缓存创建 Token
+	CacheReadTokens       int64        // 缓存读取 Token
+	Model                 string       // 请求模型
+	APIType               string       // "messages"、"responses"、"gemini" 或 "chat"
 }

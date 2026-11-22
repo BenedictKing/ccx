@@ -129,6 +129,7 @@ func initSchema(db *sql.DB) error {
 			cache_creation_tokens INTEGER DEFAULT 0,
 			cache_read_tokens INTEGER DEFAULT 0,
 			first_byte_latency_ms REAL NOT NULL DEFAULT 0,
+			first_content_latency_ms REAL,
 			api_type TEXT NOT NULL DEFAULT 'messages'
 		);
 
@@ -204,6 +205,9 @@ func initSchema(db *sql.DB) error {
 
 	if err := ensureSQLiteColumn(db, "request_records", "first_byte_latency_ms", "REAL NOT NULL DEFAULT 0"); err != nil {
 		return fmt.Errorf("ensure first-byte latency column: %w", err)
+	}
+	if err := ensureSQLiteColumn(db, "request_records", "first_content_latency_ms", "REAL"); err != nil {
+		return fmt.Errorf("ensure first-content latency column: %w", err)
 	}
 
 	// 复合索引：无论 schema 版本如何，幂等创建（不改变 user_version，避免干扰 v2→v3 数据迁移流程）
@@ -667,8 +671,8 @@ func (s *SQLiteStore) batchInsertRecords(records []PersistentRecord) error {
 	stmt, err := tx.Prepare(`
 		INSERT INTO request_records
 		(metrics_key, base_url, key_mask, timestamp, success, failure_class,
-		 input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, first_byte_latency_ms, api_type, model)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		 input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, first_byte_latency_ms, first_content_latency_ms, api_type, model)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
 		return err
@@ -682,7 +686,7 @@ func (s *SQLiteStore) batchInsertRecords(records []PersistentRecord) error {
 		}
 		_, err := stmt.Exec(
 			r.MetricsKey, r.BaseURL, r.KeyMask, r.Timestamp.Unix(), success, string(r.FailureClass),
-			r.InputTokens, r.OutputTokens, r.CacheCreationTokens, r.CacheReadTokens, r.FirstByteLatencyMs, r.APIType, r.Model,
+			r.InputTokens, r.OutputTokens, r.CacheCreationTokens, r.CacheReadTokens, r.FirstByteLatencyMs, r.FirstContentLatencyMs, r.APIType, r.Model,
 		)
 		if err != nil {
 			return err
@@ -696,7 +700,7 @@ func (s *SQLiteStore) batchInsertRecords(records []PersistentRecord) error {
 func (s *SQLiteStore) LoadRecords(since time.Time, apiType string) ([]PersistentRecord, error) {
 	rows, err := s.db.Query(`
 		SELECT metrics_key, base_url, key_mask, timestamp, success, failure_class,
-		       input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, first_byte_latency_ms, model
+		       input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, first_byte_latency_ms, first_content_latency_ms, model
 		FROM request_records
 		WHERE timestamp >= ? AND api_type = ?
 		ORDER BY timestamp ASC
@@ -716,7 +720,7 @@ func (s *SQLiteStore) LoadRecords(since time.Time, apiType string) ([]Persistent
 
 		err := rows.Scan(
 			&r.MetricsKey, &r.BaseURL, &r.KeyMask, &ts, &success, &failureClass,
-			&r.InputTokens, &r.OutputTokens, &r.CacheCreationTokens, &r.CacheReadTokens, &r.FirstByteLatencyMs, &r.Model,
+			&r.InputTokens, &r.OutputTokens, &r.CacheCreationTokens, &r.CacheReadTokens, &r.FirstByteLatencyMs, &r.FirstContentLatencyMs, &r.Model,
 		)
 		if err != nil {
 			return nil, err

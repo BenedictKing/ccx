@@ -84,6 +84,7 @@ type RequestRecord struct {
 	Success                  bool
 	FailureClass             FailureClass
 	FirstByteLatencyMs       float64
+	FirstContentLatencyMs    *float64
 	pending                  bool
 	InputTokens              int64
 	OutputTokens             int64
@@ -160,6 +161,10 @@ type TimeWindowStats struct {
 	FirstByteLatencySamples int64   `json:"firstByteLatencySamples,omitempty"`
 	FirstByteLatencyP50Ms   float64 `json:"firstByteLatencyP50Ms,omitempty"`
 	FirstByteLatencyP95Ms   float64 `json:"firstByteLatencyP95Ms,omitempty"`
+	// 首内容延迟为 HTTP 200 后到首个有效流内容的耗时；nil 观察值不计入样本。
+	FirstContentLatencySamples int64   `json:"firstContentLatencySamples,omitempty"`
+	FirstContentLatencyP50Ms   float64 `json:"firstContentLatencyP50Ms,omitempty"`
+	FirstContentLatencyP95Ms   float64 `json:"firstContentLatencyP95Ms,omitempty"`
 }
 
 // MetricsManager 指标管理器
@@ -312,6 +317,7 @@ func (m *MetricsManager) loadFromStore() error {
 				Success:                  r.Success,
 				FailureClass:             normalizeFailureClass(r.Success, r.FailureClass),
 				FirstByteLatencyMs:       r.FirstByteLatencyMs,
+				FirstContentLatencyMs:    r.FirstContentLatencyMs,
 				InputTokens:              r.InputTokens,
 				OutputTokens:             r.OutputTokens,
 				CacheCreationInputTokens: r.CacheCreationTokens,

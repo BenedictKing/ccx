@@ -28,7 +28,7 @@ type StreamTimeoutObserver struct {
 }
 
 func StartStreamTimeoutObservation(c *gin.Context, store *metrics.ChannelLogStore, metricsKey, requestID string, startedAt time.Time) {
-	if c == nil || store == nil || metricsKey == "" || requestID == "" {
+	if c == nil || metricsKey == "" || requestID == "" {
 		return
 	}
 	if startedAt.IsZero() {
@@ -125,6 +125,15 @@ func (o *StreamTimeoutObserver) Finish(now time.Time) {
 		o.maxToolCallIdleMs = maxInt64(o.maxToolCallIdleMs, now.Sub(o.lastToolCallActivityAt).Milliseconds())
 	}
 	o.flushLocked()
+}
+
+func (o *StreamTimeoutObserver) firstContentLatency(requestID string) (time.Duration, bool) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if o.requestID != requestID || o.firstContentAt.IsZero() {
+		return 0, false
+	}
+	return o.firstContentAt.Sub(o.startedAt), true
 }
 
 func (o *StreamTimeoutObserver) addRoutingDetails(requestID string, details *metrics.RoutingAttemptDetails) {

@@ -301,7 +301,7 @@ func (m *MetricsManager) calculateAggregatedTimeWindowsInternal(baseURL string, 
 		cutoff := now.Add(-duration)
 		var requestCount, successCount, failureCount int64
 		var inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens int64
-		var firstByteLatencies firstByteLatencyHistogram
+		var latencies requestLatencyHistograms
 
 		for _, apiKey := range activeKeys {
 			for _, metrics := range m.getMetricsVariantsLocked(baseURL, apiKey, serviceType) {
@@ -317,9 +317,7 @@ func (m *MetricsManager) calculateAggregatedTimeWindowsInternal(baseURL string, 
 						outputTokens += record.OutputTokens
 						cacheCreationTokens += record.CacheCreationInputTokens
 						cacheReadTokens += record.CacheReadInputTokens
-						if !record.pending {
-							firstByteLatencies.add(record.FirstByteLatencyMs)
-						}
+						latencies.add(record)
 					}
 				}
 			}
@@ -335,22 +333,19 @@ func (m *MetricsManager) calculateAggregatedTimeWindowsInternal(baseURL string, 
 		if denom > 0 {
 			cacheHitRate = float64(cacheReadTokens) / float64(denom) * 100
 		}
-		latencySamples, p50Latency, p95Latency := firstByteLatencies.summary()
-
-		result[label] = TimeWindowStats{
-			RequestCount:            requestCount,
-			SuccessCount:            successCount,
-			FailureCount:            failureCount,
-			SuccessRate:             successRate,
-			InputTokens:             inputTokens,
-			OutputTokens:            outputTokens,
-			CacheCreationTokens:     cacheCreationTokens,
-			CacheReadTokens:         cacheReadTokens,
-			CacheHitRate:            cacheHitRate,
-			FirstByteLatencySamples: latencySamples,
-			FirstByteLatencyP50Ms:   p50Latency,
-			FirstByteLatencyP95Ms:   p95Latency,
+		stats := TimeWindowStats{
+			RequestCount:        requestCount,
+			SuccessCount:        successCount,
+			FailureCount:        failureCount,
+			SuccessRate:         successRate,
+			InputTokens:         inputTokens,
+			OutputTokens:        outputTokens,
+			CacheCreationTokens: cacheCreationTokens,
+			CacheReadTokens:     cacheReadTokens,
+			CacheHitRate:        cacheHitRate,
 		}
+		latencies.populate(&stats)
+		result[label] = stats
 	}
 
 	return result
@@ -372,7 +367,7 @@ func (m *MetricsManager) calculateAggregatedTimeWindowsMultiURL(baseURLs []strin
 		cutoff := now.Add(-duration)
 		var requestCount, successCount, failureCount int64
 		var inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens int64
-		var firstByteLatencies firstByteLatencyHistogram
+		var latencies requestLatencyHistograms
 
 		// 遍历所有 BaseURL 和 Key 的组合
 		for _, metrics := range m.getIdentityMetricsByMultiURLAndKeysLocked(baseURLs, activeKeys, serviceType) {
@@ -388,9 +383,7 @@ func (m *MetricsManager) calculateAggregatedTimeWindowsMultiURL(baseURLs []strin
 					outputTokens += record.OutputTokens
 					cacheCreationTokens += record.CacheCreationInputTokens
 					cacheReadTokens += record.CacheReadInputTokens
-					if !record.pending {
-						firstByteLatencies.add(record.FirstByteLatencyMs)
-					}
+					latencies.add(record)
 				}
 			}
 		}
@@ -405,22 +398,19 @@ func (m *MetricsManager) calculateAggregatedTimeWindowsMultiURL(baseURLs []strin
 		if denom > 0 {
 			cacheHitRate = float64(cacheReadTokens) / float64(denom) * 100
 		}
-		latencySamples, p50Latency, p95Latency := firstByteLatencies.summary()
-
-		result[label] = TimeWindowStats{
-			RequestCount:            requestCount,
-			SuccessCount:            successCount,
-			FailureCount:            failureCount,
-			SuccessRate:             successRate,
-			InputTokens:             inputTokens,
-			OutputTokens:            outputTokens,
-			CacheCreationTokens:     cacheCreationTokens,
-			CacheReadTokens:         cacheReadTokens,
-			CacheHitRate:            cacheHitRate,
-			FirstByteLatencySamples: latencySamples,
-			FirstByteLatencyP50Ms:   p50Latency,
-			FirstByteLatencyP95Ms:   p95Latency,
+		stats := TimeWindowStats{
+			RequestCount:        requestCount,
+			SuccessCount:        successCount,
+			FailureCount:        failureCount,
+			SuccessRate:         successRate,
+			InputTokens:         inputTokens,
+			OutputTokens:        outputTokens,
+			CacheCreationTokens: cacheCreationTokens,
+			CacheReadTokens:     cacheReadTokens,
+			CacheHitRate:        cacheHitRate,
 		}
+		latencies.populate(&stats)
+		result[label] = stats
 	}
 
 	return result

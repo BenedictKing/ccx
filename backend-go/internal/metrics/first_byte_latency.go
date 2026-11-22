@@ -2,25 +2,28 @@ package metrics
 
 import "math"
 
-const firstByteLatencyBucketCount = 2048
+const latencyBucketCount = 2048
 
-type firstByteLatencyBucket struct {
+type latencyBucket struct {
 	count    int64
 	min, max float64
 }
 
 // 固定空间直方图：每个倍增区间分为 32 桶，覆盖 time.Duration 的纳秒范围。
 // 桶内按观察到的最小/最大值插值，正常范围内分位数误差不超过约 2.2%。
-type firstByteLatencyHistogram struct {
-	buckets [firstByteLatencyBucketCount]firstByteLatencyBucket
+type latencyHistogram struct {
+	buckets [latencyBucketCount]latencyBucket
 	count   int64
 }
 
-func (h *firstByteLatencyHistogram) add(latencyMs float64) {
-	if latencyMs <= 0 || math.IsNaN(latencyMs) || math.IsInf(latencyMs, 0) {
+func (h *latencyHistogram) add(latencyMs float64) {
+	if latencyMs < 0 || math.IsNaN(latencyMs) || math.IsInf(latencyMs, 0) {
 		return
 	}
-	index := int(math.Log2(latencyMs*1e6) * 32)
+	index := 0
+	if latencyMs > 0 {
+		index = int(math.Log2(latencyMs*1e6) * 32)
+	}
 	if index < 0 {
 		index = 0
 	} else if index >= len(h.buckets) {
@@ -37,7 +40,7 @@ func (h *firstByteLatencyHistogram) add(latencyMs float64) {
 	h.count++
 }
 
-func (h *firstByteLatencyHistogram) valueAtRank(rank int64) float64 {
+func (h *latencyHistogram) valueAtRank(rank int64) float64 {
 	for _, bucket := range h.buckets {
 		if rank >= bucket.count {
 			rank -= bucket.count
@@ -51,7 +54,7 @@ func (h *firstByteLatencyHistogram) valueAtRank(rank int64) float64 {
 	return 0
 }
 
-func (h *firstByteLatencyHistogram) percentile(percentile float64) float64 {
+func (h *latencyHistogram) percentile(percentile float64) float64 {
 	position := percentile * float64(h.count-1)
 	lower := int64(position)
 	value := h.valueAtRank(lower)
@@ -61,9 +64,31 @@ func (h *firstByteLatencyHistogram) percentile(percentile float64) float64 {
 	return value
 }
 
-func (h *firstByteLatencyHistogram) summary() (int64, float64, float64) {
+func (h *latencyHistogram) summary() (int64, float64, float64) {
 	if h.count == 0 {
 		return 0, 0, 0
 	}
 	return h.count, h.percentile(0.50), h.percentile(0.95)
+}
+
+// 渠道与 Key 查询共用样本口径：仅纳入已结束且确实观测到的耗时。
+type requestLatencyHistograms struct {
+	firstByte, firstContent latencyHistogram
+}
+
+func (h *requestLatencyHistograms) add(record RequestRecord) {
+	if record.pending {
+		return
+	}
+	if record.FirstByteLatencyMs > 0 {
+		h.firstByte.add(record.FirstByteLatencyMs)
+	}
+	if record.FirstContentLatencyMs != nil {
+		h.firstContent.add(*record.FirstContentLatencyMs)
+	}
+}
+
+func (h *requestLatencyHistograms) populate(stats *TimeWindowStats) {
+	stats.FirstByteLatencySamples, stats.FirstByteLatencyP50Ms, stats.FirstByteLatencyP95Ms = h.firstByte.summary()
+	stats.FirstContentLatencySamples, stats.FirstContentLatencyP50Ms, stats.FirstContentLatencyP95Ms = h.firstContent.summary()
 }

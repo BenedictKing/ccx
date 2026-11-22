@@ -145,6 +145,29 @@ func (m *MetricsManager) RecordRequestFirstByte(baseURL, apiKey, serviceType str
 	}
 }
 
+// RecordRequestFirstContent 记录 HTTP 200 后到首个有效流内容的耗时，只保留第一次观察。
+func (m *MetricsManager) RecordRequestFirstContent(baseURL, apiKey, serviceType string, requestID uint64, latency time.Duration) {
+	if latency < 0 {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	metrics := m.findPendingRequestMetricsLocked(baseURL, apiKey, serviceType, requestID)
+	if metrics == nil {
+		return
+	}
+	idx, ok := metrics.pendingHistoryIdx[requestID]
+	if !ok || idx < 0 || idx >= len(metrics.requestHistory) {
+		return
+	}
+	record := &metrics.requestHistory[idx]
+	if record.FirstContentLatencyMs == nil {
+		value := float64(latency) / float64(time.Millisecond)
+		record.FirstContentLatencyMs = &value
+	}
+}
+
 // RecordRequestFinalizeSuccess 回写成功结果与 token（requestID 来自 RecordRequestConnected）。
 func (m *MetricsManager) RecordRequestFinalizeSuccess(baseURL, apiKey, serviceType string, requestID uint64, usage *types.Usage) {
 	m.RecordRequestFinalizeOutcome(baseURL, apiKey, serviceType, requestID, true, FailureClassNone, usage)
@@ -212,19 +235,20 @@ func (m *MetricsManager) RecordRequestFinalizeOutcome(baseURL, apiKey, serviceTy
 
 		if m.store != nil {
 			m.store.AddRecord(PersistentRecord{
-				MetricsKey:          metrics.MetricsKey,
-				BaseURL:             metrics.BaseURL,
-				KeyMask:             metrics.KeyMask,
-				Timestamp:           record.Timestamp,
-				Success:             true,
-				FailureClass:        FailureClassNone,
-				FirstByteLatencyMs:  record.FirstByteLatencyMs,
-				InputTokens:         inputTokens,
-				OutputTokens:        outputTokens,
-				CacheCreationTokens: cacheCreationTokens,
-				CacheReadTokens:     cacheReadTokens,
-				APIType:             m.apiType,
-				Model:               record.Model,
+				MetricsKey:            metrics.MetricsKey,
+				BaseURL:               metrics.BaseURL,
+				KeyMask:               metrics.KeyMask,
+				Timestamp:             record.Timestamp,
+				Success:               true,
+				FailureClass:          FailureClassNone,
+				FirstByteLatencyMs:    record.FirstByteLatencyMs,
+				FirstContentLatencyMs: record.FirstContentLatencyMs,
+				InputTokens:           inputTokens,
+				OutputTokens:          outputTokens,
+				CacheCreationTokens:   cacheCreationTokens,
+				CacheReadTokens:       cacheReadTokens,
+				APIType:               m.apiType,
+				Model:                 record.Model,
 			})
 		}
 		return
@@ -241,19 +265,20 @@ func (m *MetricsManager) RecordRequestFinalizeOutcome(baseURL, apiKey, serviceTy
 
 	if m.store != nil {
 		m.store.AddRecord(PersistentRecord{
-			MetricsKey:          metrics.MetricsKey,
-			BaseURL:             metrics.BaseURL,
-			KeyMask:             metrics.KeyMask,
-			Timestamp:           record.Timestamp,
-			Success:             false,
-			FailureClass:        failureClass,
-			FirstByteLatencyMs:  record.FirstByteLatencyMs,
-			InputTokens:         0,
-			OutputTokens:        0,
-			CacheCreationTokens: 0,
-			CacheReadTokens:     0,
-			APIType:             m.apiType,
-			Model:               record.Model,
+			MetricsKey:            metrics.MetricsKey,
+			BaseURL:               metrics.BaseURL,
+			KeyMask:               metrics.KeyMask,
+			Timestamp:             record.Timestamp,
+			Success:               false,
+			FailureClass:          failureClass,
+			FirstByteLatencyMs:    record.FirstByteLatencyMs,
+			FirstContentLatencyMs: record.FirstContentLatencyMs,
+			InputTokens:           0,
+			OutputTokens:          0,
+			CacheCreationTokens:   0,
+			CacheReadTokens:       0,
+			APIType:               m.apiType,
+			Model:                 record.Model,
 		})
 	}
 }

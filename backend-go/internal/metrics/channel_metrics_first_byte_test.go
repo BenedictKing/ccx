@@ -66,8 +66,8 @@ func TestFirstByteLatencyExcludesPendingAndExpiredRequests(t *testing.T) {
 }
 
 func TestFirstByteLatencyHistogramAccuracy(t *testing.T) {
-	var histogram firstByteLatencyHistogram
-	for _, invalid := range []float64{0, -1, math.NaN(), math.Inf(1)} {
+	var histogram latencyHistogram
+	for _, invalid := range []float64{-1, math.NaN(), math.Inf(1)} {
 		histogram.add(invalid)
 	}
 	if count, _, _ := histogram.summary(); count != 0 {
@@ -99,7 +99,7 @@ func BenchmarkFirstByteLatencyHistogram(b *testing.B) {
 		b.Run(fmt.Sprint(count), func(b *testing.B) {
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
-				var histogram firstByteLatencyHistogram
+				var histogram latencyHistogram
 				for j := 0; j < count; j++ {
 					histogram.add(float64(j%10000 + 1))
 				}
@@ -200,8 +200,11 @@ func TestFirstByteLatencyColumnUpgradePreservesSchemaVersion(t *testing.T) {
 	if err := store.db.QueryRow("SELECT COUNT(*) FROM pragma_table_info('request_records') WHERE name = 'first_byte_latency_ms'").Scan(&columnCount); err != nil || columnCount != 1 {
 		t.Fatalf("first-byte latency column count = %d, err = %v", columnCount, err)
 	}
+	if err := store.db.QueryRow("SELECT COUNT(*) FROM pragma_table_info('request_records') WHERE name = 'first_content_latency_ms' AND [notnull] = 0").Scan(&columnCount); err != nil || columnCount != 1 {
+		t.Fatalf("nullable first-content column count = %d, err = %v", columnCount, err)
+	}
 	records, err := store.LoadRecords(time.Now().Add(-time.Hour), "messages")
-	if err != nil || len(records) != 1 || records[0].FirstByteLatencyMs != 0 {
+	if err != nil || len(records) != 1 || records[0].FirstByteLatencyMs != 0 || records[0].FirstContentLatencyMs != nil {
 		t.Fatalf("legacy request should have no latency sample: %+v, err=%v", records, err)
 	}
 }

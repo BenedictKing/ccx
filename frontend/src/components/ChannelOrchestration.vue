@@ -252,7 +252,11 @@
                       </div>
                       <div class="metrics-tooltip-row">
                         <span>{{ t('orchestration.firstByteLatency') }} · {{ t('orchestration.minutes15') }}:</span>
-                        <span>{{ formatFirstByteLatency(get15mStats(element.index)) }}</span>
+                        <span>{{ formatRequestLatency(get15mStats(element.index)) }}</span>
+                      </div>
+                      <div class="metrics-tooltip-row">
+                        <span>{{ t('orchestration.firstContentLatency') }} · {{ t('orchestration.minutes15') }}:</span>
+                        <span>{{ formatRequestLatency(get15mStats(element.index), 'firstContent') }}</span>
                       </div>
                       <div class="metrics-tooltip-row">
                         <span>{{ t('orchestration.hour1') }}:</span>
@@ -260,7 +264,11 @@
                       </div>
                       <div class="metrics-tooltip-row">
                         <span>{{ t('orchestration.firstByteLatency') }} · {{ t('orchestration.hour1') }}:</span>
-                        <span>{{ formatFirstByteLatency(get1hStats(element.index)) }}</span>
+                        <span>{{ formatRequestLatency(get1hStats(element.index)) }}</span>
+                      </div>
+                      <div class="metrics-tooltip-row">
+                        <span>{{ t('orchestration.firstContentLatency') }} · {{ t('orchestration.hour1') }}:</span>
+                        <span>{{ formatRequestLatency(get1hStats(element.index), 'firstContent') }}</span>
                       </div>
                       <div class="metrics-tooltip-row">
                         <span>{{ t('orchestration.hours6') }}:</span>
@@ -268,7 +276,11 @@
                       </div>
                       <div class="metrics-tooltip-row">
                         <span>{{ t('orchestration.firstByteLatency') }} · {{ t('orchestration.hours6') }}:</span>
-                        <span>{{ formatFirstByteLatency(get6hStats(element.index)) }}</span>
+                        <span>{{ formatRequestLatency(get6hStats(element.index)) }}</span>
+                      </div>
+                      <div class="metrics-tooltip-row">
+                        <span>{{ t('orchestration.firstContentLatency') }} · {{ t('orchestration.hours6') }}:</span>
+                        <span>{{ formatRequestLatency(get6hStats(element.index), 'firstContent') }}</span>
                       </div>
                       <div class="metrics-tooltip-row">
                         <span>{{ t('orchestration.hours24') }}:</span>
@@ -276,7 +288,11 @@
                       </div>
                       <div class="metrics-tooltip-row">
                         <span>{{ t('orchestration.firstByteLatency') }} · {{ t('orchestration.hours24') }}:</span>
-                        <span>{{ formatFirstByteLatency(get24hStats(element.index)) }}</span>
+                        <span>{{ formatRequestLatency(get24hStats(element.index)) }}</span>
+                      </div>
+                      <div class="metrics-tooltip-row">
+                        <span>{{ t('orchestration.firstContentLatency') }} · {{ t('orchestration.hours24') }}:</span>
+                        <span>{{ formatRequestLatency(get24hStats(element.index), 'firstContent') }}</span>
                       </div>
 
                       <div class="text-caption font-weight-bold mt-2 mb-1">{{ t('orchestration.cacheStats') }}</div>
@@ -320,15 +336,16 @@
             <!-- Latency display -->
             <div class="channel-latency" @click.stop>
               <button
-                v-if="get15mStats(element.index)?.firstByteLatencySamples"
+                v-for="latency in realLatencySummaries(get15mStats(element.index))"
+                :key="latency.kind"
                 class="real-latency-summary"
                 type="button"
                 :disabled="!element.channelUid"
-                :title="t('orchestration.firstByteLatencyTooltip', { samples: get15mStats(element.index)?.firstByteLatencySamples ?? 0 })"
+                :title="t(`orchestration.${latency.kind}LatencyTooltip`, { samples: latency.samples })"
                 @click="openRequestHistory(element, '15m')"
               >
-                <span>{{ t('orchestration.firstByteP95') }}</span>
-                <strong v-if="(get15mStats(element.index)?.firstByteLatencySamples ?? 0) >= 5">≈{{ Math.round(get15mStats(element.index)!.firstByteLatencyP95Ms || 0) }}ms</strong>
+                <span>{{ t(`orchestration.${latency.kind}P95`) }}</span>
+                <strong v-if="latency.samples >= 5">≈{{ Math.round(latency.p95) }}ms</strong>
                 <strong v-else>{{ t('orchestration.latencyInsufficient') }}</strong>
               </button>
               <v-chip
@@ -1114,13 +1131,27 @@ const formatStats = (stats?: TimeWindowStats): string => {
   return `${stats.requestCount} ${t('orchestration.requests')} (${stats.successRate?.toFixed(0)}%)`
 }
 
-const formatFirstByteLatency = (stats?: TimeWindowStats): string => {
-  const samples = stats?.firstByteLatencySamples ?? 0
+type RequestLatencyKind = 'firstByte' | 'firstContent'
+
+const requestLatencyValues = (stats: TimeWindowStats | undefined, kind: RequestLatencyKind) => ({
+  kind,
+  samples: stats?.[`${kind}LatencySamples`] ?? 0,
+  p50: stats?.[`${kind}LatencyP50Ms`] ?? 0,
+  p95: stats?.[`${kind}LatencyP95Ms`] ?? 0
+})
+
+const realLatencySummaries = (stats?: TimeWindowStats) =>
+  (['firstByte', 'firstContent'] as const)
+    .map(kind => requestLatencyValues(stats, kind))
+    .filter(latency => latency.samples > 0)
+
+const formatRequestLatency = (stats?: TimeWindowStats, kind: RequestLatencyKind = 'firstByte'): string => {
+  const { samples, p50, p95 } = requestLatencyValues(stats, kind)
   if (!samples) return '--'
   if (samples < 5) return t('orchestration.latencyInsufficientStats', { samples })
   return t('orchestration.firstByteLatencyStats', {
-    p50: Math.round(stats?.firstByteLatencyP50Ms ?? 0),
-    p95: Math.round(stats?.firstByteLatencyP95Ms ?? 0),
+    p50: Math.round(p50),
+    p95: Math.round(p95),
     samples
   })
 }

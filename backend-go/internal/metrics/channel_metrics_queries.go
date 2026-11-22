@@ -527,7 +527,7 @@ func (m *MetricsManager) GetTimeWindowStatsForKey(baseURL, apiKey, serviceType s
 
 	cutoff := time.Now().Add(-duration)
 	var requestCount, successCount, failureCount int64
-	var firstByteLatencies firstByteLatencyHistogram
+	var latencies requestLatencyHistograms
 
 	metrics := m.getIdentityMetricsLocked(baseURL, apiKey, serviceType)
 	if metrics != nil {
@@ -539,9 +539,7 @@ func (m *MetricsManager) GetTimeWindowStatsForKey(baseURL, apiKey, serviceType s
 				} else {
 					failureCount++
 				}
-				if !record.pending {
-					firstByteLatencies.add(record.FirstByteLatencyMs)
-				}
+				latencies.add(record)
 			}
 		}
 	}
@@ -552,16 +550,14 @@ func (m *MetricsManager) GetTimeWindowStatsForKey(baseURL, apiKey, serviceType s
 
 	successRate := float64(successCount) / float64(requestCount) * 100
 
-	latencySamples, p50Latency, p95Latency := firstByteLatencies.summary()
-	return TimeWindowStats{
-		RequestCount:            requestCount,
-		SuccessCount:            successCount,
-		FailureCount:            failureCount,
-		SuccessRate:             successRate,
-		FirstByteLatencySamples: latencySamples,
-		FirstByteLatencyP50Ms:   p50Latency,
-		FirstByteLatencyP95Ms:   p95Latency,
+	stats := TimeWindowStats{
+		RequestCount: requestCount,
+		SuccessCount: successCount,
+		FailureCount: failureCount,
+		SuccessRate:  successRate,
 	}
+	latencies.populate(&stats)
+	return stats
 }
 
 // GetAllTimeWindowStatsForKey 获取单个 Key 所有时间窗口的统计
