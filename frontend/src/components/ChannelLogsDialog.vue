@@ -16,7 +16,7 @@
         </v-tooltip>
       </v-card-title>
       <v-divider />
-      <v-card-text class="pa-0 channel-logs-scroll">
+      <v-card-text ref="scrollContainerRef" class="pa-0 channel-logs-scroll">
         <!-- Loading -->
         <div v-if="isLoading && !logs.length" class="d-flex justify-center py-8">
           <v-progress-circular indeterminate color="primary" />
@@ -45,12 +45,13 @@
             <div
               role="button"
               tabindex="0"
-              :class="['log-item', { 'log-item--failed': log.status === 'failed', 'log-item--expanded': expandedIndex === i }]"
-              :aria-expanded="expandedIndex === i"
+              :class="['log-item', { 'log-item--failed': log.status === 'failed', 'log-item--expanded': isExpanded(log, i) }]"
+              :data-log-key="getLogCopyKey(log, i)"
+              :aria-expanded="isExpanded(log, i)"
               :aria-controls="`channel-log-details-${i}`"
-              @click="toggleExpand(i)"
-              @keydown.enter.self.prevent="toggleExpand(i)"
-              @keydown.space.self.prevent="toggleExpand(i)"
+              @click="toggleExpand(log, i)"
+              @keydown.enter.self.prevent="toggleExpand(log, i)"
+              @keydown.space.self.prevent="toggleExpand(log, i)"
             >
               <div class="log-status">
                 <v-chip
@@ -180,7 +181,7 @@
                   </div>
                 </div>
 
-                <div v-if="log.errorInfo?.trim() && expandedIndex !== i" class="log-error-preview">
+                <div v-if="log.errorInfo?.trim() && !isExpanded(log, i)" class="log-error-preview">
                   {{ formatErrorInfo(log.errorInfo) }}
                 </div>
               </div>
@@ -227,14 +228,14 @@
                     </v-btn>
                   </template>
                 </v-tooltip>
-                <v-icon size="18" class="log-expand-icon" :class="{ 'log-expand-icon--expanded': expandedIndex === i }">
+                <v-icon size="18" class="log-expand-icon" :class="{ 'log-expand-icon--expanded': isExpanded(log, i) }">
                   mdi-chevron-down
                 </v-icon>
               </div>
             </div>
 
             <v-expand-transition>
-              <div v-if="expandedIndex === i" :id="`channel-log-details-${i}`" class="log-details">
+              <div v-if="isExpanded(log, i)" :id="`channel-log-details-${i}`" class="log-details">
                 <div v-if="log.errorInfo?.trim()" class="log-error-detail">{{ formatErrorInfo(log.errorInfo) }}</div>
                 <div class="log-detail-grid">
                   <section class="log-detail-section">
@@ -334,7 +335,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted, onUnmounted } from 'vue'
+import { ref, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { api, type ChannelLogEntry, type ChannelLogRetestRequest } from '../services/api'
 import { useI18n } from '../i18n'
 import { useGlobalTick } from '../composables/useGlobalTick'
@@ -357,7 +358,8 @@ const { t } = useI18n()
 const logs = ref<ChannelLogEntry[]>([])
 const isLoading = ref(false)
 const autoRefresh = ref(true)
-const expandedIndex = ref<number | null>(null)
+const expandedKey = ref<string | null>(null)
+const scrollContainerRef = ref<{ $el?: unknown } | null>(null)
 const copiedLogKey = ref<string | null>(null)
 let copyLogResetTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -418,8 +420,54 @@ const copyLogEntry = async (log: ChannelLogEntry, index: number) => {
   }
 }
 
-const toggleExpand = (i: number) => {
-  expandedIndex.value = expandedIndex.value === i ? null : i
+// 展开状态绑定日志的稳定标识：轮询时新日志插入顶部，下标会整体后移
+const isExpanded = (log: ChannelLogEntry, index: number): boolean => {
+  return expandedKey.value === getLogCopyKey(log, index)
+}
+
+const toggleExpand = (log: ChannelLogEntry, index: number) => {
+  const key = getLogCopyKey(log, index)
+  expandedKey.value = expandedKey.value === key ? null : key
+}
+
+interface ScrollAnchor {
+  key: string
+  offset: number
+}
+
+const getScrollContainer = (): HTMLElement | null => {
+  const el = scrollContainerRef.value?.$el
+  return el instanceof HTMLElement ? el : null
+}
+
+const findLogRow = (container: HTMLElement, key: string): HTMLElement | null => {
+  for (const row of container.querySelectorAll<HTMLElement>('[data-log-key]')) {
+    if (row.dataset.logKey === key) return row
+  }
+  return null
+}
+
+// 记录首条可见日志相对容器的位置；停在顶部且未展开时不锚定，让新日志自然出现
+const captureScrollAnchor = (): ScrollAnchor | null => {
+  const container = getScrollContainer()
+  if (!container || (container.scrollTop <= 0 && expandedKey.value === null)) return null
+  const containerTop = container.getBoundingClientRect().top
+  for (const row of container.querySelectorAll<HTMLElement>('[data-log-key]')) {
+    const rect = row.getBoundingClientRect()
+    if (rect.bottom > containerTop) {
+      return { key: row.dataset.logKey || '', offset: rect.top - containerTop }
+    }
+  }
+  return null
+}
+
+const restoreScrollAnchor = (anchor: ScrollAnchor | null) => {
+  const container = getScrollContainer()
+  if (!anchor || !container) return
+  const row = findLogRow(container, anchor.key)
+  if (!row) return
+  const offset = row.getBoundingClientRect().top - container.getBoundingClientRect().top
+  container.scrollTop += offset - anchor.offset
 }
 
 const getRetestProtocol = (log: ChannelLogEntry): ChannelLogRetestRequest['protocol'] | null => {
@@ -612,7 +660,10 @@ const fetchLogs = async () => {
   isLoading.value = true
   try {
     const res = await api.getChannelLogs(props.channelType, props.channelIndex)
+    const anchor = captureScrollAnchor()
     logs.value = res.logs || []
+    await nextTick()
+    restoreScrollAnchor(anchor)
   } catch (e) {
     console.error('Failed to fetch channel logs:', e)
   } finally {
@@ -629,7 +680,7 @@ logsTick.onTick(() => {
 watch(() => props.modelValue, (open) => {
   if (open) {
     logs.value = []
-    expandedIndex.value = null
+    expandedKey.value = null
     fetchLogs()
     if (autoRefresh.value) startPolling()
   } else {
@@ -641,7 +692,7 @@ watch(() => props.modelValue, (open) => {
 watch([() => props.channelIndex, () => props.channelType], () => {
   if (props.modelValue) {
     logs.value = []
-    expandedIndex.value = null
+    expandedKey.value = null
     fetchLogs()
   }
 })
@@ -695,6 +746,8 @@ onUnmounted(() => {
   --log-pad-x: 20px;
   max-height: 600px;
   overflow-y: auto;
+  /* 由 fetchLogs 手动锚定，避免与浏览器原生滚动锚定叠加补偿 */
+  overflow-anchor: none;
 }
 
 .log-list {

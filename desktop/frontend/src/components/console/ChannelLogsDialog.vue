@@ -28,7 +28,7 @@ const logs = ref<ChannelLogEntry[]>([])
 const loading = ref(false)
 const refreshing = ref(false)
 const error = ref('')
-const expandedIndex = ref<number | null>(null)
+const expandedKey = ref<string | null>(null)
 const autoRefresh = ref(true)
 const copiedLogKey = ref<string | null>(null)
 let fetchPromise: Promise<void> | null = null
@@ -60,8 +60,10 @@ async function fetchLogs(options: { silent?: boolean } = {}) {
   return fetchPromise
 }
 
-function toggleExpand(index: number) {
-  expandedIndex.value = expandedIndex.value === index ? null : index
+// 展开状态绑定日志的稳定标识：轮询时新日志插入顶部，下标会整体后移
+function toggleExpand(log: ChannelLogEntry, index: number) {
+  const key = getLogCopyKey(log, index)
+  expandedKey.value = expandedKey.value === key ? null : key
 }
 
 function getLogCopyKey(log: ChannelLogEntry, index: number) {
@@ -234,7 +236,7 @@ const { pause, resume } = useIntervalFn(() => {
 watch(() => props.open, (isOpen) => {
   if (isOpen) {
     logs.value = []
-    expandedIndex.value = null
+    expandedKey.value = null
     resume()
     window.addEventListener('keydown', onKeyDown)
     void fetchLogs()
@@ -247,7 +249,7 @@ watch(() => props.open, (isOpen) => {
 watch([() => props.channelId, () => props.channelType], () => {
   if (!props.open) return
   logs.value = []
-  expandedIndex.value = null
+  expandedKey.value = null
   void fetchLogs()
 })
 
@@ -317,10 +319,10 @@ onBeforeUnmount(() => {
               <div class="divide-y divide-border">
                 <div
                   v-for="(log, index) in logs"
-                  :key="log.requestId || index"
+                  :key="getLogCopyKey(log, index)"
                   class="group relative cursor-pointer px-4 py-3 pr-14 transition-colors hover:bg-accent/40"
                   :class="{ 'bg-destructive/5': log.status === 'failed' }"
-                  @click="toggleExpand(index)"
+                  @click="toggleExpand(log, index)"
                 >
                   <Button
                     variant="outline"
@@ -435,7 +437,7 @@ onBeforeUnmount(() => {
                     </span>
                   </div>
 
-                  <div v-if="expandedIndex === index && log.errorInfo" class="mt-2 border border-destructive/20 bg-destructive/10 p-2 text-xs text-destructive">
+                  <div v-if="expandedKey === getLogCopyKey(log, index) && log.errorInfo" class="mt-2 border border-destructive/20 bg-destructive/10 p-2 text-xs text-destructive">
                     {{ log.errorInfo }}
                   </div>
                 </div>

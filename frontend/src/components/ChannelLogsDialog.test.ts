@@ -7,7 +7,10 @@ import ChannelLogsDialog from './ChannelLogsDialog.vue'
 import { api, type ChannelLogEntry } from '../services/api'
 
 vi.mock('../i18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }))
-vi.mock('../composables/useGlobalTick', () => ({ useGlobalTick: () => ({ onTick: vi.fn() }) }))
+const tickCallbacks = vi.hoisted(() => [] as Array<() => void>)
+vi.mock('../composables/useGlobalTick', () => ({
+  useGlobalTick: () => ({ onTick: (callback: () => void) => { tickCallbacks.push(callback) } }),
+}))
 vi.mock('../services/api', () => ({ api: { getChannelLogs: vi.fn() } }))
 
 const box = defineComponent({ setup: (_, { slots }) => () => h('div', slots.default?.()) })
@@ -62,7 +65,29 @@ async function openDialog() {
 describe('渠道日志列表', () => {
   beforeEach(() => {
     vi.resetAllMocks()
+    tickCallbacks.length = 0
     vi.mocked(api.getChannelLogs).mockResolvedValue({ channelIndex: 1, logs })
+  })
+
+  it('轮询插入新日志后展开状态仍跟随原日志', async () => {
+    const wrapper = await openDialog()
+    try {
+      await wrapper.findAll('.log-item')[1]!.trigger('click')
+      expect(wrapper.find('[data-log-key="req-failed"]').attributes('aria-expanded')).toBe('true')
+
+      const newLog: ChannelLogEntry = { ...logs[0]!, requestId: 'req-new', model: 'claude-haiku-4-5' }
+      vi.mocked(api.getChannelLogs).mockResolvedValue({ channelIndex: 1, logs: [newLog, ...logs] })
+      tickCallbacks.forEach(callback => callback())
+      await flushPromises()
+
+      expect(wrapper.findAll('.log-item')).toHaveLength(3)
+      expect(wrapper.find('[data-log-key="req-new"]').attributes('aria-expanded')).toBe('false')
+      expect(wrapper.find('[data-log-key="req-success"]').attributes('aria-expanded')).toBe('false')
+      expect(wrapper.find('[data-log-key="req-failed"]').attributes('aria-expanded')).toBe('true')
+      expect(wrapper.find('#channel-log-details-2 .log-error-detail').text()).toBe('upstream overloaded')
+    } finally {
+      wrapper.unmount()
+    }
   })
 
   it('只在有稳定渠道标识时提供请求历史入口', async () => {
