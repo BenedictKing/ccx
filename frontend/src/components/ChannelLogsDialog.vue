@@ -1,9 +1,10 @@
 <template>
   <v-dialog :model-value="modelValue" max-width="900" @update:model-value="$emit('update:modelValue', $event)">
     <v-card>
-      <v-card-title class="d-flex align-center justify-space-between">
-        <span class="dialog-title text-truncate mr-2">{{ t('channelLogs.title', { channel: channelName }) }}</span>
-        <v-btn v-if="historyAvailable" size="small" variant="text" class="flex-shrink-0" @click="emit('requestHistory')">
+      <v-card-title class="d-flex align-center dialog-header">
+        <span class="dialog-title text-truncate">{{ t('channelLogs.title', { channel: channelName }) }}</span>
+        <v-spacer />
+        <v-btn v-if="historyAvailable" size="small" variant="tonal" class="flex-shrink-0 mr-1 history-btn" @click="emit('requestHistory')">
           {{ t('routing.history') }}
         </v-btn>
         <v-tooltip :text="t('app.actions.close') + ' (Esc)'" location="bottom" content-class="ccx-tooltip">
@@ -28,15 +29,30 @@
         </div>
 
         <!-- Log list -->
-        <v-list v-else density="comfortable" class="pa-0">
+        <div v-else class="log-list">
+          <div class="log-columns" aria-hidden="true">
+            <span ></span>
+            <div class="log-summary-grid">
+              <span>{{ t('channelLogs.col.time') }}</span>
+              <span>{{ t('channelLogs.col.stream') }}</span>
+              <span>{{ t('channelLogs.col.tokens') }}</span>
+              <span>{{ t('channelLogs.col.cost') }}</span>
+              <span>{{ t('channelLogs.col.latency') }}</span>
+            </div>
+            <span ></span>
+          </div>
           <template v-for="(log, i) in logs" :key="getLogCopyKey(log, i)">
-            <v-list-item
-              :class="['log-item', { 'bg-error-subtle': log.status === 'failed' }]"
+            <div
+              role="button"
+              tabindex="0"
+              :class="['log-item', { 'log-item--failed': log.status === 'failed', 'log-item--expanded': expandedIndex === i }]"
               :aria-expanded="expandedIndex === i"
               :aria-controls="`channel-log-details-${i}`"
               @click="toggleExpand(i)"
+              @keydown.enter.self.prevent="toggleExpand(i)"
+              @keydown.space.self.prevent="toggleExpand(i)"
             >
-              <template #prepend>
+              <div class="log-status">
                 <v-chip
                   v-if="log.statusCode > 0"
                   :color="statusColor(log.statusCode)"
@@ -58,7 +74,7 @@
                 <v-chip v-else size="small" color="default" variant="flat" class="font-weight-bold log-status-chip">
                   -
                 </v-chip>
-              </template>
+              </div>
 
               <div class="log-entry">
                 <div class="log-heading">
@@ -91,24 +107,77 @@
                   <v-chip v-if="log.isRetry" size="x-small" color="warning" variant="tonal">{{ t('channelLogs.retry') }}</v-chip>
                 </div>
 
-                <div class="log-summary text-medium-emphasis">
-                  <span class="log-time">{{ formatTime(log.timestamp) }}</span>
-                  <v-chip v-if="log.status" size="x-small" :color="requestStatusColor(log.status)" variant="tonal">
-                    {{ requestStatusText(log.status) }}
-                  </v-chip>
-                  <span class="log-metric">
-                    {{ t('channelLogs.duration.total') }} {{ formatDurationSeconds(calculateDurations(log)?.totalMs ?? log.durationMs) }}
-                  </span>
-                  <template v-if="(log.inputTokens || 0) > 0 || (log.outputTokens || 0) > 0">
-                    <span class="log-metric">{{ t('channelLogs.input') }} {{ formatTokenCount(log.inputTokens || 0) }}</span>
-                    <span class="log-metric">{{ t('channelLogs.output') }} {{ formatTokenCount(log.outputTokens || 0) }}</span>
-                  </template>
-                  <span v-if="fallbackContextTokens(log) > 0" class="log-metric" :title="t('channelLogs.estimatedContextTokensDetail')">
-                    {{ t('channelLogs.estimatedContextTokens') }} {{ formatTokenCount(fallbackContextTokens(log)) }}
-                  </span>
-                  <span v-if="log.tokensPerSecond" class="log-metric" :title="t('channelLogs.tpsDetail', { output: formatTokenCount(log.outputTokens || 0) })">
-                    {{ formatTokensPerSecond(log.tokensPerSecond) }} TPS
-                  </span>
+                <div class="log-summary log-summary-grid">
+                  <div class="log-cell">
+                    <span class="log-cell__label">{{ t('channelLogs.col.time') }}</span>
+                    <span class="log-cell__primary log-time">{{ formatTime(log.timestamp) }}</span>
+                    <span v-if="log.status" class="log-cell__secondary log-state" :style="{ '--state': `var(--v-theme-${requestStatusColor(log.status) === 'default' ? 'on-surface' : requestStatusColor(log.status)})` }">
+                      <span class="log-state__dot"></span>{{ requestStatusText(log.status) }}
+                    </span>
+                  </div>
+
+                  <div class="log-cell">
+                    <span class="log-cell__label">{{ t('channelLogs.col.stream') }}</span>
+                    <span v-if="log.isStream === undefined" class="log-cell__primary log-cell__empty">—</span>
+                    <span v-else class="log-cell__primary log-stream" :class="{ 'log-stream--on': log.isStream }">
+                      {{ log.isStream ? t('channelLogs.stream.yes') : t('channelLogs.stream.no') }}
+                    </span>
+                    <span
+                      v-if="log.tokensPerSecond"
+                      class="log-cell__secondary log-num"
+                      :title="t('channelLogs.tpsDetail', { output: formatTokenCount(log.outputTokens || 0) })"
+                    >
+                      {{ formatTokensPerSecond(log.tokensPerSecond) }} t/s
+                    </span>
+                  </div>
+
+                  <div class="log-cell">
+                    <span class="log-cell__label">{{ t('channelLogs.col.tokens') }}</span>
+                    <template v-if="hasUsage(log)">
+                      <span
+                        class="log-cell__primary log-num"
+                        :title="t('channelLogs.tokensDetail', { input: formatTokenCount(log.inputTokens || 0), output: formatTokenCount(log.outputTokens || 0) })"
+                      >
+                        {{ formatTokenCount(log.inputTokens || 0) }} <span class="log-sep">/</span> {{ formatTokenCount(log.outputTokens || 0) }}
+                      </span>
+                      <span v-if="(log.cacheReadTokens || 0) > 0 || (log.cacheCreationTokens || 0) > 0" class="log-cell__secondary log-num log-cache">
+                        <span>{{ t('channelLogs.cache') }}</span>
+                        <span v-if="(log.cacheReadTokens || 0) > 0" :title="t('channelLogs.cacheReadDetail', { tokens: formatTokenCount(log.cacheReadTokens!) })">
+                          ↓ {{ formatTokenCount(log.cacheReadTokens!) }}
+                        </span>
+                        <span v-if="(log.cacheCreationTokens || 0) > 0" :title="t('channelLogs.cacheWriteDetail', { tokens: formatTokenCount(log.cacheCreationTokens!) })">
+                          ↑ {{ formatTokenCount(log.cacheCreationTokens!) }}
+                        </span>
+                      </span>
+                    </template>
+                    <template v-else-if="fallbackContextTokens(log) > 0">
+                      <span class="log-cell__primary log-num" :title="t('channelLogs.estimatedContextTokensDetail')">
+                        ≈ {{ formatTokenCount(fallbackContextTokens(log)) }}
+                      </span>
+                      <span class="log-cell__secondary">{{ t('channelLogs.estimatedContextTokens') }}</span>
+                    </template>
+                    <span v-else class="log-cell__primary log-cell__empty">—</span>
+                  </div>
+
+                  <div class="log-cell">
+                    <span class="log-cell__label">{{ t('channelLogs.col.cost') }}</span>
+                    <span v-if="(log.costUSD || 0) > 0" class="log-cost log-num" :title="t('channelLogs.costDetail')">
+                      ${{ formatCost(log.costUSD!) }}
+                    </span>
+                    <span v-else class="log-cell__primary log-cell__empty" :title="hasUsage(log) ? t('channelLogs.costUnpriced') : undefined">—</span>
+                  </div>
+
+                  <div class="log-cell log-latency" :class="`log-latency--${latencyTone(log)}`">
+                    <span class="log-cell__label">{{ t('channelLogs.col.latency') }}</span>
+                    <span v-if="calculateDurations(log)?.firstByteMs != null" class="log-latency__row">
+                      <span class="log-latency__key">{{ t('channelLogs.duration.firstByte') }}</span>
+                      <span class="log-latency__value log-num">{{ formatDurationSeconds(calculateDurations(log)!.firstByteMs!) }}</span>
+                    </span>
+                    <span class="log-latency__row">
+                      <span class="log-latency__key">{{ t('channelLogs.duration.total') }}</span>
+                      <span class="log-latency__value log-num">{{ formatDurationSeconds(displayTotalMs(log)) }}</span>
+                    </span>
+                  </div>
                 </div>
 
                 <div v-if="log.errorInfo?.trim() && expandedIndex !== i" class="log-error-preview">
@@ -116,55 +185,53 @@
                 </div>
               </div>
 
-              <template #append>
-                <div class="log-actions">
-                  <v-tooltip
-                    v-if="canRetestModel(log)"
-                    :text="t('channelLogs.retestModel', { model: log.model })"
-                    location="left"
-                    content-class="ccx-tooltip"
-                  >
-                    <template #activator="{ props: tooltipProps }">
-                      <v-btn
-                        v-bind="tooltipProps"
-                        icon
-                        size="x-small"
-                        variant="text"
-                        color="secondary"
-                        class="log-action-btn"
-                        :aria-label="t('channelLogs.retestModel', { model: log.model })"
-                        @click.stop="retestModel(log)"
-                      >
-                        <v-icon size="16">mdi-test-tube</v-icon>
-                      </v-btn>
-                    </template>
-                  </v-tooltip>
-                  <v-tooltip
-                    :text="copiedLogKey === getLogCopyKey(log, i) ? t('channelLogs.copiedEntry') : t('channelLogs.copyEntry')"
-                    location="left"
-                    content-class="ccx-tooltip"
-                  >
-                    <template #activator="{ props: tooltipProps }">
-                      <v-btn
-                        v-bind="tooltipProps"
-                        icon
-                        size="x-small"
-                        variant="text"
-                        class="log-action-btn log-copy-btn"
-                        :class="{ 'log-copy-btn--visible': copiedLogKey === getLogCopyKey(log, i) }"
-                        :aria-label="t('channelLogs.copyEntry')"
-                        @click.stop="copyLogEntry(log, i)"
-                      >
-                        <v-icon size="16">{{ copiedLogKey === getLogCopyKey(log, i) ? 'mdi-check' : 'mdi-content-copy' }}</v-icon>
-                      </v-btn>
-                    </template>
-                  </v-tooltip>
-                  <v-icon size="18" class="log-expand-icon" :class="{ 'log-expand-icon--expanded': expandedIndex === i }">
-                    mdi-chevron-down
-                  </v-icon>
-                </div>
-              </template>
-            </v-list-item>
+              <div class="log-actions">
+                <v-tooltip
+                  v-if="canRetestModel(log)"
+                  :text="t('channelLogs.retestModel', { model: log.model })"
+                  location="left"
+                  content-class="ccx-tooltip"
+                >
+                  <template #activator="{ props: tooltipProps }">
+                    <v-btn
+                      v-bind="tooltipProps"
+                      icon
+                      size="x-small"
+                      variant="text"
+                      color="secondary"
+                      class="log-action-btn"
+                      :aria-label="t('channelLogs.retestModel', { model: log.model })"
+                      @click.stop="retestModel(log)"
+                    >
+                      <v-icon size="16">mdi-test-tube</v-icon>
+                    </v-btn>
+                  </template>
+                </v-tooltip>
+                <v-tooltip
+                  :text="copiedLogKey === getLogCopyKey(log, i) ? t('channelLogs.copiedEntry') : t('channelLogs.copyEntry')"
+                  location="left"
+                  content-class="ccx-tooltip"
+                >
+                  <template #activator="{ props: tooltipProps }">
+                    <v-btn
+                      v-bind="tooltipProps"
+                      icon
+                      size="x-small"
+                      variant="text"
+                      class="log-action-btn log-copy-btn"
+                      :class="{ 'log-copy-btn--visible': copiedLogKey === getLogCopyKey(log, i) }"
+                      :aria-label="t('channelLogs.copyEntry')"
+                      @click.stop="copyLogEntry(log, i)"
+                    >
+                      <v-icon size="16">{{ copiedLogKey === getLogCopyKey(log, i) ? 'mdi-check' : 'mdi-content-copy' }}</v-icon>
+                    </v-btn>
+                  </template>
+                </v-tooltip>
+                <v-icon size="18" class="log-expand-icon" :class="{ 'log-expand-icon--expanded': expandedIndex === i }">
+                  mdi-chevron-down
+                </v-icon>
+              </div>
+            </div>
 
             <v-expand-transition>
               <div v-if="expandedIndex === i" :id="`channel-log-details-${i}`" class="log-details">
@@ -251,14 +318,16 @@
                       <div v-if="log.tokensPerSecond" class="log-detail-row">
                         <dt>TPS</dt><dd>{{ formatTokensPerSecond(log.tokensPerSecond) }}</dd>
                       </div>
+                      <div v-if="(log.costUSD || 0) > 0" class="log-detail-row" :title="t('channelLogs.costDetail')">
+                        <dt>{{ t('channelLogs.col.cost') }}</dt><dd>${{ formatCost(log.costUSD!) }}</dd>
+                      </div>
                     </dl>
                   </section>
                 </div>
               </div>
             </v-expand-transition>
-            <v-divider v-if="i < logs.length - 1" />
           </template>
-        </v-list>
+        </div>
       </v-card-text>
     </v-card>
   </v-dialog>
@@ -445,6 +514,39 @@ const formatTokensPerSecond = (value: number): string => {
   return value >= 100 ? value.toFixed(0) : value.toFixed(1)
 }
 
+const hasUsage = (log: ChannelLogEntry): boolean => {
+  return (log.inputTokens || 0) > 0 || (log.outputTokens || 0) > 0 || (log.cacheReadTokens || 0) > 0 || (log.cacheCreationTokens || 0) > 0
+}
+
+// 小额费用保留更多位数，避免单次请求显示为 $0.00；去掉末尾多余的 0
+const formatCost = (usd: number): string => {
+  if (usd >= 1) return usd.toFixed(2)
+  if (usd >= 0.01) return usd.toFixed(4)
+  if (usd < 0.000001) return '<0.000001'
+  return usd.toFixed(6).replace(/0+$/, '')
+}
+
+// 进行中请求按当前时间计算已耗时，结束后使用完成时间
+const displayTotalMs = (log: ChannelLogEntry): number => {
+  const total = calculateDurations(log)?.totalMs
+  if (total != null) return total
+  if (isInProgress(log.status) && log.startTime) {
+    return Math.max(0, Date.now() - new Date(log.startTime).getTime())
+  }
+  return log.durationMs
+}
+
+// 按首字延迟着色：首字是用户感知等待的主要来源，总耗时随输出长度变化不宜直接评判
+const latencyTone = (log: ChannelLogEntry): 'good' | 'warn' | 'bad' | 'neutral' => {
+  if (log.status === 'failed') return 'bad'
+  if (isInProgress(log.status)) return 'neutral'
+  const firstByteMs = calculateDurations(log)?.firstByteMs
+  if (firstByteMs == null) return 'neutral'
+  if (firstByteMs <= 5000) return 'good'
+  if (firstByteMs <= 15000) return 'warn'
+  return 'bad'
+}
+
 const formatReasoningEffort = (effort: string): string => {
   const value = effort.trim()
   return value.length > 24 ? `${value.slice(0, 21)}...` : value
@@ -576,50 +678,113 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+.dialog-header {
+  gap: 8px;
+}
+
+.history-btn {
+  font-size: 0.8125rem;
+  letter-spacing: 0.02em;
+  text-transform: none;
+}
+
 .channel-logs-scroll {
-  max-height: 560px;
+  --log-status-col: 56px;
+  --log-actions-col: 76px;
+  --log-gap: 14px;
+  --log-pad-x: 20px;
+  max-height: 600px;
   overflow-y: auto;
 }
 
+.log-list {
+  display: flex;
+  flex-direction: column;
+}
+
+/* 行与表头共用同一网格，保证列对齐 */
+.log-columns,
 .log-item {
-  padding-top: 12px;
-  padding-bottom: 12px;
+  display: grid;
+  grid-template-columns: var(--log-status-col) minmax(0, 1fr) var(--log-actions-col);
+  column-gap: var(--log-gap);
+  padding-inline: var(--log-pad-x);
 }
 
-.log-item :deep(.v-list-item__content) {
-  min-width: 0;
-  overflow: visible;
+.log-columns {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding-block: 8px;
+  border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  background: rgb(var(--v-theme-surface));
+  color: rgba(var(--v-theme-on-surface), 0.56);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
 }
 
-.log-item :deep(.v-list-item__prepend),
-.log-item :deep(.v-list-item__append) {
-  align-self: flex-start;
+.log-summary-grid {
+  display: grid;
+  grid-template-columns: minmax(84px, 0.9fr) minmax(72px, 0.75fr) minmax(150px, 1.5fr) minmax(96px, 1fr) minmax(104px, 1fr);
+  column-gap: 16px;
 }
 
-.log-item :deep(.v-list-item__append) {
-  margin-inline-start: 8px;
+.log-item {
+  position: relative;
+  padding-block: 14px;
+  border-bottom: 1px solid rgba(var(--v-border-color), calc(var(--v-border-opacity) * 0.7));
+  cursor: pointer;
+  outline: none;
+  transition: background-color 0.15s ease;
+}
+
+.log-item:hover {
+  background: rgba(var(--v-theme-on-surface), 0.025);
+}
+
+.log-item:focus-visible {
+  box-shadow: inset 0 0 0 2px rgba(var(--v-theme-primary), 0.5);
+}
+
+.log-item--expanded {
+  border-bottom-color: transparent;
+  background: rgba(var(--v-theme-primary), 0.035);
+}
+
+.log-item--failed {
+  background: rgba(var(--v-theme-error), 0.035);
+}
+
+.log-item--failed::before {
+  content: '';
+  position: absolute;
+  inset-block: 0;
+  left: 0;
+  width: 3px;
+  background: rgb(var(--v-theme-error));
 }
 
 .log-item :deep(.v-chip__content) {
   font-size: 11px;
 }
 
+.log-status {
+  padding-top: 1px;
+}
+
 .log-entry {
   display: grid;
   min-width: 0;
-  gap: 6px;
+  gap: 10px;
 }
 
-.log-heading,
-.log-summary {
+.log-heading {
   display: flex;
   min-width: 0;
   flex-wrap: wrap;
   align-items: center;
   gap: 4px 8px;
-}
-
-.log-heading {
   line-height: 1.5;
 }
 
@@ -629,27 +794,131 @@ onUnmounted(() => {
 }
 
 .log-model {
-  font-size: 0.875rem;
+  font-size: 0.9375rem;
 }
 
 .log-original-model {
   font-size: 0.8125rem;
 }
 
-.log-summary {
-  column-gap: 12px;
-  font-size: 0.8125rem;
-  line-height: 1.5;
+.log-cell {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+  line-height: 1.45;
+}
+
+.log-cell__label {
+  display: none;
+}
+
+.log-cell__primary {
+  font-size: 0.875rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.log-cell__secondary {
+  color: rgba(var(--v-theme-on-surface), 0.56);
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.log-cell__empty {
+  color: rgba(var(--v-theme-on-surface), 0.32);
+  font-weight: 400;
+}
+
+.log-num,
+.log-time {
+  font-variant-numeric: tabular-nums;
 }
 
 .log-time {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-  font-variant-numeric: tabular-nums;
+  font-size: 0.8125rem;
 }
 
-.log-metric {
+.log-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: rgb(var(--state, var(--v-theme-on-surface)));
+  font-weight: 500;
+}
+
+.log-state__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.log-stream {
+  color: rgba(var(--v-theme-on-surface), 0.6);
+}
+
+.log-stream--on {
+  color: rgb(var(--v-theme-primary));
+}
+
+.log-sep {
+  margin-inline: 1px;
+  color: rgba(var(--v-theme-on-surface), 0.32);
+}
+
+.log-cache {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 8px;
+  white-space: normal;
+}
+
+.log-cost {
+  align-self: flex-start;
+  padding: 2px 10px;
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  border-radius: 999px;
+  background: rgba(var(--v-theme-on-surface), 0.03);
+  font-size: 0.8125rem;
+  font-weight: 600;
   white-space: nowrap;
-  font-variant-numeric: tabular-nums;
+}
+
+.log-latency {
+  --tone: var(--v-theme-on-surface);
+  padding-left: 10px;
+  border-left: 3px solid rgba(var(--tone), 0.85);
+}
+
+.log-latency--good { --tone: var(--v-theme-success); }
+.log-latency--warn { --tone: var(--v-theme-warning); }
+.log-latency--bad { --tone: var(--v-theme-error); }
+
+.log-latency--neutral {
+  border-left-color: rgba(var(--v-theme-on-surface), 0.16);
+}
+
+.log-latency__row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 0.8125rem;
+  white-space: nowrap;
+}
+
+.log-latency__key {
+  color: rgba(var(--v-theme-on-surface), 0.56);
+}
+
+.log-latency__value {
+  color: rgb(var(--tone));
+  font-weight: 600;
+}
+
+.log-latency--neutral .log-latency__value {
+  color: rgba(var(--v-theme-on-surface), 0.87);
 }
 
 .log-error-preview {
@@ -663,7 +932,8 @@ onUnmounted(() => {
 
 .log-actions {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
+  justify-content: flex-end;
   gap: 2px;
 }
 
@@ -673,7 +943,7 @@ onUnmounted(() => {
 }
 
 .log-item:hover .log-action-btn,
-.log-action-btn:focus-visible,
+.log-item:focus-within .log-action-btn,
 .log-copy-btn--visible {
   opacity: 1;
 }
@@ -683,6 +953,7 @@ onUnmounted(() => {
 }
 
 .log-expand-icon {
+  margin-top: 3px;
   color: rgba(var(--v-theme-on-surface), 0.56);
   transition: transform 0.18s ease;
 }
@@ -735,8 +1006,9 @@ onUnmounted(() => {
 }
 
 .log-details {
-  padding: 16px 20px 18px 80px;
-  background: rgba(var(--v-theme-surface-variant), 0.24);
+  padding: 4px calc(var(--log-pad-x) + var(--log-actions-col) + var(--log-gap)) 18px calc(var(--log-pad-x) + var(--log-status-col) + var(--log-gap));
+  border-bottom: 1px solid rgba(var(--v-border-color), calc(var(--v-border-opacity) * 0.7));
+  background: rgba(var(--v-theme-primary), 0.035);
 }
 
 .log-error-detail {
@@ -804,8 +1076,8 @@ onUnmounted(() => {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 }
 
-.bg-error-subtle {
-  background: rgba(var(--v-theme-error), 0.035);
+.log-item--failed .log-error-preview {
+  margin-top: -2px;
 }
 
 @media (hover: none) {
@@ -814,13 +1086,35 @@ onUnmounted(() => {
   }
 }
 
-@media (max-width: 600px) {
-  .log-item {
-    padding-inline: 12px;
+@media (max-width: 760px) {
+  .log-summary-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    row-gap: 10px;
   }
 
-  .log-item :deep(.v-list-item__prepend) {
-    margin-inline-end: 8px;
+  .log-columns {
+    display: none;
+  }
+
+  .log-cell__label {
+    display: block;
+    color: rgba(var(--v-theme-on-surface), 0.48);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+}
+
+@media (max-width: 600px) {
+  .channel-logs-scroll {
+    --log-status-col: 44px;
+    --log-actions-col: 52px;
+    --log-gap: 10px;
+    --log-pad-x: 12px;
+  }
+
+  .log-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .log-status-chip {
@@ -847,7 +1141,8 @@ onUnmounted(() => {
   }
 
   .log-expand-icon,
-  .log-action-btn {
+  .log-action-btn,
+  .log-item {
     transition: none;
   }
 }

@@ -35,7 +35,16 @@ func WithEstimatedContextTokens(tokens int) ChannelLogOption {
 	}
 }
 
-// WithChannelSelectionTrace 记录本次渠道选择的可解释性摘要。
+// WithStreamMode 记录客户端请求的流式模式，供日志区分流/非流。
+func WithStreamMode(isStream bool) ChannelLogOption {
+	return func(log *metrics.ChannelLog) {
+		if log != nil {
+			log.IsStream = &isStream
+		}
+	}
+}
+
+// WithSubagentRoutingPolicy 记录子代理策略是否生效及策略模型。
 func WithSubagentRoutingPolicy(applied bool, model string) ChannelLogOption {
 	return func(log *metrics.ChannelLog) {
 		log.SubagentPolicyApplied = applied
@@ -43,6 +52,7 @@ func WithSubagentRoutingPolicy(applied bool, model string) ChannelLogOption {
 	}
 }
 
+// WithChannelSelectionTrace 记录本次渠道选择的可解释性摘要。
 func WithChannelSelectionTrace(reason, summary string) ChannelLogOption {
 	reason = strings.TrimSpace(reason)
 	summary = strings.TrimSpace(summary)

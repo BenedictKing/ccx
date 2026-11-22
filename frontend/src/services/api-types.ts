@@ -685,6 +685,8 @@ export interface ChannelLogEntry {
   contextTokens?: number
   estimatedContextTokens?: number
   tokensPerSecond?: number
+  isStream?: boolean  // 客户端请求是否流式；缺省表示旧日志未记录
+  costUSD?: number    // 查询时按当前价格与 Key 倍率估算
   success: boolean
   keyMask: string
   baseUrl: string

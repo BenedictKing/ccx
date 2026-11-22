@@ -425,7 +425,7 @@ func TryUpstreamWithAllKeys(
 			metricsKey := metrics.GenerateMetricsIdentityKey(currentBaseURL, apiKey, metricsServiceType)
 
 			// 创建 pending 状态日志（附带代理上下文与会话标识，用于 subagent 观测）
-			logRequestID := CreatePendingLog(channelLogStore, metricsKey, channelIndex, upstream.Name, redirectedModel, originalModel, originalReasoningEffort, actualReasoningEffort, apiKey, currentBaseURL, apiType, operation, metrics.RequestSourceProxy, AgentContextFromGin(c), SessionIDFromGin(c), tryOpts.channelLogOptions...)
+			logRequestID := CreatePendingLog(channelLogStore, metricsKey, channelIndex, upstream.Name, redirectedModel, originalModel, originalReasoningEffort, actualReasoningEffort, apiKey, currentBaseURL, apiType, operation, metrics.RequestSourceProxy, AgentContextFromGin(c), SessionIDFromGin(c), append([]ChannelLogOption{WithStreamMode(isStream)}, tryOpts.channelLogOptions...)...)
 
 			if logRequestID == "" {
 				logRequestID = GenerateRequestID()

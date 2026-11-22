@@ -28,6 +28,8 @@ type ChannelLog struct {
 	ContextTokens           int       `json:"contextTokens,omitempty"`
 	EstimatedContextTokens  int       `json:"estimatedContextTokens,omitempty"` // 原始请求上下文估算，不含输出预留；独立于上游 usage
 	TokensPerSecond         float64   `json:"tokensPerSecond,omitempty"`
+	IsStream                *bool     `json:"isStream,omitempty"` // 客户端请求是否流式；nil 表示未记录（旧日志/兼容路径）
+	CostUSD                 float64   `json:"costUSD,omitempty"`  // 查询时按当前价格与 Key 倍率估算，不持久化语义
 	Success                 bool      `json:"success"`
 	KeyMask                 string    `json:"keyMask"`
 	BaseURL                 string    `json:"baseUrl"`

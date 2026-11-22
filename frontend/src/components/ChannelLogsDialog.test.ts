@@ -12,12 +12,6 @@ vi.mock('../services/api', () => ({ api: { getChannelLogs: vi.fn() } }))
 
 const box = defineComponent({ setup: (_, { slots }) => () => h('div', slots.default?.()) })
 const chip = defineComponent({ setup: (_, { slots }) => () => h('span', slots.default?.()) })
-const listItem = defineComponent({
-  emits: ['click'],
-  setup: (_, { slots, emit }) => () => h('div', { onClick: () => emit('click') }, [
-    slots.prepend?.(), slots.default?.(), slots.append?.(),
-  ]),
-})
 const button = defineComponent({
   emits: ['click'],
   setup: (_, { slots, emit }) => () => h('button', { onClick: (event: MouseEvent) => {
@@ -36,7 +30,7 @@ const logs: ChannelLogEntry[] = [
     connectedAt: '2026-11-19T10:00:00.150Z', firstByteAt: '2026-11-19T10:00:01Z', completedAt: '2026-11-19T10:00:02Z',
     model: 'claude-sonnet-4-5', interfaceType: 'messages', statusCode: 200, durationMs: 2000,
     inputTokens: 1200, outputTokens: 300, contextTokens: 1800, cacheReadTokens: 500, cacheCreationTokens: 100,
-    tokensPerSecond: 42.5, success: true, keyMask: 'sk-...masked', baseUrl: 'https://upstream.test',
+    tokensPerSecond: 42.5, isStream: true, costUSD: 0.031768, success: true, keyMask: 'sk-...masked', baseUrl: 'https://upstream.test',
     errorInfo: '', isRetry: false, status: 'completed', selectionReason: 'priority', selectionTraceSummary: 'highest priority',
   },
   {
@@ -52,7 +46,7 @@ function renderDialog() {
     props: { modelValue: false, channelIndex: 1, channelName: 'test', channelType: 'messages' },
     global: { stubs: {
       VDialog: box, VCard: box, VCardTitle: box, VCardText: box, VDivider: box,
-      VList: box, VListItem: listItem, VChip: chip, VIcon: chip, VBtn: button,
+      VSpacer: true, VChip: chip, VIcon: chip, VBtn: button,
       VTooltip: tooltip, VExpandTransition: box, VProgressCircular: true,
     } },
   })
@@ -86,7 +80,14 @@ describe('渠道日志列表', () => {
       const firstLog = wrapper.findAll('.log-item')[0]!
       expect(firstLog.attributes('aria-expanded')).toBe('false')
       expect(wrapper.text()).toContain('claude-sonnet-4-5')
-      expect(wrapper.text()).toContain('channelLogs.input')
+      const summary = firstLog.find('.log-summary')
+      expect(summary.text()).toContain('channelLogs.stream.yes')
+      expect(summary.text()).toContain('42.5 t/s')
+      expect(summary.text()).toContain(`${(1200).toLocaleString()} / 300`)
+      expect(summary.text()).toContain('channelLogs.cache')
+      expect(summary.text()).toContain(`↓ ${(500).toLocaleString()}`)
+      expect(summary.text()).toContain('$0.0318')
+      expect(summary.find('.log-latency--good').exists()).toBe(true)
       expect(wrapper.text()).not.toContain('https://upstream.test')
       expect(wrapper.text()).not.toContain('highest priority')
 
@@ -95,16 +96,37 @@ describe('渠道日志列表', () => {
       expect(wrapper.find('#channel-log-details-0').text()).toContain('https://upstream.test')
       expect(wrapper.find('#channel-log-details-0').text()).toContain('highest priority')
       expect(wrapper.find('#channel-log-details-0').text()).toContain('channelLogs.duration.connect')
+      expect(wrapper.find('#channel-log-details-0').text()).toContain('channelLogs.input')
 
       await firstLog.trigger('click')
       expect(firstLog.attributes('aria-expanded')).toBe('false')
       expect(wrapper.find('#channel-log-details-0').exists()).toBe(false)
 
       const failedLog = wrapper.findAll('.log-item')[1]!
+      expect(failedLog.find('.log-latency--bad').exists()).toBe(true)
+      // 旧日志未记录流式标识、无 usage 时不猜测流/非流与费用
+      expect(failedLog.text()).not.toContain('channelLogs.stream')
+      expect(failedLog.text()).not.toContain('$')
       expect(wrapper.find('.log-error-preview').exists()).toBe(true)
       await failedLog.trigger('click')
       expect(wrapper.find('.log-error-preview').exists()).toBe(false)
       expect(wrapper.find('#channel-log-details-1 .log-error-detail').text()).toBe('upstream overloaded')
+    } finally {
+      wrapper.unmount()
+    }
+  })
+
+  it('支持键盘展开与非流式标识', async () => {
+    vi.mocked(api.getChannelLogs).mockResolvedValue({ channelIndex: 1, logs: [{ ...logs[0]!, isStream: false, costUSD: 2.5 }] })
+    const wrapper = await openDialog()
+    try {
+      const row = wrapper.find('.log-item')
+      expect(row.text()).toContain('channelLogs.stream.no')
+      expect(row.text()).toContain('$2.50')
+      await row.trigger('keydown', { key: 'Enter' })
+      expect(row.attributes('aria-expanded')).toBe('true')
+      await row.trigger('keydown', { key: ' ' })
+      expect(row.attributes('aria-expanded')).toBe('false')
     } finally {
       wrapper.unmount()
     }

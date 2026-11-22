@@ -18,7 +18,7 @@
 
 - **全局统计**：协议页共享时间范围和刷新状态，展示请求、成功率、延迟、Token、缓存和费用趋势；局部模型去向筛选不得改变原趋势。
 - **模型去向**：位于全局统计内，采用“请求模型 → 渠道 → 实际发送模型”三列流向；支持三维筛选、成功请求去向/全部上游尝试、路径下钻和请求详情。窄屏使用路径卡片和全屏详情，不以横向表格替代。
-- **渠道日志**：展示生命周期、状态码、来源、BaseURL、脱敏 Key、原模型/实际模型、重试和耗时；Images 额外显示 operation，缓存与 TPS 等字段按实际记录展示。
+- **渠道日志**：展示生命周期、状态码、来源、BaseURL、脱敏 Key、原模型/实际模型、重试和耗时；Images 额外显示 operation，缓存与 TPS 等字段按实际记录展示。列表行以“时间/状态 · 流式 · Token · 费用 · 耗时”五栏摘要呈现：流式栏显示客户端请求为流/非流及 TPS；Token 栏显示输入/输出与缓存读↓写↑；费用栏为按当前模型价格与 Key 分组倍率在查询时估算的 USD，无定价或无 usage 时显示占位；耗时栏显示首字与总耗时并按首字延迟着色。未记录流式标识的旧日志不得猜测流/非流。
 - **请求历史**：支持状态、搜索、请求模型、渠道、实际模型和 Key 筛选，游标分页；提供 15m/1h/6h/24h/7d/30d/全部保留范围，超出保留期明确拒绝。
 - **Key 运维**：渠道菜单按脱敏 Key 展示 15 分钟请求量、成功率、最近失败及操作记录，可携带渠道、Key、attempt ID 跳转请求历史。
 - **运行诊断**：顶栏展示版本、持久化配置、保留范围、待写入、丢弃和清理异常；可导出仅含低敏字段的 JSON。
@@ -92,7 +92,7 @@
 
 - 请求记录与存储：`backend-go/internal/metrics/routing_observability.go`及测试。
 - 查询接口：`handlers/routing_handler.go`、`routing_handler_test.go`、`routing_integration_test.go`。
-- 渠道日志：`metrics/channel_log.go`；写入钩子位于 `handlers/common/routing_observation.go`。
+- 渠道日志：`metrics/channel_log.go`；写入钩子位于 `handlers/common/routing_observation.go`；流式标识由 `handlers/common/channel_log_helper.go` 的 `WithStreamMode` 写入，单条费用在 `handlers/channel_logs_handler.go` 查询时估算；Web 展示为 `ChannelLogsDialog.vue` 及测试。
 - Key 运维：`handlers/key_observability.go`、`metrics/key_operations.go`及测试。
 - 运行诊断：`handlers/diagnostics.go`。
 - 用量报表：`handlers/usage_report_handler.go`、`usage_report_handler_test.go`、`group_multiplier_cost_test.go`。
