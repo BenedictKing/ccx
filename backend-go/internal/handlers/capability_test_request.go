@@ -337,12 +337,14 @@ func buildTestRequestWithContext(ctx context.Context, protocol string, channel *
 		if headerProtocol == "messages" {
 			req.Header.Set("anthropic-version", "2023-06-01")
 			req.Header.Set("anthropic-beta", "claude-code-20250219,adaptive-thinking-2026-01-28,prompt-caching-scope-2026-01-05,effort-2025-11-24")
-			req.Header.Set("User-Agent", "claude-cli/2.1.71 (external, cli)")
+			req.Header.Set("User-Agent", "claude-cli/2.1.330 (external, cli)")
 			req.Header.Set("X-App", "cli")
 		}
 		if headerProtocol == "responses" {
 			req.Header.Set("Originator", "codex_cli_rs")
-			req.Header.Set("User-Agent", "codex_cli_rs/0.111.0 (Mac OS 26.3.0; arm64) iTerm.app/3.6.6")
+		}
+		if headerProtocol == "responses" || headerProtocol == "chat" {
+			req.Header.Set("User-Agent", "Codex Desktop/0.171.0-alpha.13 (Mac OS 27.2.1; arm64) unknown (Codex Desktop; 26.1117.31558)")
 		}
 	}
 
