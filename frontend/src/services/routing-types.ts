@@ -34,6 +34,7 @@ export interface RoutingRequest {
   apiType: ChannelKind
   requestedModel: string
   operation?: string
+  requestSource?: string
   receivedAt: string
   completedAt?: string
   status: RoutingStatus
@@ -93,6 +94,8 @@ export interface RoutingQuery {
   requestedModel?: string
   channelUid?: string
   sentModel?: string
+  status?: RoutingStatus | ''
+  q?: string
   cursor?: string
   limit?: number
 }

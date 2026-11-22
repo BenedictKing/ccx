@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/BenedictKing/ccx/internal/config"
@@ -18,6 +19,15 @@ type routingCursor struct {
 	From, To        time.Time
 	ReceivedAt      time.Time
 	ID, Fingerprint string
+}
+
+type routingHistoryCursor struct {
+	From        time.Time
+	To          time.Time
+	ReceivedAt  time.Time
+	ID          string
+	Fingerprint string
+	IssuedAt    time.Time
 }
 
 func routingQuery(c *gin.Context, apiType string) (metrics.RoutingFilter, time.Time, time.Time, *routingCursor, bool) {
@@ -142,6 +152,99 @@ func registerRoutingProtocol(group *gin.RouterGroup, store *metrics.RoutingStore
 		markDeletedRoutingChannels(requests, managers)
 		c.JSON(200, requests[0])
 	})
+	group.GET(prefix+"/history", func(c *gin.Context) {
+		filter, cursor, limit, ok := routingHistoryQuery(c, apiType, store)
+		if !ok {
+			return
+		}
+		requests, hasMore, coverage, err := store.QueryRequests(apiType, cursor.From, cursor.To, filter, cursor.ReceivedAt, cursor.ID, limit)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not query request history"})
+			return
+		}
+		markDeletedRoutingChannels(requests, managers)
+		next := ""
+		if hasMore && len(requests) > 0 {
+			last := requests[len(requests)-1]
+			cursor.ReceivedAt, cursor.ID = last.ReceivedAt, last.GatewayRequestID
+			payload, _ := json.Marshal(cursor)
+			next = base64.RawURLEncoding.EncodeToString(payload)
+		}
+		c.JSON(http.StatusOK, gin.H{"requests": requests, "nextCursor": next, "from": cursor.From, "to": cursor.To, "coverage": coverage})
+	})
+}
+
+func routingHistoryQuery(c *gin.Context, apiType string, store *metrics.RoutingStore) (metrics.RoutingHistoryFilter, *routingHistoryCursor, int, bool) {
+	filter := metrics.RoutingHistoryFilter{
+		RoutingFilter: metrics.RoutingFilter{
+			RequestedModel: c.Query("requestedModel"),
+			ChannelUID:     c.Query("channelUid"),
+			SentModel:      c.Query("sentModel"),
+			Basis:          "all_attempts",
+		},
+		Status: c.Query("status"),
+		Search: strings.TrimSpace(c.Query("q")),
+	}
+	bad := func() (metrics.RoutingHistoryFilter, *routingHistoryCursor, int, bool) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request history range, filter or cursor"})
+		return filter, nil, 0, false
+	}
+	switch filter.Status {
+	case "", metrics.RoutingStatusSuccess, metrics.RoutingStatusFailed, metrics.RoutingStatusCancelled, metrics.RoutingStatusInProgress, metrics.RoutingStatusUnknown:
+	default:
+		return bad()
+	}
+	if len(filter.Search) > 120 || len(filter.RequestedModel) > 160 || len(filter.ChannelUID) > 160 || len(filter.SentModel) > 160 {
+		return bad()
+	}
+
+	limit := 20
+	if raw := c.Query("limit"); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil || n < 1 || n > 100 {
+			return bad()
+		}
+		limit = n
+	}
+
+	duration := time.Duration(0)
+	switch c.DefaultQuery("duration", "24h") {
+	case "24h":
+		duration = 24 * time.Hour
+	case "7d":
+		duration = 7 * 24 * time.Hour
+	case "30d":
+		duration = 30 * 24 * time.Hour
+	default:
+		return bad()
+	}
+	if duration > store.MaxHistoryAge() {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Requested history exceeds the configured retention period", "code": "routing_history_retention_exceeded"})
+		return filter, nil, 0, false
+	}
+
+	fingerprintBytes := sha256.Sum256([]byte(strings.Join([]string{
+		apiType, c.DefaultQuery("duration", "24h"), filter.Status, filter.Search,
+		filter.RequestedModel, filter.ChannelUID, filter.SentModel,
+	}, "\x00")))
+	fingerprint := hex.EncodeToString(fingerprintBytes[:])
+	var cursor routingHistoryCursor
+	if raw := c.Query("cursor"); raw != "" {
+		payload, err := base64.RawURLEncoding.DecodeString(raw)
+		if err != nil || json.Unmarshal(payload, &cursor) != nil || cursor.Fingerprint != fingerprint || cursor.IssuedAt.IsZero() || time.Since(cursor.IssuedAt) > metrics.RoutingSnapshotMaxAge {
+			c.JSON(http.StatusGone, gin.H{"error": "Request history cursor expired; run the search again", "code": "routing_history_cursor_expired"})
+			return filter, nil, 0, false
+		}
+	} else {
+		cursor.From = time.Now().Add(-duration)
+		cursor.To = time.Now()
+		cursor.IssuedAt = cursor.To
+		cursor.Fingerprint = fingerprint
+	}
+	if !cursor.From.Before(cursor.To) || cursor.To.After(time.Now().Add(time.Minute)) || time.Since(cursor.From) > store.MaxHistoryAge()+time.Minute {
+		return bad()
+	}
+	return filter, &cursor, limit, true
 }
 
 func markDeletedRoutingChannels(requests []metrics.RoutingRequest, managers []*config.ConfigManager) {

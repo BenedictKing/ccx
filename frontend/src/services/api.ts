@@ -53,6 +53,10 @@ export class ApiService {
     return this.request(`/${type}/models/routing/requests?${this.routingQuery(query)}`)
   }
 
+  async getRoutingHistory(type: string, query: RoutingQuery): Promise<RoutingRequestPage> {
+    return this.request(`/${type}/models/routing/history?${this.routingQuery(query)}`)
+  }
+
   private routingQuery(query: RoutingQuery): string {
     return new URLSearchParams(Object.entries(query).filter(([, value]) => value !== undefined && value !== "").map(([key, value]) => [key, String(value)])).toString()
   }

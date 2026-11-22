@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /* eslint-disable vue/one-component-per-file */
 import { flushPromises, mount } from '@vue/test-utils'
-import { defineComponent, nextTick, ref } from 'vue'
+import { defineComponent, nextTick, ref, type PropType } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ModelRoutingPanel from './ModelRoutingPanel.vue'
 import { api } from '../services/api'
@@ -9,12 +9,25 @@ import { ApiError } from '../services/api-helpers'
 import type { RoutingDistribution } from '../services/routing-types'
 
 vi.mock('../i18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }))
-vi.mock('../services/api', () => ({ api: { getModelRouting: vi.fn(), getRoutingRequests: vi.fn() } }))
+vi.mock('../services/api', () => ({ api: { getModelRouting: vi.fn(), getRoutingRequests: vi.fn(), getRoutingHistory: vi.fn() } }))
 vi.mock('vuetify', () => ({ useDisplay: () => ({ smAndDown: ref(false), width: ref(1400) }) }))
 vi.mock('vuetify/components/VNavigationDrawer', () => ({ VNavigationDrawer: { template: '<aside><slot /></aside>' } }))
 
 const Slot = defineComponent({ template: '<div><slot /></div>' })
 const Button = defineComponent({ emits: ['click'], template: '<button @click="$emit(\'click\')"><slot /></button>' })
+const Select = defineComponent({
+  props: {
+    modelValue: { type: String, default: '' },
+    items: { type: Array as PropType<{ title: string; value: string }[]>, default: () => [] }
+  },
+  emits: ['update:modelValue'],
+  template: '<select :value="modelValue" @change="$emit(\'update:modelValue\', $event.target.value)"><option v-for="item in items" :key="item.value" :value="item.value">{{ item.title }}</option></select>'
+})
+const TextField = defineComponent({
+  props: { modelValue: { type: String, default: '' } },
+  emits: ['update:modelValue', 'keydown'],
+  template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" @keydown.enter="$emit(\'keydown.enter\', $event)" />'
+})
 const result = (model: string): RoutingDistribution => ({
   from: '2026-11-13T00:00:00Z',
   to: '2026-11-13T01:00:00Z',
@@ -63,6 +76,8 @@ function render(duration: '6h' | '7d' = '6h') {
         VTooltip: Slot,
         VBtnToggle: Slot,
         VBtn: Button,
+        VSelect: Select,
+        VTextField: TextField,
         VChip: Slot,
         VNavigationDrawer: Slot,
         teleport: true,
@@ -234,6 +249,40 @@ describe('model routing query lifecycle', () => {
       expect.objectContaining({ from: '2026-11-13T00:05:00Z', to: '2026-11-13T01:05:00Z' })
     )
     expect(wrapper.text()).not.toContain('routing.snapshotExpired')
+    wrapper.unmount()
+  })
+  it('opens persistent request history with the selected range and filters', async () => {
+    vi.mocked(api.getModelRouting).mockResolvedValue(result('source'))
+    vi.mocked(api.getRoutingHistory).mockResolvedValue({
+      requests: [],
+      nextCursor: '',
+      from: '2026-11-06T00:00:00Z',
+      to: '2026-11-13T00:00:00Z',
+      coverage: result('source').coverage
+    })
+    const wrapper = render()
+    await flushPromises()
+    await wrapper
+      .findAll('button')
+      .find(button => button.text() === 'routing.history')!
+      .trigger('click')
+    await flushPromises()
+    expect(api.getRoutingHistory).toHaveBeenCalledWith(
+      'chat',
+      expect.objectContaining({ duration: '24h', basis: 'all_attempts', limit: 10 })
+    )
+    expect(wrapper.find('.routing-history-filters').exists()).toBe(true)
+    await wrapper.findAll('.routing-history-filters select')[1]!.setValue('failed')
+    await wrapper.find('.routing-history-filters input').setValue('timeout')
+    await wrapper
+      .findAll('button')
+      .find(button => button.text() === 'routing.search')!
+      .trigger('click')
+    await flushPromises()
+    expect(api.getRoutingHistory).toHaveBeenLastCalledWith(
+      'chat',
+      expect.objectContaining({ duration: '24h', status: 'failed', q: 'timeout', cursor: '', limit: 10 })
+    )
     wrapper.unmount()
   })
 })

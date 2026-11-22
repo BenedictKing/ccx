@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -74,6 +76,12 @@ type RoutingCoverage struct {
 	DroppedWrites   uint64    `json:"droppedWrites"`
 	UnknownRequests int       `json:"unknownRequests"`
 	Limited         bool      `json:"limited"`
+}
+
+type RoutingHistoryFilter struct {
+	RoutingFilter
+	Status string
+	Search string
 }
 
 // RoutingStore 的内存窗口为 24 小时，后台持久化独立快照，写入失败不影响代理。
@@ -319,6 +327,183 @@ func (s *RoutingStore) Get(apiType, id string) (RoutingRequest, bool) {
 	defer s.mu.RUnlock()
 	r, ok := s.requests[id]
 	return cloneRoutingRequest(r), ok && r.APIType == apiType
+}
+
+func (s *RoutingStore) MaxHistoryAge() time.Duration {
+	if s == nil || s.db == nil {
+		return routingHistoryWindow
+	}
+	return time.Duration(s.retentionDays) * 24 * time.Hour
+}
+
+func (s *RoutingStore) QueryRequests(apiType string, from, to time.Time, filter RoutingHistoryFilter, after time.Time, afterID string, limit int) ([]RoutingRequest, bool, RoutingCoverage, error) {
+	if s == nil || limit < 1 {
+		return nil, false, RoutingCoverage{}, nil
+	}
+
+	s.mu.RLock()
+	coverage := RoutingCoverage{StartedAt: s.startedAt, Persistent: s.db != nil, DroppedWrites: s.dropped.Load(), Limited: s.limited}
+	now := time.Now()
+	memoryTo := to
+	if memoryTo.After(now) {
+		memoryTo = now
+	}
+	requests := make([]RoutingRequest, 0, limit+1)
+	for _, request := range s.requests {
+		if request.APIType != apiType || request.ReceivedAt.Before(from) || !request.ReceivedAt.Before(memoryTo) || !afterRoutingCursor(request, after, afterID) || !matchesRoutingHistoryFilter(request, filter) {
+			continue
+		}
+		requests = append(requests, cloneRoutingRequest(request))
+	}
+	db := s.db
+	s.mu.RUnlock()
+
+	sortRoutingRequests(requests)
+	if len(requests) > limit+1 {
+		requests = requests[:limit+1]
+	}
+	if db != nil {
+		persisted, err := queryRoutingRequests(db, apiType, from, to, filter, after, afterID, limit+1)
+		if err != nil {
+			return nil, false, coverage, fmt.Errorf("query persistent routing history: %w", err)
+		}
+		byID := make(map[string]RoutingRequest, len(requests)+len(persisted))
+		for _, request := range persisted {
+			byID[request.GatewayRequestID] = request
+		}
+		for _, request := range requests {
+			byID[request.GatewayRequestID] = request
+		}
+		requests = requests[:0]
+		for _, request := range byID {
+			requests = append(requests, request)
+		}
+	}
+	sortRoutingRequests(requests)
+	hasMore := len(requests) > limit
+	if hasMore {
+		requests = requests[:limit]
+	}
+	return requests, hasMore, routingCoverageForRequests(coverage, requests), nil
+}
+
+func queryRoutingRequests(db *sql.DB, apiType string, from, to time.Time, filter RoutingHistoryFilter, after time.Time, afterID string, limit int) ([]RoutingRequest, error) {
+	pattern := "%" + escapeLike(strings.ToLower(strings.TrimSpace(filter.Search))) + "%"
+	query := `SELECT r.payload FROM routing_records_v1 AS r
+		WHERE r.api_type = ? AND r.received_at >= ? AND r.received_at < ?
+		AND (? = '' OR json_extract(r.payload, '$.status') = ?)
+		AND (? = '' OR json_extract(r.payload, '$.requestedModel') = ?)
+		AND ((? = '' AND ? = '') OR EXISTS (
+			SELECT 1 FROM json_each(r.payload, '$.attempts') AS a
+			WHERE (? = '' OR json_extract(a.value, '$.channelUid') = ?)
+			AND (? = '' OR json_extract(a.value, '$.sentModel') = ?)
+		))
+		AND (? = '' OR lower(r.request_id) LIKE ? ESCAPE '\'
+			OR lower(json_extract(r.payload, '$.requestedModel')) LIKE ? ESCAPE '\'
+			OR lower(json_extract(r.payload, '$.failureStage')) LIKE ? ESCAPE '\'
+			OR EXISTS (
+				SELECT 1 FROM json_each(r.payload, '$.attempts') AS a
+				WHERE lower(json_extract(a.value, '$.channelName')) LIKE ? ESCAPE '\'
+				OR lower(json_extract(a.value, '$.channelUid')) LIKE ? ESCAPE '\'
+				OR lower(json_extract(a.value, '$.sentModel')) LIKE ? ESCAPE '\'
+			)
+		)
+		AND (? = 0 OR r.received_at < ? OR (r.received_at = ? AND r.request_id < ?))
+		ORDER BY r.received_at DESC, r.request_id DESC LIMIT ?`
+	rows, err := db.Query(query,
+		apiType, from.UnixNano(), to.UnixNano(),
+		filter.Status, filter.Status,
+		filter.RequestedModel, filter.RequestedModel,
+		filter.ChannelUID, filter.SentModel, filter.ChannelUID, filter.ChannelUID, filter.SentModel, filter.SentModel,
+		filter.Search, pattern, pattern, pattern, pattern, pattern, pattern,
+		boolInt(!after.IsZero()), after.UnixNano(), after.UnixNano(), afterID, limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	requests := make([]RoutingRequest, 0, limit)
+	for rows.Next() {
+		var payload string
+		if err := rows.Scan(&payload); err != nil {
+			return nil, err
+		}
+		var request RoutingRequest
+		if err := json.Unmarshal([]byte(payload), &request); err != nil {
+			return nil, fmt.Errorf("decode routing record: %w", err)
+		}
+		requests = append(requests, request)
+	}
+	return requests, rows.Err()
+}
+
+func matchesRoutingHistoryFilter(request RoutingRequest, filter RoutingHistoryFilter) bool {
+	if filter.Status != "" && request.Status != filter.Status {
+		return false
+	}
+	if filter.RequestedModel != "" && request.RequestedModel != filter.RequestedModel {
+		return false
+	}
+	if filter.ChannelUID != "" || filter.SentModel != "" {
+		matched := false
+		for _, attempt := range RoutingMatches(request, filter.RoutingFilter) {
+			if filter.ChannelUID == "" || attempt.ChannelUID == filter.ChannelUID {
+				if filter.SentModel == "" || attempt.SentModel == filter.SentModel {
+					matched = true
+					break
+				}
+			}
+		}
+		if !matched {
+			return false
+		}
+	}
+	search := strings.ToLower(strings.TrimSpace(filter.Search))
+	if search == "" {
+		return true
+	}
+	if strings.Contains(strings.ToLower(request.GatewayRequestID), search) || strings.Contains(strings.ToLower(request.RequestedModel), search) || strings.Contains(strings.ToLower(request.FailureStage), search) {
+		return true
+	}
+	for _, attempt := range request.Attempts {
+		if strings.Contains(strings.ToLower(attempt.ChannelName), search) || strings.Contains(strings.ToLower(attempt.ChannelUID), search) || strings.Contains(strings.ToLower(attempt.SentModel), search) {
+			return true
+		}
+	}
+	return false
+}
+
+func afterRoutingCursor(request RoutingRequest, receivedAt time.Time, id string) bool {
+	return id == "" || request.ReceivedAt.Before(receivedAt) || request.ReceivedAt.Equal(receivedAt) && request.GatewayRequestID < id
+}
+
+func sortRoutingRequests(requests []RoutingRequest) {
+	sort.Slice(requests, func(i, j int) bool {
+		if requests[i].ReceivedAt.Equal(requests[j].ReceivedAt) {
+			return requests[i].GatewayRequestID > requests[j].GatewayRequestID
+		}
+		return requests[i].ReceivedAt.After(requests[j].ReceivedAt)
+	})
+}
+
+func routingCoverageForRequests(coverage RoutingCoverage, requests []RoutingRequest) RoutingCoverage {
+	for _, request := range requests {
+		if request.Status == RoutingStatusUnknown {
+			coverage.UnknownRequests++
+		}
+	}
+	return coverage
+}
+
+func escapeLike(value string) string {
+	return strings.NewReplacer("\\", "\\\\", "%", "\\%", "_", "\\_").Replace(value)
+}
+
+func boolInt(value bool) int {
+	if value {
+		return 1
+	}
+	return 0
 }
 func (s *RoutingStore) persist(request RoutingRequest) error {
 	payload, err := json.Marshal(request)

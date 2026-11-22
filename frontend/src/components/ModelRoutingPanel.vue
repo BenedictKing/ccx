@@ -21,6 +21,7 @@
         <v-btn size="x-small" value="successful_requests">{{ t('routing.successBasis') }}</v-btn
         ><v-btn size="x-small" value="all_attempts">{{ t('routing.attemptBasis') }}</v-btn>
       </v-btn-toggle>
+      <v-btn size="small" variant="text" prepend-icon="mdi-history" @click="openHistory">{{ t('routing.history') }}</v-btn>
     </div>
     <div class="routing-content">
       <v-alert v-if="!supported" type="info" variant="tonal" density="compact">
@@ -73,7 +74,7 @@
       >
         <div class="drawer-body">
           <div class="routing-toolbar">
-            <h3>{{ t('routing.details') }}</h3>
+            <h3>{{ historyMode ? t('routing.historyTitle') : t('routing.details') }}</h3>
             <v-btn
               icon="mdi-close"
               variant="text"
@@ -82,12 +83,50 @@
               @click="drawerOpen = false"
             />
           </div>
+          <div v-if="historyMode" class="routing-history-filters">
+            <v-select
+              v-model="historyDuration"
+              :items="historyDurationItems"
+              :label="t('routing.historyRange')"
+              item-title="title"
+              item-value="value"
+              density="compact"
+              variant="outlined"
+              hide-details
+            />
+            <v-select
+              v-model="historyStatus"
+              :items="historyStatusItems"
+              :label="t('routing.historyStatus')"
+              item-title="title"
+              item-value="value"
+              density="compact"
+              variant="outlined"
+              hide-details
+            />
+            <v-text-field
+              v-model="historySearch"
+              :label="t('routing.historySearch')"
+              density="compact"
+              variant="outlined"
+              clearable
+              hide-details
+              @keydown.enter.prevent="runHistorySearch"
+            />
+            <v-btn color="primary" variant="tonal" :disabled="drawerLoading" @click="runHistorySearch">{{ t('routing.search') }}</v-btn>
+          </div>
+          <v-alert v-if="historyMode && requestPage && !requestPage.coverage.persistent" type="info" variant="tonal" density="compact">
+            {{ t('routing.memoryOnly') }} {{ t('routing.coverage', { time: time(requestPage.coverage.startedAt) }) }}
+          </v-alert>
+          <v-alert v-else-if="historyMode && requestPage && (requestPage.coverage.droppedWrites > 0 || requestPage.coverage.limited)" type="warning" variant="tonal" density="compact">
+            {{ t('routing.incomplete') }}
+          </v-alert>
           <p v-if="selectedPath" class="selected-path">
             {{ pathTitle(selectedPath) }}<br />{{ selectedPath.count }} · {{ share(selectedPath.share) }}
           </p>
           <v-btn v-if="selectedPath" size="small" variant="text" @click="openPath()">{{ t('routing.allPaths') }}</v-btn>
-          <p v-if="!selectedPath" class="text-caption">{{ t('routing.selectPath') }}</p>
-          <div v-if="!selectedPath" class="drawer-paths">
+          <p v-if="!historyMode && !selectedPath" class="text-caption">{{ t('routing.selectPath') }}</p>
+          <div v-if="!historyMode && !selectedPath" class="drawer-paths">
             <button v-for="path in drawerPaths" :key="routingPathKey(path)" class="mobile-path" @click="openPath(path)">
               {{ pathTitle(path) }}<br />{{ path.count }} · {{ share(path.share) }}
             </button>
@@ -177,6 +216,7 @@ import type {
   RoutingPath,
   RoutingQuery,
   RoutingRequestPage,
+  RoutingStatus,
   StatsDuration
 } from '../services/routing-types'
 import ModelRoutingFlow from './ModelRoutingFlow.vue'
@@ -200,6 +240,10 @@ const drawerOpen = ref(false),
   drawerError = ref('')
 const selectedPath = ref<RoutingPath>(),
   requestPage = ref<RoutingRequestPage>()
+const historyMode = ref(false)
+const historyDuration = ref<'24h' | '7d' | '30d'>('24h')
+const historyStatus = ref<RoutingStatus | ''>('')
+const historySearch = ref('')
 const cursorHistory = ref<string[]>([])
 const drawerExpired = ref(false)
 const drawerPaths = ref<RoutingPath[]>([])
@@ -209,6 +253,19 @@ let generation = 0,
 let drawerQuery: RoutingQuery | undefined
 const supported = computed(() => ['1h', '6h', '24h', 'today'].includes(props.duration))
 const hiddenPathCount = computed(() => Math.max(0, (data.value?.paths.length ?? 0) - 12))
+const historyDurationItems = computed(() => [
+  { title: t('chart.24h'), value: '24h' },
+  { title: t('chart.7d'), value: '7d' },
+  { title: t('chart.30d'), value: '30d' }
+])
+const historyStatusItems = computed(() => [
+  { title: t('routing.status.all'), value: '' },
+  { title: t('routing.status.success'), value: 'success' },
+  { title: t('routing.status.failed'), value: 'failed' },
+  { title: t('routing.status.cancelled'), value: 'cancelled' },
+  { title: t('routing.status.in_progress'), value: 'in_progress' },
+  { title: t('routing.status.unknown'), value: 'unknown' }
+])
 const time = (value: string) => new Date(value).toLocaleString()
 const share = (value: number) => value.toFixed(1) + '%'
 const fieldTitle = (field: RoutingField) => t('routing.' + field)
@@ -270,6 +327,7 @@ function closeDrawer() {
   drawerOpen.value = false
   requestPage.value = undefined
   selectedPath.value = undefined
+  historyMode.value = false
   drawerQuery = undefined
 }
 async function loadRequests(cursor = '') {
@@ -279,7 +337,10 @@ async function loadRequests(cursor = '') {
   drawerError.value = ''
   drawerExpired.value = false
   try {
-    const page = await api.getRoutingRequests(props.apiType, { ...drawerQuery, cursor, limit: 10 })
+    const query = { ...drawerQuery, cursor, limit: 10 }
+    const page = historyMode.value
+      ? await api.getRoutingHistory(props.apiType, query)
+      : await api.getRoutingRequests(props.apiType, query)
     if (id === drawerGeneration && drawerOpen.value) {
       requestPage.value = page
       currentCursor = cursor
@@ -288,8 +349,13 @@ async function loadRequests(cursor = '') {
   } catch (err) {
     if (id === drawerGeneration) {
       drawerExpired.value = err instanceof ApiError && err.status === 410
+      const errorCode = err instanceof ApiError && typeof err.details === 'object' && err.details !== null && 'code' in err.details
+        ? err.details.code
+        : ''
       drawerError.value = drawerExpired.value
         ? t('routing.snapshotExpired')
+        : errorCode === 'routing_history_retention_exceeded'
+          ? t('routing.historyRetentionExceeded')
         : err instanceof Error
           ? err.message
           : String(err)
@@ -298,8 +364,30 @@ async function loadRequests(cursor = '') {
     if (id === drawerGeneration) drawerLoading.value = false
   }
 }
+function runHistorySearch() {
+  historyMode.value = true
+  selectedPath.value = undefined
+  cursorHistory.value = []
+  currentCursor = ''
+  requestPage.value = undefined
+  drawerQuery = {
+    duration: historyDuration.value,
+    basis: 'all_attempts',
+    status: historyStatus.value,
+    q: (historySearch.value || '').trim()
+  }
+  loadRequests()
+}
+function openHistory() {
+  historyMode.value = true
+  selectedPath.value = undefined
+  drawerPaths.value = []
+  drawerOpen.value = true
+  runHistorySearch()
+}
 function openPath(path?: RoutingPath) {
   if (!data.value) return
+  historyMode.value = false
   selectedPath.value = path
   drawerPaths.value = [...data.value.paths]
   cursorHistory.value = []
@@ -325,6 +413,10 @@ async function previousPage() {
   if (cursor !== undefined && (await loadRequests(cursor))) cursorHistory.value.pop()
 }
 async function retryRequests() {
+  if (drawerExpired.value && historyMode.value) {
+    runHistorySearch()
+    return
+  }
   if (!drawerExpired.value) {
     await loadRequests(currentCursor)
     return
@@ -447,6 +539,12 @@ onBeforeUnmount(() => {
 .drawer-body {
   padding: 16px;
 }
+.routing-history-filters {
+  display: grid;
+  grid-template-columns: minmax(100px, 0.7fr) minmax(130px, 0.9fr) minmax(180px, 1.4fr) auto;
+  align-items: center;
+  gap: 8px;
+}
 .drawer-paths {
   display: grid;
   gap: 8px;
@@ -485,6 +583,12 @@ onBeforeUnmount(() => {
     min-width: 0;
     padding: 0 6px;
     font-size: 11px;
+  }
+  .routing-history-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .routing-history-filters :deep(.v-text-field) {
+    grid-column: 1 / -1;
   }
 }
 </style>

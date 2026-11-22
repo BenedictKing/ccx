@@ -119,3 +119,66 @@ func TestRoutingRetentionPreservesOpenSnapshotGrace(t *testing.T) {
 		t.Fatal("open snapshot lost its oldest records")
 	}
 }
+
+func TestRoutingHistoryQueriesPersistentRecordsBeyondMemoryWindow(t *testing.T) {
+	db, err := NewSQLiteStore(&SQLiteStoreConfig{DBPath: filepath.Join(t.TempDir(), "metrics.db"), RetentionDays: 30})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	store, err := NewRoutingStore(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := time.Now().Add(-48 * time.Hour)
+	for i, item := range []struct {
+		id      string
+		channel string
+		model   string
+	}{
+		{id: "older-request", channel: "openai-fallback", model: "mapped-model"},
+		{id: "newer-request", channel: "anthropic-prod", model: "upstream-model"},
+	} {
+		id := item.id
+		store.StartRequest(RoutingRequest{GatewayRequestID: id, APIType: "chat", RequestedModel: "client-model", ReceivedAt: base.Add(time.Duration(i) * time.Minute)})
+		store.StartAttempt(id, RoutingAttempt{AttemptID: id + "-attempt", ChannelUID: item.channel, ChannelName: item.channel, SentModel: item.model})
+		store.FinishAttempt(id, id+"-attempt", RoutingStatusFailed, 429)
+		store.FinishRequest(id, RoutingStatusFailed, "upstream")
+	}
+	store.Close()
+
+	recovered, err := NewRoutingStore(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer recovered.Close()
+
+	from, to := base.Add(-time.Hour), base.Add(time.Hour)
+	filter := RoutingHistoryFilter{RoutingFilter: RoutingFilter{Basis: "all_attempts"}, Status: RoutingStatusFailed, Search: "anthropic"}
+	page, hasMore, coverage, err := recovered.QueryRequests("chat", from, to, filter, time.Time{}, "", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !coverage.Persistent || hasMore || len(page) != 1 || page[0].GatewayRequestID != "newer-request" || page[0].Attempts[0].StatusCode != 429 {
+		t.Fatalf("filtered historical page = %+v, hasMore=%v, coverage=%+v", page, hasMore, coverage)
+	}
+
+	filter.Search = ""
+	filter.SentModel = "mapped-model"
+	page, hasMore, _, err = recovered.QueryRequests("chat", from, to, filter, time.Time{}, "", 1)
+	if err != nil || hasMore || len(page) != 1 || page[0].GatewayRequestID != "older-request" {
+		t.Fatalf("sent-model-only filter = %+v, hasMore=%v, err=%v", page, hasMore, err)
+	}
+
+	filter.Search = ""
+	filter.SentModel = ""
+	page, hasMore, _, err = recovered.QueryRequests("chat", from, to, filter, time.Time{}, "", 1)
+	if err != nil || !hasMore || len(page) != 1 || page[0].GatewayRequestID != "newer-request" {
+		t.Fatalf("first cursor page = %+v, hasMore=%v, err=%v", page, hasMore, err)
+	}
+	page, hasMore, _, err = recovered.QueryRequests("chat", from, to, filter, page[0].ReceivedAt, page[0].GatewayRequestID, 1)
+	if err != nil || hasMore || len(page) != 1 || page[0].GatewayRequestID != "older-request" {
+		t.Fatalf("second cursor page = %+v, hasMore=%v, err=%v", page, hasMore, err)
+	}
+}
