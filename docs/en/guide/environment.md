@@ -74,8 +74,8 @@ CORS_ORIGIN=*                          # Allowed CORS origin
 # Tuning-bench startup fallback (legacy/env-only deployments). Prefer the Web/Desktop tuning bench at runtime.
 # REQUEST_TIMEOUT=120000               # Non-streaming upstream request timeout (ms, 1000-300000)
 # RESPONSE_HEADER_TIMEOUT=60           # Wait for upstream HTTP response headers (seconds, 30-120; tuning bench supports up to 300s)
-# METRICS_WINDOW_SIZE=10               # Sliding window size (min 3, default 10)
-# METRICS_FAILURE_THRESHOLD=0.5        # Failure-rate threshold (0-1, default 0.5)
+# METRICS_WINDOW_SIZE=20               # Sliding window size (min 3, default 20)
+# METRICS_FAILURE_THRESHOLD=0.7        # Failure-rate threshold (0-1, default 0.7)
 ```
 
 #### Bind Host
@@ -242,9 +242,9 @@ The runtime config file also supports stream health fields under `circuitBreaker
 
 | Field | Default | Range | Description |
 | --- | --- | --- | --- |
-| `streamFirstContentTimeoutMs` | `30000` | `5000-300000` | Time to wait for the first valid content after HTTP 200. |
-| `streamInactivityTimeoutMs` | `5000` | `1000-60000` | Idle time to wait for subsequent valid output after first content. |
-| `streamToolCallIdleTimeoutMs` | `3000` | `1000-60000` | Idle timeout while a tool call is pending; valid output resets the timer. |
+| `streamFirstContentTimeoutMs` | `90000` | `5000-300000` | Time to wait for the first valid content after HTTP 200. |
+| `streamInactivityTimeoutMs` | `90000` | `1000-180000` | Idle time to wait for subsequent valid output after first content. |
+| `streamToolCallIdleTimeoutMs` | `300000` | `30000-300000` | Idle timeout while a tool call is pending; argument deltas, status events, and heartbeat frames reset the timer. |
 
 `streamToolCallIdleTimeoutMs` is a breaking field name. The old `streamToolCallTimeoutMs` field is no longer used, and this setting is not a total runtime limit for tool calls.
 
@@ -257,8 +257,9 @@ ccx --config ~/.config/ccx/config.json --statedir ~/.local/state/ccx --logdir ~/
 ```
 
 - `--config PATH`: sets the runtime config file path.
-- `--statedir DIR`: sets the runtime state directory. `metrics.db`, `conversation_state.json`, and `scheduled_recovery_state.json` are written there; without this flag, CCX keeps the default `.config` directory.
+- `--statedir DIR`: sets the runtime state directory. `metrics.db`, `thinking_cache.db`, `conversation_state.json`, and `scheduled_recovery_state.json` are written there; without this flag, CCX keeps the default `.config` directory.
 - `--logdir DIR`: sets the log directory. It has higher priority than the `LOG_DIR` environment variable. Use `none` or `null` to disable log file writing (console output only), suitable for systemd/journald environments.
+- `--backupdir DIR`: sets the config backup directory; the default is `backups` next to the config file.
 - `--help`: prints the complete CLI usage.
 - `~` / `~/...` paths are expanded to the current user's home directory.
 

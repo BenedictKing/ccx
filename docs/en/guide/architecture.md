@@ -229,6 +229,7 @@ Images 请求会在渠道日志中记录具体端点类型：
 
 ## 相关文档
 
+- [现行特性规格（中文）](../../specs/README.md)：需求边界、页面契约、运行逻辑、异常与验收的单一事实源
 - 入口说明：`README.md`
 - 后端专项：`backend-go/README.md`
 - 开发流程：`development.md`

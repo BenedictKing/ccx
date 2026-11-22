@@ -7,6 +7,13 @@
 - **不要把 3688 当作当前运行端口**：它是示例端口和上述进程保护约定。验证前先核对目标进程的工作目录、启动环境中的 `PORT`、工作目录下的 `.env` 和实际监听端口，再请求该实例的 `/health` 确认版本。用户未指定端口时，不要直接假定 3688、3399 或 3000；也不要为验证自动停止或重启已运行实例。
 - 修改文档时，优先以以下文件为事实源：`VERSION`、`Makefile`、`backend-go/Makefile`、`frontend/package.json`、`backend-go/main.go`。
 
+## 特性规格驱动
+- `docs/specs/` 是当前产品行为与设计实现的单一事实源，总索引为 `docs/specs/README.md`。
+- **所有新需求和行为变化先修改对应规格，再修改代码和测试**；同一交付中回写实现差异、未验证项和代码索引。
+- 纯重构、测试补充或不改变行为的文档修正可不先改规格；规格与代码冲突时先确认预期行为，不得静默选择一边。
+- 界面需求必须覆盖加载、空态、错误、权限、并发、未保存和窄屏；运行需求必须覆盖状态、异常、重试、幂等、持久化和安全边界。
+- `docs/superpowers/` 与 `docs/design/` 保存历史计划、调研或未实施方案，不得作为现行规格直接引用；未实施内容不得写入现行规格。
+
 ## 项目概览
 - CCX 是一个多上游 AI API 代理与协议转换网关，当前正式支持六类渠道：`messages`、`chat`、`responses`、`gemini`、`images`、`vectors`。
 - 根目录 `VERSION` 是唯一发布版本源；后端构建时通过 `backend-go/Makefile` 的 `-ldflags` 注入运行时版本信息。
@@ -50,7 +57,8 @@
 ## 测试规范
 - 新增/修改后端逻辑尽量补 `_test.go`，优先表驱动 + `httptest`。
 - 前端当前以构建验证为主；如增加复杂逻辑，再补轻量单测。
-- 文档或接口说明调整后，至少验证：`make build`、`cd backend-go && make test`、`cd frontend && bun run build`。
+- 纯文档变更至少校验相对链接、占位符、Markdown 结构并执行 `cd docs && bun run build`，不声称完成代码或真实上游验证。
+- 接口说明或代码行为调整后，除文档站检查外，至少验证：`make build`、`cd backend-go && make test`、`cd frontend && bun run build`。
 
 ## 安全与配置提示
 - 部署前必须设置强 `PROXY_ACCESS_KEY`；如需分离管理权限，再配置 `ADMIN_ACCESS_KEY`。

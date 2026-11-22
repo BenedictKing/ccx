@@ -13,6 +13,7 @@ export default defineConfig({
   title: 'CCX',
   description: 'AI API Proxy & Protocol Translation Gateway',
   base: '/ccx/',
+  srcExclude: ['superpowers/**', 'design/**', 'reviews/**'],
   head: [
     ['link', { rel: 'icon', type: 'image/svg+xml', href: '/ccx/logo.svg' }],
     ['meta', { name: 'author', content: 'BenedictKing' }],

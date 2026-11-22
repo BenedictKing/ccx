@@ -36,7 +36,7 @@ ExecStart=/opt/ccx/ccx-linux-amd64 --config /etc/ccx/config.json --statedir /var
 # ExecStart=/opt/ccx/ccx-linux-amd64 --config /etc/ccx/config.json --statedir /var/lib/ccx --logdir none
 ```
 
-普通用户服务也可以使用用户目录，例如 `--config ~/.config/ccx/config.json --statedir ~/.local/state/ccx --logdir ~/.local/state/ccx/logs`。`--config` 只改变配置文件位置；`--statedir` 统一指定 `metrics.db`、`conversation_state.json`、`scheduled_recovery_state.json` 的目录，未指定时保持默认 `.config`；`--logdir` 只影响应用日志目录。
+普通用户服务也可以使用用户目录，例如 `--config ~/.config/ccx/config.json --statedir ~/.local/state/ccx --logdir ~/.local/state/ccx/logs`。`--config` 只改变配置文件位置；`--statedir` 统一指定 `metrics.db`、`thinking_cache.db`、`conversation_state.json`、`scheduled_recovery_state.json` 的目录，未指定时保持默认 `.config`；`--logdir` 只影响应用日志目录；`--backupdir` 可单独指定配置备份目录。
 
 对于 `ccx@.service` 这类用户级模板服务，可以把实例名用于区分配置目录：
 

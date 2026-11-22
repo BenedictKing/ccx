@@ -218,6 +218,7 @@ make dev
 - [客户端接入总览](docs/guide/clients)
 - [README.md](README.md)
 - [backend-go/README.md](backend-go/README.md)
+- [现行特性规格](docs/specs/README.md) - 设计与代码同步的单一事实源
 - [ARCHITECTURE.md](docs/guide/architecture.md)
 - [DEVELOPMENT.md](docs/guide/development.md)
 - [ENVIRONMENT.md](docs/guide/environment.md)

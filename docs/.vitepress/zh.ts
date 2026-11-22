@@ -8,8 +8,25 @@ export const zhConfig: LocaleSpecificConfig<DefaultTheme.Config> = {
       { text: '指南', link: '/guide/getting-started' },
       { text: '客户端接入', link: '/guide/clients/' },
       { text: '配置教程', link: '/providers/' },
+      { text: '特性规格', link: '/specs/' },
     ],
     sidebar: {
+      '/specs/': [
+        {
+          text: '现行特性规格',
+          items: [
+            { text: '总索引', link: '/specs/' },
+            { text: '协议网关与转换', link: '/specs/protocol-gateway' },
+            { text: '渠道配置与模型能力', link: '/specs/channels-and-models' },
+            { text: '调度、故障转移与运行保护', link: '/specs/scheduling-and-resilience' },
+            { text: '会话续接与子代理路由', link: '/specs/sessions-and-subagents' },
+            { text: '站点账号、分组与 Key 生命周期', link: '/specs/accounts-and-keys' },
+            { text: '可观测性、请求历史与用量报表', link: '/specs/observability-and-reporting' },
+            { text: 'Web、Desktop 与客户端接入', link: '/specs/management-and-clients' },
+            { text: '部署、配置、数据与安全', link: '/specs/deployment-and-data' },
+          ],
+        },
+      ],
       '/guide/clients/': [
         {
           text: '客户端接入',

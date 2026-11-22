@@ -80,8 +80,8 @@ CORS_ORIGIN=*                          # CORS 允许的源
 # 调校台启动兜底（旧部署兼容）：运行时请优先使用 Web/桌面调校台
 # REQUEST_TIMEOUT=120000               # 非流式上游请求总超时（毫秒，1000-300000）
 # RESPONSE_HEADER_TIMEOUT=60           # 等待上游 HTTP 响应头超时（秒，30-120；调校台支持到 300 秒）
-# METRICS_WINDOW_SIZE=10               # 滑动窗口大小（最小 3，默认 10）
-# METRICS_FAILURE_THRESHOLD=0.5        # 失败率阈值（0-1，默认 0.5 即 50%）
+# METRICS_WINDOW_SIZE=20               # 滑动窗口大小（最小 3，默认 20）
+# METRICS_FAILURE_THRESHOLD=0.7        # 失败率阈值（0-1，默认 0.7 即 70%）
 ```
 
 首字节延迟与首内容延迟使用独立样本：首内容统计的是流式请求收到 HTTP 200 后到首个有效内容的耗时，仅纳入已结束且观测到内容的请求，客户端取消及内部忽略的重试不计入。P50/P95 使用有界近似直方图，少于 5 个样本时管理台提示样本不足。旧记录缺失的首内容采样不会补成 0；新增聚合字段需重启后端后开始采集，并随指标记录持久化。
@@ -256,9 +256,9 @@ Vectors 仍不支持 capability-test；不要通过能力测试推断 Embedding 
 
 | 字段 | 默认值 | 范围 | 说明 |
 | --- | --- | --- | --- |
-| `streamFirstContentTimeoutMs` | `30000` | `5000-300000` | HTTP 200 后等待首个有效内容的时间。 |
-| `streamInactivityTimeoutMs` | `20000` | `1000-180000` | 首字后等待后续有效输出的空闲时间。 |
-| `streamToolCallIdleTimeoutMs` | `120000` | `30000-300000` | 工具调用 pending 阶段连续无上游 SSE 帧的 idle timeout；收到参数片段、状态事件或心跳帧都会重置计时器。 |
+| `streamFirstContentTimeoutMs` | `90000` | `5000-300000` | HTTP 200 后等待首个有效内容的时间。 |
+| `streamInactivityTimeoutMs` | `90000` | `1000-180000` | 首字后等待后续有效输出的空闲时间。 |
+| `streamToolCallIdleTimeoutMs` | `300000` | `30000-300000` | 工具调用 pending 阶段连续无上游 SSE 帧的 idle timeout；收到参数片段、状态事件或心跳帧都会重置计时器。 |
 
 `streamToolCallIdleTimeoutMs` 是破坏性字段名，旧 `streamToolCallTimeoutMs` 不再使用。该字段不是工具调用总耗时上限。
 
@@ -284,8 +284,9 @@ ccx --config ~/.config/ccx/config.json --statedir ~/.local/state/ccx --logdir ~/
 ```
 
 - `--config PATH`：指定配置文件路径。
-- `--statedir DIR`：指定运行时状态目录；`metrics.db`、`conversation_state.json`、`scheduled_recovery_state.json` 会写入该目录，未指定时保持默认 `.config`。
+- `--statedir DIR`：指定运行时状态目录；`metrics.db`、`thinking_cache.db`、`conversation_state.json`、`scheduled_recovery_state.json` 会写入该目录，未指定时保持默认 `.config`。
 - `--logdir DIR`：指定日志目录；优先级高于 `LOG_DIR` 环境变量。使用 `none` 或 `null` 可禁用日志文件写入（仅输出到控制台），适合 systemd/journald 等环境。
+- `--backupdir DIR`：指定配置备份目录，默认为配置文件同级目录下的 `backups`。
 - `--help`：查看完整命令行参数说明。
 - 路径中的 `~` / `~/...` 会按当前用户主目录展开。
 

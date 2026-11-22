@@ -94,7 +94,7 @@ QUIET_POLLING_LOGS=true
 ccx --config ~/.config/ccx/config.json --statedir ~/.local/state/ccx --logdir ~/.local/state/ccx/logs
 ```
 
-说明：`--config` 只改变配置文件位置；`--statedir` 会让 `metrics.db`、`conversation_state.json`、`scheduled_recovery_state.json` 写入指定目录，未指定时保持默认 `.config`；`--logdir` 只影响日志目录，优先级高于 `LOG_DIR` 环境变量。
+说明：`--config` 只改变配置文件位置；`--statedir` 会让 `metrics.db`、`thinking_cache.db`、`conversation_state.json`、`scheduled_recovery_state.json` 写入指定目录，未指定时保持默认 `.config`；`--logdir` 只影响日志目录，优先级高于 `LOG_DIR` 环境变量；`--backupdir` 指定配置备份目录，默认是配置文件同级的 `backups`。
 
 当前按渠道类型分组维护，例如：
 - `messagesUpstream`
@@ -198,7 +198,7 @@ Images 与 Vectors 当前没有对应的 capability-test / snapshot 路由。
 | --- | --- | --- | --- | --- | --- |
 | 1 | 促销期（Promotion） | `promotion_priority` | 全局 | 持久（带过期时间） | 处于促销时间窗口的渠道。**绕过健康检查**，给促销渠道一次尝试机会 |
 | 2 | Trace 亲和性 | `trace_affinity` | per-user + per-kind | 内存 | 同用户粘性。**但会被更高优先级渠道覆盖**：若存在 `priority` 更高的健康渠道，亲和性失效 |
-| 3 | 优先级排序 | `priority_order` | 全局 | 持久 | 按渠道 `priority` 字段从高到低遍历，选第一个健康、`active`、未熔断的渠道 |
+| 3 | 优先级排序 | `priority_order` | 全局 | 持久 | 按渠道 `priority` 字段从小到大遍历，选第一个健康、`active`、未熔断的渠道 |
 | 4 | 降级兜底 | `fallback_*` | 全局 | - | 所有健康渠道都失败时，选失败率最低的作为最后尝试 |
 
 各机制之间的关系要点：

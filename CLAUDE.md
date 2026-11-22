@@ -106,6 +106,13 @@ Client -> backend :3000 ->
 
 完整配置参考 `ENVIRONMENT.md` 与 `backend-go/.env.example`。
 
+## 特性规格驱动
+
+- `docs/specs/` 是当前产品行为与设计实现的单一事实源，总索引为 `docs/specs/README.md`。
+- 所有新需求和行为变化先修改对应规格，再修改代码和测试；同一交付中回写实现差异、未验证项和代码索引。
+- 历史计划、调研和未实施方案位于 `docs/superpowers/`、`docs/design/`，不得作为现行规格。
+- 纯重构、测试补充或不改变行为的文档修正可不先改规格；规格与代码冲突时先确认预期行为。
+
 ## 常见任务
 
 1. 添加新的上游能力：修改 `backend-go/internal/providers/`
@@ -148,6 +155,7 @@ Go 测试优先使用表驱动测试 + `httptest`。
 - [desktop/CLAUDE.md](desktop/CLAUDE.md) - 桌面模块索引
 - [desktop/frontend/CLAUDE.md](desktop/frontend/CLAUDE.md) - 桌面前端模块索引
 - [backend-go/README.md](backend-go/README.md) - 后端专项文档
+- [现行特性规格](docs/specs/README.md) - 设计、需求边界、运行逻辑与验收的单一事实源
 - [ARCHITECTURE.md](docs/guide/architecture.md) - 架构说明
 - [DEVELOPMENT.md](docs/guide/development.md) - 开发指南
 - [ENVIRONMENT.md](docs/guide/environment.md) - 环境变量说明

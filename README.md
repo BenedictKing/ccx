@@ -220,6 +220,7 @@ make dev
 - [Client Setup (中文)](docs/guide/clients/)
 - [README.zh-CN.md](README.zh-CN.md)
 - [backend-go/README.md](backend-go/README.md)
+- [Current Feature Specifications (中文)](docs/specs/README.md)
 - [ARCHITECTURE.md](docs/guide/architecture.md)
 - [DEVELOPMENT.md](docs/guide/development.md)
 - [ENVIRONMENT.md](docs/guide/environment.md)
