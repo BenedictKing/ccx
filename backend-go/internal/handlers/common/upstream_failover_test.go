@@ -1,6 +1,7 @@
 package common
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net"
@@ -363,6 +364,13 @@ func TestTryUpstreamWithAllKeysRecordsSelectionTrace(t *testing.T) {
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", strings.NewReader(`{"model":"gpt-trace"}`))
+	routingStore, err := metrics.NewRoutingStore(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer routingStore.Close()
+	c.Request = c.Request.WithContext(context.WithValue(c.Request.Context(), routingStoreContextKey{}, routingStore))
+	finishRouting := ObserveRoutingRequest(c, "messages")
 
 	cfg := cfgManager.GetConfig()
 	upstream := &cfg.Upstream[0]
@@ -444,6 +452,15 @@ func TestTryUpstreamWithAllKeysRecordsSelectionTrace(t *testing.T) {
 	}
 	if logs[0].TokensPerSecond <= 0 {
 		t.Fatalf("tokensPerSecond = %v, want positive value from real request lifecycle", logs[0].TokensPerSecond)
+	}
+	finishRouting()
+	request, ok := routingStore.Get("messages", logs[0].GatewayRequestID)
+	if !ok || len(request.Attempts) != 1 {
+		t.Fatalf("live log not associated with request: %+v", request)
+	}
+	attempt := request.Attempts[0]
+	if attempt.AttemptID != logs[0].RequestID || attempt.KeyID != metrics.RoutingKeyID("sk-trace") || attempt.Details == nil || attempt.Details.InputTokens != 10 || attempt.Details.OutputTokens != 20 || attempt.Details.FirstByteLatencyMs == nil {
+		t.Fatalf("upstream proxy did not populate request details: %+v", attempt)
 	}
 }
 

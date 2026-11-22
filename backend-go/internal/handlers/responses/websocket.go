@@ -337,7 +337,7 @@ func serveNativeResponsesWebSocket(
 		return err
 	}
 
-	observer.Sending(firstTurn, firstRequest.Body, firstUpstream, selection.Reason, firstDecision)
+	observer.Sending(firstTurn, firstRequest.Body, firstUpstream, selection.Reason, firstDecision, apiKey, firstRequest.Header.Get("Authorization"), firstRequest.Header.Get("x-api-key"))
 	upstreamConn, resp, err := dialer.DialContext(c.Request.Context(), firstRequest.URL, firstRequest.Header)
 	if err != nil {
 		if resp != nil {
@@ -507,7 +507,7 @@ func copyNativeResponsesClientToUpstream(
 			observer.Close(metrics.RoutingStatusFailed)
 			return err
 		}
-		observer.Sending(turn, body, pinned, "websocket_connection", decision)
+		observer.Sending(turn, body, pinned, "websocket_connection", decision, apiKey)
 		if err := writeWebSocketText(upstreamConn, body); err != nil {
 			observer.Close(metrics.RoutingStatusFailed)
 			return err

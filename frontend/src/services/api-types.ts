@@ -665,6 +665,7 @@ export interface ModelStatsHistoryResponse {
 // ============== 渠道日志类型 ==============
 
 export interface ChannelLogEntry {
+  gatewayRequestId?: string
   requestId: string
   timestamp: string
   model: string

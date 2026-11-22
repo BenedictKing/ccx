@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ModelRoutingPanel from './ModelRoutingPanel.vue'
 import { api } from '../services/api'
 import { ApiError } from '../services/api-helpers'
-import type { RoutingDistribution } from '../services/routing-types'
+import type { RoutingDistribution, RoutingRequestPage } from '../services/routing-types'
 
 vi.mock('../i18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }))
 vi.mock('../services/api', () => ({
@@ -97,6 +97,83 @@ beforeEach(() => {
   vi.resetAllMocks()
 })
 describe('model routing query lifecycle', () => {
+  it('shows persisted attempt details and filters the same channel by a stable Key ID', async () => {
+    const keyId = 'a'.repeat(64)
+    const page: RoutingRequestPage = {
+      from: '',
+      to: '',
+      nextCursor: '',
+      coverage: { ...result('source').coverage, retentionDays: 14 },
+      keyOptions: [{ keyId, keyMask: 'sk-***masked' }],
+      requests: [
+        {
+          gatewayRequestId: 'request',
+          apiType: 'chat',
+          requestedModel: 'source',
+          receivedAt: '2026-11-22T00:00:00Z',
+          status: 'failed',
+          attempts: [
+            {
+              ...result('source').paths[0]!,
+              attemptId: 'upstream-attempt',
+              attemptSequence: 1,
+              mappedModel: 'actual',
+              effectiveModel: 'source',
+              modelChanged: true,
+              transport: 'http',
+              serviceType: 'openai',
+              configRevision: 'version',
+              mappingOutcome: 'changed',
+              status: 'failed',
+              statusCode: 429,
+              startedAt: '2026-11-22T00:00:00Z',
+              completedAt: '2026-11-22T00:00:01Z',
+              keyId,
+              keyMask: 'sk-***masked',
+              details: {
+                errorSummary: 'rate limited',
+                usageObserved: true,
+                inputTokens: 200,
+                outputTokens: 25,
+                cacheReadTokens: 100,
+                cacheCreationTokens: 0,
+                firstByteLatencyMs: 125,
+                firstContentLatencyMs: 250,
+                durationMs: 1000
+              }
+            }
+          ]
+        }
+      ]
+    }
+    vi.mocked(api.getModelRouting).mockResolvedValue(result('source'))
+    vi.mocked(api.getRoutingHistory).mockResolvedValue(page)
+    const wrapper = render()
+    await wrapper
+      .findAll('button')
+      .find(button => button.text() === 'routing.history')!
+      .trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('rate limited')
+    expect(wrapper.text()).toContain('125ms')
+    expect(wrapper.text()).toContain('250ms')
+    expect(wrapper.text()).toContain('channelLogs.cacheRead 100')
+    expect(wrapper.text()).toContain('upstream-attempt')
+    await wrapper.findAll('.routing-history-filters select')[2]!.setValue(keyId)
+    await wrapper
+      .findAll('button')
+      .find(button => button.text() === 'routing.search')!
+      .trigger('click')
+    await flushPromises()
+    expect(api.getRoutingHistory).toHaveBeenLastCalledWith('chat', expect.objectContaining({ keyId }))
+    await wrapper.find('.attempt-key').trigger('click')
+    await flushPromises()
+    expect(api.getRoutingHistory).toHaveBeenLastCalledWith(
+      'chat',
+      expect.objectContaining({ keyId, channelUid: 'channel' })
+    )
+    wrapper.unmount()
+  })
   it('loads on mount without a collapse control and rejects stale time-window responses', async () => {
     let resolveOld!: (_data: RoutingDistribution) => void
     vi.mocked(api.getModelRouting)

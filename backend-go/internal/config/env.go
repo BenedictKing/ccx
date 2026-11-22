@@ -38,8 +38,9 @@ type EnvConfig struct {
 	MetricsWindowSize       int     // 滑动窗口大小
 	MetricsFailureThreshold float64 // 失败率阈值
 	// 指标持久化配置
-	MetricsPersistenceEnabled bool // 是否启用 SQLite 持久化
-	MetricsRetentionDays      int  // 数据保留天数（3-366）
+	MetricsPersistenceEnabled   bool // 是否启用 SQLite 持久化
+	MetricsRetentionDays        int  // 数据保留天数（3-366）
+	RequestHistoryRetentionDays int  // 请求历史保留天数（1-366），独立于聚合指标
 	// HTTP 客户端配置
 	ResponseHeaderTimeout int // 等待响应头超时时间（秒）
 	// 日志文件相关配置
@@ -90,8 +91,9 @@ func NewEnvConfig() *EnvConfig {
 		MetricsWindowSize:       getEnvAsInt("METRICS_WINDOW_SIZE", 20),
 		MetricsFailureThreshold: getEnvAsFloat("METRICS_FAILURE_THRESHOLD", 0.7),
 		// 指标持久化配置
-		MetricsPersistenceEnabled: getEnv("METRICS_PERSISTENCE_ENABLED", "true") != "false",
-		MetricsRetentionDays:      clampInt(getEnvAsInt("METRICS_RETENTION_DAYS", 366), 3, 366),
+		MetricsPersistenceEnabled:   getEnv("METRICS_PERSISTENCE_ENABLED", "true") != "false",
+		MetricsRetentionDays:        clampInt(getEnvAsInt("METRICS_RETENTION_DAYS", 366), 3, 366),
+		RequestHistoryRetentionDays: clampInt(getEnvAsInt("REQUEST_HISTORY_RETENTION_DAYS", 14), 1, 366),
 		// HTTP 客户端配置
 		ResponseHeaderTimeout: clampInt(getEnvAsInt("RESPONSE_HEADER_TIMEOUT", 120), 30, 300), // 30-300 秒
 		// 日志文件配置

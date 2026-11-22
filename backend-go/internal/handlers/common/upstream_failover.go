@@ -168,6 +168,7 @@ func TryUpstreamWithAllKeys(
 		}
 	}
 	tryOpts.channelLogOptions = append(tryOpts.channelLogOptions, WithSubagentRoutingPolicy(c.GetBool("ccxSubagentRoutingApplied"), c.GetString("ccxSubagentRoutingModel")))
+	tryOpts.channelLogOptions = append(tryOpts.channelLogOptions, WithGatewayRequestID(routingRequestID(c)))
 
 	metricsServiceType := scheduler.NormalizedMetricsServiceType(kind, upstream.ServiceType)
 
@@ -437,6 +438,8 @@ func TryUpstreamWithAllKeys(
 				c.Set("ccxRoutingSelectionSummary", log.SelectionTraceSummary)
 			}
 			StartRoutingAttempt(c, req, upstream, model, logRequestID, selectionReason, mappingDecision)
+			tracker := routingTracker(c)
+			bindRoutingAttemptKey(tracker, logRequestID, apiKey, req)
 
 			// TCP 建连开始即计数：将活跃度统计提前到发起上游请求之前
 			requestID := metricsManager.RecordRequestConnected(currentBaseURL, apiKey, metricsServiceType, redirectedModel)
@@ -447,6 +450,7 @@ func TryUpstreamWithAllKeys(
 					UpdateLogStatus(channelLogStore, metricsKey, logRequestID, metrics.StatusConnecting)
 				},
 				OnFirstResponseByte: func() {
+					recordRoutingFirstByte(tracker, logRequestID, time.Since(attemptStartedAt))
 					metricsManager.RecordRequestFirstByte(currentBaseURL, apiKey, metricsServiceType, requestID, time.Since(attemptStartedAt))
 					UpdateLogStatus(channelLogStore, metricsKey, logRequestID, metrics.StatusFirstByte)
 				},

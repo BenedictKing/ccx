@@ -24,6 +24,7 @@ type routingStoreContextKey struct{}
 type routingObservation struct {
 	store                                *metrics.RoutingStore
 	id, model, lastStatus, lastAttemptID string
+	secrets                              map[string][]string
 }
 
 const routingObservationKey = "ccxRoutingObservation"
@@ -197,9 +198,18 @@ func completeRoutingLog(c *gin.Context, store *metrics.ChannelLogStore, key, id 
 			status = metrics.RoutingStatusCancelled
 		}
 		tracker.lastStatus = status
-		tracker.store.FinishAttempt(tracker.id, id, status, code)
+		var requestUsage *types.Usage
+		if len(usage) > 0 {
+			requestUsage = usage[0]
+		}
+		details := routingAttemptDetails(info, code, tracker.secrets[id], requestUsage)
+		delete(tracker.secrets, id)
+		if observer := GetStreamTimeoutObserver(c); observer != nil {
+			observer.addRoutingDetails(id, details)
+		}
+		tracker.store.FinishAttempt(tracker.id, id, status, code, details)
 	}
-	CompleteLog(store, key, id, code, success, info, retry, usage...)
+	completeLogWithGatewayID(store, key, id, routingRequestID(c), code, success, info, retry, usage...)
 }
 
 // ObserveAuxiliaryAttempt 将网关内部 compact 调用保留在明细，排除默认代理分母。

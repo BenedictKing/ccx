@@ -37,31 +37,34 @@ type RoutingRequest struct {
 }
 
 type RoutingAttempt struct {
-	Transport             string             `json:"transport"`
-	Auxiliary             bool               `json:"auxiliary,omitempty"`
-	AttemptID             string             `json:"attemptId"`
-	AttemptSequence       int                `json:"attemptSequence"`
-	EffectiveModel        string             `json:"effectiveModel"`
-	MappedModel           string             `json:"mappedModel"`
-	SentModel             string             `json:"sentModel"`
-	ChannelUID            string             `json:"channelUid"`
-	ChannelName           string             `json:"channelName"`
-	ChannelDeleted        bool               `json:"channelDeleted,omitempty"`
-	ServiceType           string             `json:"serviceType"`
-	ConfigRevision        string             `json:"configRevision"`
-	MappingOutcome        string             `json:"mappingOutcome"`
-	MappingSource         string             `json:"mappingSource,omitempty"`
-	MappingTarget         string             `json:"mappingTarget,omitempty"`
-	MatchType             string             `json:"matchType,omitempty"`
-	TransformReason       string             `json:"transformReason,omitempty"`
-	ModelChanged          bool               `json:"modelChanged"`
-	TransformSteps        []RoutingTransform `json:"transformSteps,omitempty"`
-	SelectionReason       string             `json:"selectionReason,omitempty"`
-	SelectionTraceSummary string             `json:"selectionTraceSummary,omitempty"`
-	Status                string             `json:"status"`
-	StatusCode            int                `json:"statusCode"`
-	StartedAt             time.Time          `json:"startedAt"`
-	CompletedAt           *time.Time         `json:"completedAt,omitempty"`
+	Transport             string                 `json:"transport"`
+	Auxiliary             bool                   `json:"auxiliary,omitempty"`
+	AttemptID             string                 `json:"attemptId"`
+	AttemptSequence       int                    `json:"attemptSequence"`
+	EffectiveModel        string                 `json:"effectiveModel"`
+	MappedModel           string                 `json:"mappedModel"`
+	SentModel             string                 `json:"sentModel"`
+	ChannelUID            string                 `json:"channelUid"`
+	ChannelName           string                 `json:"channelName"`
+	ChannelDeleted        bool                   `json:"channelDeleted,omitempty"`
+	ServiceType           string                 `json:"serviceType"`
+	ConfigRevision        string                 `json:"configRevision"`
+	MappingOutcome        string                 `json:"mappingOutcome"`
+	MappingSource         string                 `json:"mappingSource,omitempty"`
+	MappingTarget         string                 `json:"mappingTarget,omitempty"`
+	MatchType             string                 `json:"matchType,omitempty"`
+	TransformReason       string                 `json:"transformReason,omitempty"`
+	ModelChanged          bool                   `json:"modelChanged"`
+	TransformSteps        []RoutingTransform     `json:"transformSteps,omitempty"`
+	SelectionReason       string                 `json:"selectionReason,omitempty"`
+	SelectionTraceSummary string                 `json:"selectionTraceSummary,omitempty"`
+	Status                string                 `json:"status"`
+	StatusCode            int                    `json:"statusCode"`
+	StartedAt             time.Time              `json:"startedAt"`
+	CompletedAt           *time.Time             `json:"completedAt,omitempty"`
+	KeyID                 string                 `json:"keyId,omitempty"`
+	KeyMask               string                 `json:"keyMask,omitempty"`
+	Details               *RoutingAttemptDetails `json:"details,omitempty"`
 }
 
 type RoutingTransform struct {
@@ -71,6 +74,7 @@ type RoutingTransform struct {
 }
 
 type RoutingCoverage struct {
+	RetentionDays   int       `json:"retentionDays"`
 	StartedAt       time.Time `json:"startedAt"`
 	Persistent      bool      `json:"persistent"`
 	DroppedWrites   uint64    `json:"droppedWrites"`
@@ -80,6 +84,7 @@ type RoutingCoverage struct {
 
 type RoutingHistoryFilter struct {
 	RoutingFilter
+	KeyID  string
 	Status string
 	Search string
 }
@@ -109,9 +114,25 @@ const RoutingSnapshotMaxAge = 15 * time.Minute
 const routingHistoryWindow = 24*time.Hour + RoutingSnapshotMaxAge
 
 func NewRoutingStore(store *SQLiteStore) (*RoutingStore, error) {
+	return newRoutingStore(store, 0)
+}
+
+func NewRoutingStoreWithRetention(store *SQLiteStore, days int) (*RoutingStore, error) {
+	if days < 1 || days > 366 {
+		return nil, fmt.Errorf("request history retention must be between 1 and 366 days")
+	}
+	return newRoutingStore(store, days)
+}
+
+func newRoutingStore(store *SQLiteStore, days int) (*RoutingStore, error) {
 	s := &RoutingStore{requests: make(map[string]RoutingRequest), startedAt: time.Now(), retentionDays: 3, writes: make(chan RoutingRequest, 2048), done: make(chan struct{})}
 	if store != nil {
 		s.db, s.retentionDays = store.db, store.retentionDays
+	}
+	if days > 0 {
+		s.retentionDays = days
+	}
+	if store != nil {
 		if err := s.init(); err != nil {
 			return nil, err
 		}
@@ -190,6 +211,10 @@ func (s *RoutingStore) init() error {
 
 func cloneRoutingRequest(request RoutingRequest) RoutingRequest {
 	request.Attempts = append([]RoutingAttempt{}, request.Attempts...)
+	for i := range request.Attempts {
+		request.Attempts[i].Details = cloneRoutingAttemptDetails(request.Attempts[i].Details)
+		request.Attempts[i].TransformSteps = append([]RoutingTransform(nil), request.Attempts[i].TransformSteps...)
+	}
 	return request
 }
 
@@ -281,12 +306,21 @@ func (s *RoutingStore) StartAttempt(id string, attempt RoutingAttempt) {
 		r.Attempts = append(r.Attempts, attempt)
 	})
 }
-func (s *RoutingStore) FinishAttempt(id, attemptID, status string, code int) {
+func (s *RoutingStore) FinishAttempt(id, attemptID, status string, code int, details ...*RoutingAttemptDetails) {
 	s.update(id, func(r *RoutingRequest) {
 		for i := range r.Attempts {
 			a := &r.Attempts[i]
 			if a.AttemptID == attemptID && a.Status == RoutingStatusInProgress {
 				now := time.Now()
+				if len(details) > 0 && details[0] != nil {
+					completed := cloneRoutingAttemptDetails(details[0])
+					if completed.FirstByteLatencyMs == nil && a.Details != nil {
+						completed.FirstByteLatencyMs = cloneRoutingAttemptDetails(a.Details).FirstByteLatencyMs
+					}
+					duration := float64(now.Sub(a.StartedAt)) / float64(time.Millisecond)
+					completed.DurationMs = &duration
+					a.Details = completed
+				}
 				a.Status, a.StatusCode, a.CompletedAt = status, code, &now
 				break
 			}
@@ -310,7 +344,7 @@ func (s *RoutingStore) Snapshot(apiType string, from, to time.Time) ([]RoutingRe
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	requests := []RoutingRequest{}
-	coverage := RoutingCoverage{StartedAt: s.startedAt, Persistent: s.db != nil, DroppedWrites: s.dropped.Load(), Limited: s.limited}
+	coverage := RoutingCoverage{StartedAt: s.startedAt, Persistent: s.db != nil, DroppedWrites: s.dropped.Load(), Limited: s.limited, RetentionDays: int(s.MaxHistoryAge() / (24 * time.Hour))}
 	for _, r := range s.requests {
 		if r.APIType != apiType || r.ReceivedAt.Before(from) || !r.ReceivedAt.Before(to) {
 			continue
@@ -342,7 +376,7 @@ func (s *RoutingStore) QueryRequests(apiType string, from, to time.Time, filter 
 	}
 
 	s.mu.RLock()
-	coverage := RoutingCoverage{StartedAt: s.startedAt, Persistent: s.db != nil, DroppedWrites: s.dropped.Load(), Limited: s.limited}
+	coverage := RoutingCoverage{StartedAt: s.startedAt, Persistent: s.db != nil, DroppedWrites: s.dropped.Load(), Limited: s.limited, RetentionDays: int(s.MaxHistoryAge() / (24 * time.Hour))}
 	now := time.Now()
 	memoryTo := to
 	if memoryTo.After(now) {
@@ -393,10 +427,11 @@ func queryRoutingRequests(db *sql.DB, apiType string, from, to time.Time, filter
 		WHERE r.api_type = ? AND r.received_at >= ? AND r.received_at < ?
 		AND (? = '' OR json_extract(r.payload, '$.status') = ?)
 		AND (? = '' OR json_extract(r.payload, '$.requestedModel') = ?)
-		AND ((? = '' AND ? = '') OR EXISTS (
+		AND ((? = '' AND ? = '' AND ? = '') OR EXISTS (
 			SELECT 1 FROM json_each(r.payload, '$.attempts') AS a
 			WHERE (? = '' OR json_extract(a.value, '$.channelUid') = ?)
 			AND (? = '' OR json_extract(a.value, '$.sentModel') = ?)
+			AND (? = '' OR json_extract(a.value, '$.keyId') = ?)
 		))
 		AND (? = '' OR lower(r.request_id) LIKE ? ESCAPE '\'
 			OR lower(json_extract(r.payload, '$.requestedModel')) LIKE ? ESCAPE '\'
@@ -406,6 +441,8 @@ func queryRoutingRequests(db *sql.DB, apiType string, from, to time.Time, filter
 				WHERE lower(json_extract(a.value, '$.channelName')) LIKE ? ESCAPE '\'
 				OR lower(json_extract(a.value, '$.channelUid')) LIKE ? ESCAPE '\'
 				OR lower(json_extract(a.value, '$.sentModel')) LIKE ? ESCAPE '\'
+				OR lower(json_extract(a.value, '$.attemptId')) LIKE ? ESCAPE '\'
+				OR lower(json_extract(a.value, '$.details.errorSummary')) LIKE ? ESCAPE '\'
 			)
 		)
 		AND (? = 0 OR r.received_at < ? OR (r.received_at = ? AND r.request_id < ?))
@@ -414,8 +451,8 @@ func queryRoutingRequests(db *sql.DB, apiType string, from, to time.Time, filter
 		apiType, from.UnixNano(), to.UnixNano(),
 		filter.Status, filter.Status,
 		filter.RequestedModel, filter.RequestedModel,
-		filter.ChannelUID, filter.SentModel, filter.ChannelUID, filter.ChannelUID, filter.SentModel, filter.SentModel,
-		filter.Search, pattern, pattern, pattern, pattern, pattern, pattern,
+		filter.ChannelUID, filter.SentModel, filter.KeyID, filter.ChannelUID, filter.ChannelUID, filter.SentModel, filter.SentModel, filter.KeyID, filter.KeyID,
+		filter.Search, pattern, pattern, pattern, pattern, pattern, pattern, pattern, pattern,
 		boolInt(!after.IsZero()), after.UnixNano(), after.UnixNano(), afterID, limit,
 	)
 	if err != nil {
@@ -444,11 +481,11 @@ func matchesRoutingHistoryFilter(request RoutingRequest, filter RoutingHistoryFi
 	if filter.RequestedModel != "" && request.RequestedModel != filter.RequestedModel {
 		return false
 	}
-	if filter.ChannelUID != "" || filter.SentModel != "" {
+	if filter.ChannelUID != "" || filter.SentModel != "" || filter.KeyID != "" {
 		matched := false
 		for _, attempt := range RoutingMatches(request, filter.RoutingFilter) {
 			if filter.ChannelUID == "" || attempt.ChannelUID == filter.ChannelUID {
-				if filter.SentModel == "" || attempt.SentModel == filter.SentModel {
+				if (filter.SentModel == "" || attempt.SentModel == filter.SentModel) && (filter.KeyID == "" || attempt.KeyID == filter.KeyID) {
 					matched = true
 					break
 				}
@@ -466,6 +503,9 @@ func matchesRoutingHistoryFilter(request RoutingRequest, filter RoutingHistoryFi
 		return true
 	}
 	for _, attempt := range request.Attempts {
+		if strings.Contains(strings.ToLower(attempt.AttemptID), search) || attempt.Details != nil && strings.Contains(strings.ToLower(attempt.Details.ErrorSummary), search) {
+			return true
+		}
 		if strings.Contains(strings.ToLower(attempt.ChannelName), search) || strings.Contains(strings.ToLower(attempt.ChannelUID), search) || strings.Contains(strings.ToLower(attempt.SentModel), search) {
 			return true
 		}
@@ -513,6 +553,11 @@ func (s *RoutingStore) persist(request RoutingRequest) error {
 	_, err = s.db.Exec(`INSERT INTO routing_records_v1(request_id,api_type,received_at,payload) VALUES(?,?,?,?) ON CONFLICT(request_id) DO UPDATE SET payload=excluded.payload`, request.GatewayRequestID, request.APIType, request.ReceivedAt.UnixNano(), string(payload))
 	return err
 }
+
+func (s *RoutingStore) cleanupHistory(now time.Time) error {
+	_, err := s.db.Exec("DELETE FROM routing_records_v1 WHERE received_at < ?", now.Add(-time.Duration(s.retentionDays)*24*time.Hour).UnixNano())
+	return err
+}
 func (s *RoutingStore) writeLoop() {
 	defer close(s.done)
 	timer := time.NewTicker(time.Hour)
@@ -535,7 +580,7 @@ func (s *RoutingStore) writeLoop() {
 			}
 		case <-timer.C:
 			if s.db != nil {
-				if _, err := s.db.Exec("DELETE FROM routing_records_v1 WHERE received_at < ?", time.Now().Add(-time.Duration(s.retentionDays)*24*time.Hour).UnixNano()); err != nil {
+				if err := s.cleanupHistory(time.Now()); err != nil {
 					s.dropped.Add(1)
 				}
 			}

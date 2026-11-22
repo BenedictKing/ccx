@@ -3,6 +3,9 @@ export type RoutingStatus = 'success' | 'failed' | 'cancelled' | 'in_progress' |
 export type RoutingBasis = 'successful_requests' | 'all_attempts'
 export type StatsDuration = '1h' | '6h' | '24h' | 'today' | '7d' | '30d' | '90d' | '180d' | '365d' | 'thisyear'
 export interface RoutingAttempt {
+  keyId?: string
+  keyMask?: string
+  details?: RoutingAttemptDetails
   transport: string
   auxiliary?: boolean
   attemptId: string
@@ -29,6 +32,19 @@ export interface RoutingAttempt {
   startedAt: string
   completedAt?: string
 }
+export interface RoutingAttemptDetails {
+  errorSummary?: string
+  usageObserved: boolean
+  inputTokens: number
+  outputTokens: number
+  cacheReadTokens: number
+  cacheCreationTokens: number
+  firstByteLatencyMs?: number
+  firstContentLatencyMs?: number
+  durationMs?: number
+  maxStreamIdleMs?: number
+  maxToolCallIdleMs?: number
+}
 export interface RoutingRequest {
   gatewayRequestId: string
   apiType: ChannelKind
@@ -53,6 +69,7 @@ export interface RoutingPath {
   statuses: Record<string, number>
 }
 export interface RoutingCoverage {
+  retentionDays?: number
   startedAt: string
   persistent: boolean
   limited: boolean
@@ -79,6 +96,7 @@ export interface RoutingDistribution {
   }
 }
 export interface RoutingRequestPage {
+  keyOptions?: { keyId: string; keyMask: string }[]
   requests: RoutingRequest[]
   nextCursor: string
   from: string
@@ -93,6 +111,7 @@ export interface RoutingHistorySelection {
   duration: RoutingHistoryDuration
 }
 export interface RoutingQuery {
+  keyId?: string
   duration?: string
   timezone?: string
   from?: string

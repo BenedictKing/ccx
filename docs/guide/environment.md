@@ -71,6 +71,7 @@ MAX_REQUEST_BODY_SIZE_MB=50            # 请求体最大大小（MB，默认 50�
 METRICS_PERSISTENCE_ENABLED=true       # 是否启用 SQLite 持久化（默认 true）
 METRICS_RETENTION_DAYS=366             # 数据保留天数（3-366，默认 366）
                                        # 支持查询最长 1 年的历史数据
+REQUEST_HISTORY_RETENTION_DAYS=14      # 请求历史明细（1-366 天），独立于聚合指标
 
 # CORS 配置
 ENABLE_CORS=false                      # 是否启用 CORS

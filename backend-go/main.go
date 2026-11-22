@@ -374,7 +374,7 @@ func main() {
 		log.Printf("[Metrics-Init] 指标持久化已禁用，使用纯内存模式")
 	}
 
-	routingStore, routingErr := metrics.NewRoutingStore(metricsStore)
+	routingStore, routingErr := metrics.NewRoutingStoreWithRetention(metricsStore, envCfg.RequestHistoryRetentionDays)
 	if routingErr != nil {
 		log.Printf("[Routing-Init] 持久化不可用: %v", routingErr)
 		routingStore, _ = metrics.NewRoutingStore(nil)

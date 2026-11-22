@@ -8,6 +8,7 @@ import (
 
 // ChannelLog 单次上游请求日志
 type ChannelLog struct {
+	GatewayRequestID        string    `json:"gatewayRequestId,omitempty"`
 	RequestID               string    `json:"requestId"` // 请求唯一标识
 	ChannelIndex            int       `json:"-"`         // 创建时的渠道索引（不序列化，仅用于内部排查）
 	ChannelName             string    `json:"-"`         // 创建时的渠道名称（不序列化，用于共享 metricsKey 日志归属）

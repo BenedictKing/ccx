@@ -109,8 +109,20 @@
               variant="outlined"
               hide-details
             />
+            <v-select
+              v-model="historyKeyId"
+              :items="historyKeyItems"
+              :label="t('routing.historyKey')"
+              class="routing-history-key"
+              item-title="title"
+              item-value="value"
+              density="compact"
+              variant="outlined"
+              hide-details
+            />
             <v-text-field
               v-model="historySearch"
+              class="routing-history-search"
               :label="t('routing.historySearch')"
               density="compact"
               variant="outlined"
@@ -122,6 +134,9 @@
               t('routing.search')
             }}</v-btn>
           </div>
+          <p v-if="historyMode && requestPage?.coverage.retentionDays" class="text-caption text-medium-emphasis">
+            {{ t('routing.historyRetention', { days: requestPage.coverage.retentionDays }) }}
+          </p>
           <v-alert
             v-if="historyMode && requestPage && !requestPage.coverage.persistent"
             type="info"
@@ -177,6 +192,42 @@
                     {{ t('routing.status.' + attempt.status) }}</strong
                   >
                   <p>{{ attempt.effectiveModel }} → {{ attempt.sentModel || t('routing.unknownModel') }}</p>
+                  <button v-if="attempt.keyId" type="button" class="attempt-key" @click="filterHistoryKey(attempt)">
+                    Key {{ attempt.keyMask || attempt.keyId.slice(0, 8) }} · {{ attempt.keyId.slice(0, 8) }}
+                  </button>
+                  <template v-if="attempt.details">
+                    <p v-if="attempt.details.errorSummary" class="attempt-error">{{ attempt.details.errorSummary }}</p>
+                    <div v-if="attempt.details.usageObserved" class="attempt-metrics">
+                      <span>{{ t('channelLogs.input') }} {{ attempt.details.inputTokens }}</span>
+                      <span>{{ t('channelLogs.output') }} {{ attempt.details.outputTokens }}</span>
+                      <span>{{ t('channelLogs.cacheRead') }} {{ attempt.details.cacheReadTokens }}</span>
+                      <span>{{ t('channelLogs.cacheWrite') }} {{ attempt.details.cacheCreationTokens }}</span>
+                    </div>
+                    <p v-else class="text-caption text-medium-emphasis">{{ t('routing.usageUnavailable') }}</p>
+                    <div class="attempt-metrics">
+                      <span
+                        >{{ t('orchestration.firstByteLatency') }}
+                        {{ latency(attempt.details.firstByteLatencyMs) }}</span
+                      >
+                      <span
+                        >{{ t('channelLogs.duration.firstContent') }}
+                        {{ latency(attempt.details.firstContentLatencyMs) }}</span
+                      >
+                      <span
+                        >{{ t('channelLogs.duration.total') }}
+                        {{ latency(attempt.completedAt ? attempt.details.durationMs : undefined) }}</span
+                      >
+                      <span v-if="attempt.details.maxStreamIdleMs"
+                        >{{ t('channelLogs.duration.maxStreamIdle') }}
+                        {{ latency(attempt.details.maxStreamIdleMs) }}</span
+                      >
+                      <span v-if="attempt.details.maxToolCallIdleMs"
+                        >{{ t('channelLogs.duration.maxToolCallIdle') }}
+                        {{ latency(attempt.details.maxToolCallIdleMs) }}</span
+                      >
+                    </div>
+                  </template>
+                  <p v-else class="text-caption text-medium-emphasis">{{ t('routing.detailsUnavailable') }}</p>
                   <p>
                     {{ t('routing.mapping.' + attempt.mappingOutcome)
                     }}<span v-if="attempt.matchType">
@@ -204,6 +255,7 @@
                     {{ attempt.statusCode || '—' }} · {{ elapsed(attempt.startedAt, attempt.completedAt) }} ·
                     {{ attempt.configRevision }}</small
                   >
+                  <small class="text-medium-emphasis">ID: {{ attempt.attemptId }}</small>
                 </article>
               </v-expansion-panel-text>
             </v-expansion-panel>
@@ -238,6 +290,7 @@ import type {
   RoutingStatus,
   RoutingHistoryDuration,
   RoutingHistorySelection,
+  RoutingAttempt,
   StatsDuration
 } from '../services/routing-types'
 import ModelRoutingFlow from './ModelRoutingFlow.vue'
@@ -267,6 +320,7 @@ const historyDuration = ref<RoutingHistoryDuration>('24h')
 const historyChannel = ref<RoutingHistorySelection>()
 const historyStatus = ref<RoutingStatus | ''>('')
 const historySearch = ref('')
+const historyKeyId = ref('')
 const cursorHistory = ref<string[]>([])
 const drawerExpired = ref(false)
 const drawerPaths = ref<RoutingPath[]>([])
@@ -276,14 +330,23 @@ let generation = 0,
 let drawerQuery: RoutingQuery | undefined
 const supported = computed(() => ['1h', '6h', '24h', 'today'].includes(props.duration))
 const hiddenPathCount = computed(() => Math.max(0, (data.value?.paths.length ?? 0) - 12))
-const historyDurationItems = computed(() => [
-  { title: t('orchestration.minutes15'), value: '15m' },
-  { title: t('chart.1h'), value: '1h' },
-  { title: t('chart.6h'), value: '6h' },
-  { title: t('chart.24h'), value: '24h' },
-  { title: t('chart.7d'), value: '7d' },
-  { title: t('chart.30d'), value: '30d' }
-])
+const historyDurationItems = computed(() =>
+  [
+    { title: t('orchestration.minutes15'), value: '15m' },
+    { title: t('chart.1h'), value: '1h' },
+    { title: t('chart.6h'), value: '6h' },
+    { title: t('chart.24h'), value: '24h' },
+    { title: t('chart.7d'), value: '7d' },
+    { title: t('chart.30d'), value: '30d' }
+  ].map(item => ({
+    ...item,
+    props: {
+      disabled:
+        !!requestPage.value?.coverage.retentionDays &&
+        (item.value === '7d' ? 7 : item.value === '30d' ? 30 : 1) > requestPage.value.coverage.retentionDays
+    }
+  }))
+)
 const historyStatusItems = computed(() => [
   { title: t('routing.status.all'), value: '' },
   { title: t('routing.status.success'), value: 'success' },
@@ -292,6 +355,21 @@ const historyStatusItems = computed(() => [
   { title: t('routing.status.in_progress'), value: 'in_progress' },
   { title: t('routing.status.unknown'), value: 'unknown' }
 ])
+const historyKeyItems = computed(() => {
+  const keys = new Map((requestPage.value?.keyOptions ?? []).map(key => [key.keyId, key.keyMask]))
+  for (const request of requestPage.value?.requests ?? []) {
+    for (const attempt of request.attempts) {
+      if (attempt.keyId && (!historyChannel.value || attempt.channelUid === historyChannel.value.channelUid))
+        keys.set(attempt.keyId, attempt.keyMask ?? '')
+    }
+  }
+  if (historyKeyId.value && !keys.has(historyKeyId.value)) keys.set(historyKeyId.value, '')
+  return [
+    { title: t('routing.allKeys'), value: '' },
+    ...[...keys].map(([id, mask]) => ({ title: `${mask || 'Key'} · ${id.slice(0, 8)}`, value: id }))
+  ]
+})
+const latency = (value?: number) => (value === undefined ? '--' : `${Math.round(value)}ms`)
 const time = (value: string) => new Date(value).toLocaleString()
 const share = (value: number) => value.toFixed(1) + '%'
 const fieldTitle = (field: RoutingField) => t('routing.' + field)
@@ -402,11 +480,13 @@ function runHistorySearch() {
     basis: 'all_attempts',
     status: historyStatus.value,
     channelUid: historyChannel.value?.channelUid,
+    keyId: historyKeyId.value,
     q: (historySearch.value || '').trim()
   }
   loadRequests()
 }
-function openHistory(selection?: RoutingHistorySelection) {
+function openHistory(selection?: RoutingHistorySelection, keyId = '') {
+  historyKeyId.value = keyId
   historyChannel.value = selection
   if (selection) {
     historyDuration.value = selection.duration
@@ -422,6 +502,18 @@ function openHistory(selection?: RoutingHistorySelection) {
 function clearHistoryChannel() {
   historyChannel.value = undefined
   runHistorySearch()
+}
+function filterHistoryKey(attempt: RoutingAttempt) {
+  if (!attempt.keyId) return
+  openHistory(
+    {
+      apiType: props.apiType,
+      channelUid: attempt.channelUid,
+      channelName: attempt.channelName,
+      duration: historyMode.value ? historyDuration.value : '24h'
+    },
+    attempt.keyId
+  )
 }
 function openPath(path?: RoutingPath) {
   if (!data.value) return
@@ -588,9 +680,31 @@ onBeforeUnmount(() => {
 }
 .routing-history-filters {
   display: grid;
-  grid-template-columns: minmax(116px, 0.7fr) minmax(126px, 0.9fr) minmax(140px, 1.4fr) auto;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   align-items: center;
   gap: 8px;
+}
+.routing-history-search {
+  grid-column: 1 / 3;
+}
+.attempt-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  font-size: 12px;
+}
+.attempt-error {
+  color: rgb(var(--v-theme-error));
+  overflow-wrap: anywhere;
+}
+.attempt-key {
+  width: fit-content;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: rgb(var(--v-theme-primary));
+  font: inherit;
+  cursor: pointer;
 }
 .drawer-paths {
   display: grid;
@@ -634,7 +748,8 @@ onBeforeUnmount(() => {
   .routing-history-filters {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .routing-history-filters :deep(.v-text-field) {
+  .routing-history-search,
+  .routing-history-key {
     grid-column: 1 / -1;
   }
 }

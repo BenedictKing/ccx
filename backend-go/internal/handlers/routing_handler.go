@@ -170,7 +170,7 @@ func registerRoutingProtocol(group *gin.RouterGroup, store *metrics.RoutingStore
 			payload, _ := json.Marshal(cursor)
 			next = base64.RawURLEncoding.EncodeToString(payload)
 		}
-		c.JSON(http.StatusOK, gin.H{"requests": requests, "nextCursor": next, "from": cursor.From, "to": cursor.To, "coverage": coverage})
+		c.JSON(http.StatusOK, gin.H{"requests": requests, "nextCursor": next, "from": cursor.From, "to": cursor.To, "coverage": coverage, "keyOptions": routingHistoryKeyOptions(apiType, filter.ChannelUID, requests, managers)})
 	})
 }
 
@@ -184,6 +184,7 @@ func routingHistoryQuery(c *gin.Context, apiType string, store *metrics.RoutingS
 		},
 		Status: c.Query("status"),
 		Search: strings.TrimSpace(c.Query("q")),
+		KeyID:  c.Query("keyId"),
 	}
 	bad := func() (metrics.RoutingHistoryFilter, *routingHistoryCursor, int, bool) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request history range, filter or cursor"})
@@ -196,6 +197,12 @@ func routingHistoryQuery(c *gin.Context, apiType string, store *metrics.RoutingS
 	}
 	if len(filter.Search) > 120 || len(filter.RequestedModel) > 160 || len(filter.ChannelUID) > 160 || len(filter.SentModel) > 160 {
 		return bad()
+	}
+	if filter.KeyID != "" {
+		decoded, err := hex.DecodeString(filter.KeyID)
+		if err != nil || len(decoded) != 32 || strings.ToLower(filter.KeyID) != filter.KeyID {
+			return bad()
+		}
 	}
 
 	limit := 20
@@ -232,6 +239,7 @@ func routingHistoryQuery(c *gin.Context, apiType string, store *metrics.RoutingS
 	fingerprintBytes := sha256.Sum256([]byte(strings.Join([]string{
 		apiType, c.DefaultQuery("duration", "24h"), filter.Status, filter.Search,
 		filter.RequestedModel, filter.ChannelUID, filter.SentModel,
+		filter.KeyID,
 	}, "\x00")))
 	fingerprint := hex.EncodeToString(fingerprintBytes[:])
 	var cursor routingHistoryCursor

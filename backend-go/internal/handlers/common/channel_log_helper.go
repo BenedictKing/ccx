@@ -22,6 +22,10 @@ func GenerateRequestID() string {
 // ChannelLogOption 为 pending 渠道日志补充可选观测字段。
 type ChannelLogOption func(*metrics.ChannelLog)
 
+func WithGatewayRequestID(id string) ChannelLogOption {
+	return func(log *metrics.ChannelLog) { log.GatewayRequestID = id }
+}
+
 // WithEstimatedContextTokens 保留请求上下文估算，供上游未返回 usage 时排查。
 func WithEstimatedContextTokens(tokens int) ChannelLogOption {
 	return func(log *metrics.ChannelLog) {
@@ -155,6 +159,10 @@ func CompleteLog(
 	isRetry bool,
 	usage ...*types.Usage,
 ) {
+	completeLogWithGatewayID(channelLogStore, metricsKey, requestID, "", statusCode, success, errorInfo, isRetry, usage...)
+}
+
+func completeLogWithGatewayID(channelLogStore *metrics.ChannelLogStore, metricsKey, requestID, gatewayRequestID string, statusCode int, success bool, errorInfo string, isRetry bool, usage ...*types.Usage) {
 	if channelLogStore == nil || metricsKey == "" || requestID == "" {
 		return
 	}
@@ -171,6 +179,9 @@ func CompleteLog(
 		requestUsage = usage[0]
 	}
 	updateStatus, actualMetricsKey := channelLogStore.Update(metricsKey, requestID, func(log *metrics.ChannelLog) {
+		if gatewayRequestID != "" {
+			log.GatewayRequestID = gatewayRequestID
+		}
 		log.StatusCode = statusCode
 		log.Success = success
 		log.ErrorInfo = errorInfo
@@ -184,16 +195,17 @@ func CompleteLog(
 	// 仅在确认是环形缓冲淘汰时补写终态日志；若渠道已删除则不补写，避免污染其他渠道。
 	if updateStatus == metrics.UpdateMissingEvicted && actualMetricsKey != "" {
 		terminalLog := &metrics.ChannelLog{
-			RequestID:   requestID,
-			Timestamp:   now,
-			StatusCode:  statusCode,
-			Success:     success,
-			ErrorInfo:   errorInfo,
-			IsRetry:     isRetry,
-			Status:      status,
-			StartTime:   now,
-			CompletedAt: &now,
-			DurationMs:  0,
+			GatewayRequestID: gatewayRequestID,
+			RequestID:        requestID,
+			Timestamp:        now,
+			StatusCode:       statusCode,
+			Success:          success,
+			ErrorInfo:        errorInfo,
+			IsRetry:          isRetry,
+			Status:           status,
+			StartTime:        now,
+			CompletedAt:      &now,
+			DurationMs:       0,
 		}
 		applyChannelLogUsage(terminalLog, requestUsage, now)
 		channelLogStore.Record(actualMetricsKey, terminalLog)

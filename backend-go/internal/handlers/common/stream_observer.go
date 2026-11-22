@@ -127,6 +127,19 @@ func (o *StreamTimeoutObserver) Finish(now time.Time) {
 	o.flushLocked()
 }
 
+func (o *StreamTimeoutObserver) addRoutingDetails(requestID string, details *metrics.RoutingAttemptDetails) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if o.requestID != requestID {
+		return
+	}
+	if !o.firstContentAt.IsZero() {
+		value := float64(o.firstContentAt.Sub(o.startedAt)) / float64(time.Millisecond)
+		details.FirstContentLatencyMs = &value
+	}
+	details.MaxStreamIdleMs, details.MaxToolCallIdleMs = o.maxStreamIdleMs, o.maxToolCallIdleMs
+}
+
 func (o *StreamTimeoutObserver) markFirstContentLocked(now time.Time) {
 	if now.IsZero() {
 		now = time.Now()

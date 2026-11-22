@@ -3,11 +3,13 @@ package common
 import (
 	"bytes"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/BenedictKing/ccx/internal/config"
 	"github.com/BenedictKing/ccx/internal/metrics"
+	"github.com/BenedictKing/ccx/internal/types"
 	"github.com/gin-gonic/gin"
 	"github.com/tidwall/gjson"
 )
@@ -22,12 +24,16 @@ type SocketRoutingObserver struct {
 	finishedOrder []string
 	closed        bool
 	onSuccess     func(string, string)
+	secrets       []string
 }
 type SocketRoutingTurn struct {
 	context                   *gin.Context
 	id, attemptID, responseID string
 	requestedModel            string
 	sentModel                 string
+	apiKey                    string
+	details                   *metrics.RoutingAttemptDetails
+	secrets                   []string
 }
 
 func NewSocketRoutingObserver(parent *gin.Context, onSuccess ...func(string, string)) *SocketRoutingObserver {
@@ -66,7 +72,7 @@ func (o *SocketRoutingObserver) Begin(payload []byte) *SocketRoutingTurn {
 	o.pending = append(o.pending, turn)
 	return turn
 }
-func (o *SocketRoutingObserver) Sending(turn *SocketRoutingTurn, body []byte, upstream *config.UpstreamConfig, reason string, decision RoutingMappingDecision) {
+func (o *SocketRoutingObserver) Sending(turn *SocketRoutingTurn, body []byte, upstream *config.UpstreamConfig, reason string, decision RoutingMappingDecision, apiKeys ...string) {
 	if turn == nil {
 		return
 	}
@@ -80,10 +86,30 @@ func (o *SocketRoutingObserver) Sending(turn *SocketRoutingTurn, body []byte, up
 	req, _ := http.NewRequest(http.MethodPost, "http://routing-observation.invalid/v1/responses", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	StartRoutingAttempt(turn.context, req, upstream, turn.requestedModel, turn.attemptID, reason, decision)
+	if len(apiKeys) > 0 {
+		turn.apiKey = apiKeys[0]
+		bindRoutingAttemptKey(routingTracker(turn.context), turn.attemptID, turn.apiKey, req)
+	}
+	// 握手可能使用派生凭证；后续同连接请求也要沿用脱敏范围。
+	if len(apiKeys) > 1 {
+		o.secrets = nil
+		for _, value := range apiKeys[1:] {
+			if strings.HasPrefix(strings.ToLower(value), "bearer ") {
+				value = value[7:]
+			}
+			if value != "" {
+				o.secrets = append(o.secrets, value)
+			}
+		}
+	}
+	turn.secrets = append([]string{turn.apiKey}, o.secrets...)
 }
 func (o *SocketRoutingObserver) finishLocked(turn *SocketRoutingTurn, status string, code int) {
 	if o.store != nil && turn.attemptID != "" {
-		o.store.FinishAttempt(turn.id, turn.attemptID, status, code)
+		if turn.details == nil {
+			turn.details = &metrics.RoutingAttemptDetails{}
+		}
+		o.store.FinishAttempt(turn.id, turn.attemptID, status, code, turn.details)
 	}
 	stage := ""
 	if status == metrics.RoutingStatusFailed {
@@ -156,6 +182,23 @@ func (o *SocketRoutingObserver) Event(payload []byte) {
 	}
 	if id != "" {
 		turn.responseID = id
+	}
+	if event != "response.created" {
+		var usage *types.Usage
+		if observed := gjson.GetBytes(payload, "response.usage"); observed.IsObject() {
+			usage = &types.Usage{
+				InputTokens: int(observed.Get("input_tokens").Int()), PromptTokensTotal: int(observed.Get("input_tokens").Int()),
+				OutputTokens: int(observed.Get("output_tokens").Int()), CacheReadInputTokens: int(observed.Get("input_tokens_details.cached_tokens").Int()),
+			}
+		}
+		info := gjson.GetBytes(payload, "response.error").Raw
+		if info == "" || info == "null" {
+			info = gjson.GetBytes(payload, "error").Raw
+		}
+		if info == "null" {
+			info = ""
+		}
+		turn.details = routingAttemptDetails(info, 101, turn.secrets, usage)
 	}
 	switch event {
 	case "response.completed":
