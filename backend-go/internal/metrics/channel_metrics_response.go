@@ -1,8 +1,6 @@
 package metrics
 
-import (
-	"time"
-)
+import "time"
 
 // ============ 兼容旧 API 的方法（基于 channelIndex，需要调用方提供 baseURL 和 keys）============
 
@@ -303,6 +301,7 @@ func (m *MetricsManager) calculateAggregatedTimeWindowsInternal(baseURL string, 
 		cutoff := now.Add(-duration)
 		var requestCount, successCount, failureCount int64
 		var inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens int64
+		var firstByteLatencies firstByteLatencyHistogram
 
 		for _, apiKey := range activeKeys {
 			for _, metrics := range m.getMetricsVariantsLocked(baseURL, apiKey, serviceType) {
@@ -318,6 +317,9 @@ func (m *MetricsManager) calculateAggregatedTimeWindowsInternal(baseURL string, 
 						outputTokens += record.OutputTokens
 						cacheCreationTokens += record.CacheCreationInputTokens
 						cacheReadTokens += record.CacheReadInputTokens
+						if !record.pending {
+							firstByteLatencies.add(record.FirstByteLatencyMs)
+						}
 					}
 				}
 			}
@@ -333,17 +335,21 @@ func (m *MetricsManager) calculateAggregatedTimeWindowsInternal(baseURL string, 
 		if denom > 0 {
 			cacheHitRate = float64(cacheReadTokens) / float64(denom) * 100
 		}
+		latencySamples, p50Latency, p95Latency := firstByteLatencies.summary()
 
 		result[label] = TimeWindowStats{
-			RequestCount:        requestCount,
-			SuccessCount:        successCount,
-			FailureCount:        failureCount,
-			SuccessRate:         successRate,
-			InputTokens:         inputTokens,
-			OutputTokens:        outputTokens,
-			CacheCreationTokens: cacheCreationTokens,
-			CacheReadTokens:     cacheReadTokens,
-			CacheHitRate:        cacheHitRate,
+			RequestCount:            requestCount,
+			SuccessCount:            successCount,
+			FailureCount:            failureCount,
+			SuccessRate:             successRate,
+			InputTokens:             inputTokens,
+			OutputTokens:            outputTokens,
+			CacheCreationTokens:     cacheCreationTokens,
+			CacheReadTokens:         cacheReadTokens,
+			CacheHitRate:            cacheHitRate,
+			FirstByteLatencySamples: latencySamples,
+			FirstByteLatencyP50Ms:   p50Latency,
+			FirstByteLatencyP95Ms:   p95Latency,
 		}
 	}
 
@@ -366,6 +372,7 @@ func (m *MetricsManager) calculateAggregatedTimeWindowsMultiURL(baseURLs []strin
 		cutoff := now.Add(-duration)
 		var requestCount, successCount, failureCount int64
 		var inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens int64
+		var firstByteLatencies firstByteLatencyHistogram
 
 		// 遍历所有 BaseURL 和 Key 的组合
 		for _, metrics := range m.getIdentityMetricsByMultiURLAndKeysLocked(baseURLs, activeKeys, serviceType) {
@@ -381,6 +388,9 @@ func (m *MetricsManager) calculateAggregatedTimeWindowsMultiURL(baseURLs []strin
 					outputTokens += record.OutputTokens
 					cacheCreationTokens += record.CacheCreationInputTokens
 					cacheReadTokens += record.CacheReadInputTokens
+					if !record.pending {
+						firstByteLatencies.add(record.FirstByteLatencyMs)
+					}
 				}
 			}
 		}
@@ -395,17 +405,21 @@ func (m *MetricsManager) calculateAggregatedTimeWindowsMultiURL(baseURLs []strin
 		if denom > 0 {
 			cacheHitRate = float64(cacheReadTokens) / float64(denom) * 100
 		}
+		latencySamples, p50Latency, p95Latency := firstByteLatencies.summary()
 
 		result[label] = TimeWindowStats{
-			RequestCount:        requestCount,
-			SuccessCount:        successCount,
-			FailureCount:        failureCount,
-			SuccessRate:         successRate,
-			InputTokens:         inputTokens,
-			OutputTokens:        outputTokens,
-			CacheCreationTokens: cacheCreationTokens,
-			CacheReadTokens:     cacheReadTokens,
-			CacheHitRate:        cacheHitRate,
+			RequestCount:            requestCount,
+			SuccessCount:            successCount,
+			FailureCount:            failureCount,
+			SuccessRate:             successRate,
+			InputTokens:             inputTokens,
+			OutputTokens:            outputTokens,
+			CacheCreationTokens:     cacheCreationTokens,
+			CacheReadTokens:         cacheReadTokens,
+			CacheHitRate:            cacheHitRate,
+			FirstByteLatencySamples: latencySamples,
+			FirstByteLatencyP50Ms:   p50Latency,
+			FirstByteLatencyP95Ms:   p95Latency,
 		}
 	}
 

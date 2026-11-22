@@ -135,8 +135,8 @@ func TestToResponseMultiURLIncludesHistoricalOnlyChannelWindows(t *testing.T) {
 	metrics.FailureCount = 1
 	metrics.LastSuccessAt = &now
 	metrics.requestHistory = append(metrics.requestHistory,
-		RequestRecord{Timestamp: now.Add(-time.Minute), Success: true, InputTokens: 10},
-		RequestRecord{Timestamp: now.Add(-2 * time.Minute), Success: false, OutputTokens: 5},
+		RequestRecord{Timestamp: now.Add(-time.Minute), Success: true, InputTokens: 10, FirstByteLatencyMs: 100},
+		RequestRecord{Timestamp: now.Add(-2 * time.Minute), Success: false, OutputTokens: 5, FirstByteLatencyMs: 200},
 	)
 	m.mu.Unlock()
 
@@ -149,6 +149,9 @@ func TestToResponseMultiURLIncludesHistoricalOnlyChannelWindows(t *testing.T) {
 	}
 	if got := resp.TimeWindows["15m"].RequestCount; got != 2 {
 		t.Fatalf("15m request count = %d, want 2", got)
+	}
+	if stats := resp.TimeWindows["15m"]; stats.FirstByteLatencySamples != 2 || stats.FirstByteLatencyP50Ms != 150 || stats.FirstByteLatencyP95Ms != 195 {
+		t.Fatalf("15m first-byte latency stats = %+v, want 2 samples and p50/p95 150/195", stats)
 	}
 }
 

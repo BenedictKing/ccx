@@ -71,6 +71,15 @@ describe('渠道日志列表', () => {
     vi.mocked(api.getChannelLogs).mockResolvedValue({ channelIndex: 1, logs })
   })
 
+  it('只在有稳定渠道标识时提供请求历史入口', async () => {
+    const wrapper = await openDialog()
+    expect(wrapper.findAll('button').some(button => button.text() === 'routing.history')).toBe(false)
+    await wrapper.setProps({ historyAvailable: true })
+    await wrapper.findAll('button').find(button => button.text() === 'routing.history')!.trigger('click')
+    expect(wrapper.emitted('requestHistory')).toHaveLength(1)
+    wrapper.unmount()
+  })
+
   it('默认显示请求摘要，点击后展开并收起完整诊断', async () => {
     const wrapper = await openDialog()
     try {

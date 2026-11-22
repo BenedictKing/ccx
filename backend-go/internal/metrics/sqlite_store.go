@@ -128,6 +128,7 @@ func initSchema(db *sql.DB) error {
 			output_tokens INTEGER DEFAULT 0,
 			cache_creation_tokens INTEGER DEFAULT 0,
 			cache_read_tokens INTEGER DEFAULT 0,
+			first_byte_latency_ms REAL NOT NULL DEFAULT 0,
 			api_type TEXT NOT NULL DEFAULT 'messages'
 		);
 
@@ -201,12 +202,48 @@ func initSchema(db *sql.DB) error {
 		log.Printf("[SQLite-Migration] schema 升级: v1 -> v2 (添加 failure_class 列与 circuit_states 表)")
 	}
 
+	if err := ensureSQLiteColumn(db, "request_records", "first_byte_latency_ms", "REAL NOT NULL DEFAULT 0"); err != nil {
+		return fmt.Errorf("ensure first-byte latency column: %w", err)
+	}
+
 	// 复合索引：无论 schema 版本如何，幂等创建（不改变 user_version，避免干扰 v2→v3 数据迁移流程）
 	if _, err := db.Exec("CREATE INDEX IF NOT EXISTS idx_records_api_type_metrics_key_timestamp ON request_records(api_type, metrics_key, timestamp)"); err != nil {
 		return fmt.Errorf("create composite index failed: %w", err)
 	}
 
 	return nil
+}
+
+func ensureSQLiteColumn(db *sql.DB, table, column, definition string) error {
+	rows, err := db.Query("PRAGMA table_info(" + table + ")")
+	if err != nil {
+		return err
+	}
+	exists := false
+	for rows.Next() {
+		var cid, notNull, primaryKey int
+		var name, dataType string
+		var defaultValue sql.NullString
+		if err := rows.Scan(&cid, &name, &dataType, &notNull, &defaultValue, &primaryKey); err != nil {
+			rows.Close()
+			return err
+		}
+		if name == column {
+			exists = true
+		}
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	if exists {
+		return nil
+	}
+	_, err = db.Exec("ALTER TABLE " + table + " ADD COLUMN " + column + " " + definition)
+	return err
 }
 
 func (s *SQLiteStore) schemaVersion() (int, error) {
@@ -630,8 +667,8 @@ func (s *SQLiteStore) batchInsertRecords(records []PersistentRecord) error {
 	stmt, err := tx.Prepare(`
 		INSERT INTO request_records
 		(metrics_key, base_url, key_mask, timestamp, success, failure_class,
-		 input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, api_type, model)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		 input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, first_byte_latency_ms, api_type, model)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
 		return err
@@ -645,7 +682,7 @@ func (s *SQLiteStore) batchInsertRecords(records []PersistentRecord) error {
 		}
 		_, err := stmt.Exec(
 			r.MetricsKey, r.BaseURL, r.KeyMask, r.Timestamp.Unix(), success, string(r.FailureClass),
-			r.InputTokens, r.OutputTokens, r.CacheCreationTokens, r.CacheReadTokens, r.APIType, r.Model,
+			r.InputTokens, r.OutputTokens, r.CacheCreationTokens, r.CacheReadTokens, r.FirstByteLatencyMs, r.APIType, r.Model,
 		)
 		if err != nil {
 			return err
@@ -659,7 +696,7 @@ func (s *SQLiteStore) batchInsertRecords(records []PersistentRecord) error {
 func (s *SQLiteStore) LoadRecords(since time.Time, apiType string) ([]PersistentRecord, error) {
 	rows, err := s.db.Query(`
 		SELECT metrics_key, base_url, key_mask, timestamp, success, failure_class,
-		       input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, model
+		       input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, first_byte_latency_ms, model
 		FROM request_records
 		WHERE timestamp >= ? AND api_type = ?
 		ORDER BY timestamp ASC
@@ -679,7 +716,7 @@ func (s *SQLiteStore) LoadRecords(since time.Time, apiType string) ([]Persistent
 
 		err := rows.Scan(
 			&r.MetricsKey, &r.BaseURL, &r.KeyMask, &ts, &success, &failureClass,
-			&r.InputTokens, &r.OutputTokens, &r.CacheCreationTokens, &r.CacheReadTokens, &r.Model,
+			&r.InputTokens, &r.OutputTokens, &r.CacheCreationTokens, &r.CacheReadTokens, &r.FirstByteLatencyMs, &r.Model,
 		)
 		if err != nil {
 			return nil, err

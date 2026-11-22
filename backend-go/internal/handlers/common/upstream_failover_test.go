@@ -425,6 +425,10 @@ func TestTryUpstreamWithAllKeysRecordsSelectionTrace(t *testing.T) {
 	}
 
 	serviceType := scheduler.NormalizedMetricsServiceType(scheduler.ChannelKindMessages, upstream.ServiceType)
+	stats := messagesMetrics.GetTimeWindowStatsForKey(server.URL, "sk-trace", serviceType, time.Hour)
+	if stats.FirstByteLatencySamples != 1 || stats.FirstByteLatencyP95Ms <= 0 {
+		t.Fatalf("real HTTP request did not record first-byte latency: %+v", stats)
+	}
 	logs := channelScheduler.GetChannelLogStore(scheduler.ChannelKindMessages).Get(metrics.GenerateMetricsIdentityKey(server.URL, "sk-trace", serviceType))
 	if len(logs) != 1 {
 		t.Fatalf("logs count = %d, want 1", len(logs))

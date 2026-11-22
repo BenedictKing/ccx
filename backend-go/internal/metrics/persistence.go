@@ -74,6 +74,7 @@ type PersistentRecord struct {
 	Timestamp           time.Time    // 请求时间
 	Success             bool         // 是否成功
 	FailureClass        FailureClass // 失败分类（用于重建 breaker 窗口）
+	FirstByteLatencyMs  float64      // 实际请求首个响应字节延迟，毫秒
 	InputTokens         int64        // 输入 Token 数
 	OutputTokens        int64        // 输出 Token 数
 	CacheCreationTokens int64        // 缓存创建 Token

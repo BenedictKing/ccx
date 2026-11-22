@@ -246,7 +246,12 @@
           <v-expand-transition>
             <div v-if="preferencesStore.showGlobalStats">
               <v-divider />
-              <GlobalStatsPanel :key="channelStore.activeTab" :api-type="channelStore.activeTab" />
+              <GlobalStatsPanel
+                :key="channelStore.activeTab"
+                :api-type="channelStore.activeTab"
+                :history-selection="requestHistorySelection?.apiType === channelStore.activeTab ? requestHistorySelection : undefined"
+                @history-closed="requestHistorySelection = undefined"
+              />
             </div>
           </v-expand-transition>
         </v-card>
@@ -380,6 +385,7 @@
           @refresh="refreshChannels"
           @error="showErrorToast"
           @success="showSuccessToast"
+          @request-history="openRequestHistory"
         />
       </v-container>
     </v-main>
@@ -702,7 +708,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, defineAsyncComponent } from 'vue'
+import { computed, defineAsyncComponent, ref } from 'vue'
 import Logo from './components/Logo.vue'
 import AddChannelModal from './components/AddChannelModal.vue'
 import EditChannelModal from './components/EditChannelModal.vue'
@@ -710,9 +716,15 @@ import CapabilityTestDialog from './components/CapabilityTestDialog.vue'
 import UpdateDialog from './components/UpdateDialog.vue'
 import UserGuideDialog from './components/UserGuideDialog.vue'
 import { useAppController } from './composables/useAppController'
+import type { RoutingHistorySelection } from './services/routing-types'
 
 // 异步加载图表组件，减少首屏 JS 体积
 const GlobalStatsPanel = defineAsyncComponent(() => import('./components/GlobalStatsPanel.vue'))
+const requestHistorySelection = ref<RoutingHistorySelection>()
+function openRequestHistory(selection: RoutingHistorySelection) {
+  requestHistorySelection.value = selection
+  preferencesStore.showGlobalStats = true
+}
 
 const {
   route,

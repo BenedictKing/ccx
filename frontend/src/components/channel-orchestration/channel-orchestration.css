@@ -245,8 +245,38 @@
 
 .channel-latency {
   display: flex;
-  align-items: center;
-  min-width: 60px;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 2px;
+  min-width: 68px;
+}
+
+.real-latency-summary {
+  display: flex;
+  align-items: baseline;
+  gap: 3px;
+  color: rgba(var(--v-theme-on-surface), 0.72);
+  font-size: 11px;
+  line-height: 1.35;
+  white-space: nowrap;
+  border: 0;
+  padding: 2px 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.real-latency-summary:focus-visible {
+  outline: 2px solid rgb(var(--v-theme-primary));
+  outline-offset: 2px;
+}
+
+.real-latency-summary strong {
+  color: rgb(var(--v-theme-on-surface));
+}
+
+.real-latency-summary:disabled {
+  cursor: default;
 }
 
 /* RPM/TPM display styles */

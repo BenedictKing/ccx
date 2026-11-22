@@ -165,3 +165,38 @@ func TestRoutingHistoryEndpointReadsPersistentRange(t *testing.T) {
 		t.Fatalf("persistent history response = %d %s", response.Code, response.Body.String())
 	}
 }
+
+func TestRoutingHistoryShortWindowsPreserveChannelFilter(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	store, err := metrics.NewRoutingStore(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	for _, item := range []struct {
+		id, channel string
+		age         time.Duration
+	}{
+		{"recent", "slow-channel", time.Minute},
+		{"old", "slow-channel", 7 * time.Hour},
+		{"other", "other-channel", time.Minute},
+	} {
+		store.StartRequest(metrics.RoutingRequest{
+			GatewayRequestID: item.id, APIType: "chat", ReceivedAt: time.Now().Add(-item.age),
+		})
+		store.StartAttempt(item.id, metrics.RoutingAttempt{AttemptID: item.id, ChannelUID: item.channel})
+		store.FinishRequest(item.id, metrics.RoutingStatusSuccess, "")
+	}
+	router := gin.New()
+	RegisterRoutingRoutes(router.Group("/api"), store)
+	for _, duration := range []string{"15m", "1h", "6h"} {
+		t.Run(duration, func(t *testing.T) {
+			response := httptest.NewRecorder()
+			router.ServeHTTP(response, httptest.NewRequest("GET", "/api/chat/models/routing/history?duration="+duration+"&channelUid=slow-channel", nil))
+			var page struct{ Requests []metrics.RoutingRequest }
+			if response.Code != 200 || json.Unmarshal(response.Body.Bytes(), &page) != nil || len(page.Requests) != 1 || page.Requests[0].GatewayRequestID != "recent" {
+				t.Fatalf("short-window channel history = %d %s", response.Code, response.Body.String())
+			}
+		})
+	}
+}

@@ -21,7 +21,9 @@
         <v-btn size="x-small" value="successful_requests">{{ t('routing.successBasis') }}</v-btn
         ><v-btn size="x-small" value="all_attempts">{{ t('routing.attemptBasis') }}</v-btn>
       </v-btn-toggle>
-      <v-btn size="small" variant="text" prepend-icon="mdi-history" @click="openHistory">{{ t('routing.history') }}</v-btn>
+      <v-btn size="small" variant="text" prepend-icon="mdi-history" @click="openHistory()">{{
+        t('routing.history')
+      }}</v-btn>
     </div>
     <div class="routing-content">
       <v-alert v-if="!supported" type="info" variant="tonal" density="compact">
@@ -83,6 +85,9 @@
               @click="drawerOpen = false"
             />
           </div>
+          <v-chip v-if="historyMode && historyChannel" closable size="small" @click:close="clearHistoryChannel">
+            {{ historyChannel.channelName }}
+          </v-chip>
           <div v-if="historyMode" class="routing-history-filters">
             <v-select
               v-model="historyDuration"
@@ -113,12 +118,26 @@
               hide-details
               @keydown.enter.prevent="runHistorySearch"
             />
-            <v-btn color="primary" variant="tonal" :disabled="drawerLoading" @click="runHistorySearch">{{ t('routing.search') }}</v-btn>
+            <v-btn color="primary" variant="tonal" :disabled="drawerLoading" @click="runHistorySearch">{{
+              t('routing.search')
+            }}</v-btn>
           </div>
-          <v-alert v-if="historyMode && requestPage && !requestPage.coverage.persistent" type="info" variant="tonal" density="compact">
+          <v-alert
+            v-if="historyMode && requestPage && !requestPage.coverage.persistent"
+            type="info"
+            variant="tonal"
+            density="compact"
+          >
             {{ t('routing.memoryOnly') }} {{ t('routing.coverage', { time: time(requestPage.coverage.startedAt) }) }}
           </v-alert>
-          <v-alert v-else-if="historyMode && requestPage && (requestPage.coverage.droppedWrites > 0 || requestPage.coverage.limited)" type="warning" variant="tonal" density="compact">
+          <v-alert
+            v-else-if="
+              historyMode && requestPage && (requestPage.coverage.droppedWrites > 0 || requestPage.coverage.limited)
+            "
+            type="warning"
+            variant="tonal"
+            density="compact"
+          >
             {{ t('routing.incomplete') }}
           </v-alert>
           <p v-if="selectedPath" class="selected-path">
@@ -217,6 +236,8 @@ import type {
   RoutingQuery,
   RoutingRequestPage,
   RoutingStatus,
+  RoutingHistoryDuration,
+  RoutingHistorySelection,
   StatsDuration
 } from '../services/routing-types'
 import ModelRoutingFlow from './ModelRoutingFlow.vue'
@@ -226,8 +247,9 @@ const props = defineProps<{
   duration: StatsDuration
   refreshVersion: number
   resetVersion: number
+  historySelection?: RoutingHistorySelection
 }>()
-const emit = defineEmits<{ 'update:duration': [value: StatsDuration] }>()
+const emit = defineEmits<{ 'update:duration': [value: StatsDuration]; historyClosed: [] }>()
 const { t } = useI18n()
 const { smAndDown, width } = useDisplay()
 const basis = ref<RoutingBasis>('successful_requests')
@@ -241,7 +263,8 @@ const drawerOpen = ref(false),
 const selectedPath = ref<RoutingPath>(),
   requestPage = ref<RoutingRequestPage>()
 const historyMode = ref(false)
-const historyDuration = ref<'24h' | '7d' | '30d'>('24h')
+const historyDuration = ref<RoutingHistoryDuration>('24h')
+const historyChannel = ref<RoutingHistorySelection>()
 const historyStatus = ref<RoutingStatus | ''>('')
 const historySearch = ref('')
 const cursorHistory = ref<string[]>([])
@@ -254,6 +277,9 @@ let drawerQuery: RoutingQuery | undefined
 const supported = computed(() => ['1h', '6h', '24h', 'today'].includes(props.duration))
 const hiddenPathCount = computed(() => Math.max(0, (data.value?.paths.length ?? 0) - 12))
 const historyDurationItems = computed(() => [
+  { title: t('orchestration.minutes15'), value: '15m' },
+  { title: t('chart.1h'), value: '1h' },
+  { title: t('chart.6h'), value: '6h' },
   { title: t('chart.24h'), value: '24h' },
   { title: t('chart.7d'), value: '7d' },
   { title: t('chart.30d'), value: '30d' }
@@ -349,16 +375,17 @@ async function loadRequests(cursor = '') {
   } catch (err) {
     if (id === drawerGeneration) {
       drawerExpired.value = err instanceof ApiError && err.status === 410
-      const errorCode = err instanceof ApiError && typeof err.details === 'object' && err.details !== null && 'code' in err.details
-        ? err.details.code
-        : ''
+      const errorCode =
+        err instanceof ApiError && typeof err.details === 'object' && err.details !== null && 'code' in err.details
+          ? err.details.code
+          : ''
       drawerError.value = drawerExpired.value
         ? t('routing.snapshotExpired')
         : errorCode === 'routing_history_retention_exceeded'
           ? t('routing.historyRetentionExceeded')
-        : err instanceof Error
-          ? err.message
-          : String(err)
+          : err instanceof Error
+            ? err.message
+            : String(err)
     }
   } finally {
     if (id === drawerGeneration) drawerLoading.value = false
@@ -374,15 +401,26 @@ function runHistorySearch() {
     duration: historyDuration.value,
     basis: 'all_attempts',
     status: historyStatus.value,
+    channelUid: historyChannel.value?.channelUid,
     q: (historySearch.value || '').trim()
   }
   loadRequests()
 }
-function openHistory() {
+function openHistory(selection?: RoutingHistorySelection) {
+  historyChannel.value = selection
+  if (selection) {
+    historyDuration.value = selection.duration
+    historyStatus.value = ''
+    historySearch.value = ''
+  }
   historyMode.value = true
   selectedPath.value = undefined
   drawerPaths.value = []
   drawerOpen.value = true
+  runHistorySearch()
+}
+function clearHistoryChannel() {
+  historyChannel.value = undefined
   runHistorySearch()
 }
 function openPath(path?: RoutingPath) {
@@ -444,6 +482,13 @@ watch(
 )
 onMounted(load)
 watch(
+  () => props.historySelection,
+  selection => {
+    if (selection && selection.apiType === props.apiType) openHistory(selection)
+  },
+  { immediate: true }
+)
+watch(
   () => props.refreshVersion,
   () => load()
 )
@@ -455,8 +500,10 @@ watch(
   }
 )
 watch(drawerOpen, async value => {
-  if (!value) drawerGeneration++
-  else {
+  if (!value) {
+    drawerGeneration++
+    emit('historyClosed')
+  } else {
     await nextTick()
     document.querySelector<HTMLElement>('.routing-drawer button[aria-label]')?.focus()
   }
@@ -541,7 +588,7 @@ onBeforeUnmount(() => {
 }
 .routing-history-filters {
   display: grid;
-  grid-template-columns: minmax(100px, 0.7fr) minmax(130px, 0.9fr) minmax(180px, 1.4fr) auto;
+  grid-template-columns: minmax(116px, 0.7fr) minmax(126px, 0.9fr) minmax(140px, 1.4fr) auto;
   align-items: center;
   gap: 8px;
 }

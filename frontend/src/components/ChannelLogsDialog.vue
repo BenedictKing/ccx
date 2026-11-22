@@ -2,7 +2,10 @@
   <v-dialog :model-value="modelValue" max-width="900" @update:model-value="$emit('update:modelValue', $event)">
     <v-card>
       <v-card-title class="d-flex align-center justify-space-between">
-        <span class="dialog-title">{{ t('channelLogs.title', { channel: channelName }) }}</span>
+        <span class="dialog-title text-truncate mr-2">{{ t('channelLogs.title', { channel: channelName }) }}</span>
+        <v-btn v-if="historyAvailable" size="small" variant="text" class="flex-shrink-0" @click="emit('requestHistory')">
+          {{ t('routing.history') }}
+        </v-btn>
         <v-tooltip :text="t('app.actions.close') + ' (Esc)'" location="bottom" content-class="ccx-tooltip">
           <template #activator="{ props: tooltipProps }">
             <v-btn icon size="small" variant="text" v-bind="tooltipProps" @click="$emit('update:modelValue', false)">
@@ -272,11 +275,13 @@ const props = defineProps<{
   channelIndex: number
   channelName: string
   channelType: 'messages' | 'chat' | 'responses' | 'gemini' | 'images' | 'vectors'
+  historyAvailable?: boolean
 }>()
 
 const emit = defineEmits<{
   (_e: 'update:modelValue', _v: boolean): void
   (_e: 'retestModel', _request: ChannelLogRetestRequest): void
+  (_e: 'requestHistory'): void
 }>()
 const { t } = useI18n()
 

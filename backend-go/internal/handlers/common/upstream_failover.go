@@ -440,16 +440,17 @@ func TryUpstreamWithAllKeys(
 
 			// TCP 建连开始即计数：将活跃度统计提前到发起上游请求之前
 			requestID := metricsManager.RecordRequestConnected(currentBaseURL, apiKey, metricsServiceType, redirectedModel)
+			attemptStartedAt := time.Now()
 
 			lifecycleTrace := &RequestLifecycleTrace{
 				OnConnected: func() {
 					UpdateLogStatus(channelLogStore, metricsKey, logRequestID, metrics.StatusConnecting)
 				},
 				OnFirstResponseByte: func() {
+					metricsManager.RecordRequestFirstByte(currentBaseURL, apiKey, metricsServiceType, requestID, time.Since(attemptStartedAt))
 					UpdateLogStatus(channelLogStore, metricsKey, logRequestID, metrics.StatusFirstByte)
 				},
 			}
-			attemptStartedAt := time.Now()
 			var budgetTimer *time.Timer
 			if budget != nil {
 				budgetCtx, cancel := context.WithCancelCause(req.Context())

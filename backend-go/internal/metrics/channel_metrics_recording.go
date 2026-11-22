@@ -114,12 +114,35 @@ func (m *MetricsManager) RecordRequestConnectedAt(baseURL, apiKey, serviceType s
 		Success:      true, // 先按成功计数；结束时会回写真实结果
 		FailureClass: FailureClassNone,
 		Model:        model,
+		pending:      true,
 	})
 	metrics.pendingHistoryIdx[requestID] = len(metrics.requestHistory) - 1
 
 	m.cleanupHistoryLocked(metrics)
 
 	return requestID
+}
+
+// RecordRequestFirstByte 将真实上游首字节延迟记录到进行中的请求。
+func (m *MetricsManager) RecordRequestFirstByte(baseURL, apiKey, serviceType string, requestID uint64, latency time.Duration) {
+	if latency <= 0 {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	metrics := m.findPendingRequestMetricsLocked(baseURL, apiKey, serviceType, requestID)
+	if metrics == nil {
+		return
+	}
+	idx, ok := metrics.pendingHistoryIdx[requestID]
+	if !ok || idx < 0 || idx >= len(metrics.requestHistory) {
+		return
+	}
+	record := &metrics.requestHistory[idx]
+	if record.FirstByteLatencyMs == 0 {
+		record.FirstByteLatencyMs = float64(latency) / float64(time.Millisecond)
+	}
 }
 
 // RecordRequestFinalizeSuccess 回写成功结果与 token（requestID 来自 RecordRequestConnected）。
@@ -173,6 +196,7 @@ func (m *MetricsManager) RecordRequestFinalizeOutcome(baseURL, apiKey, serviceTy
 	metrics.RequestCount++
 	record := &metrics.requestHistory[idx]
 	record.Success = success
+	record.pending = false
 	record.FailureClass = normalizeFailureClass(success, failureClass)
 
 	if success {
@@ -194,6 +218,7 @@ func (m *MetricsManager) RecordRequestFinalizeOutcome(baseURL, apiKey, serviceTy
 				Timestamp:           record.Timestamp,
 				Success:             true,
 				FailureClass:        FailureClassNone,
+				FirstByteLatencyMs:  record.FirstByteLatencyMs,
 				InputTokens:         inputTokens,
 				OutputTokens:        outputTokens,
 				CacheCreationTokens: cacheCreationTokens,
@@ -222,6 +247,7 @@ func (m *MetricsManager) RecordRequestFinalizeOutcome(baseURL, apiKey, serviceTy
 			Timestamp:           record.Timestamp,
 			Success:             false,
 			FailureClass:        failureClass,
+			FirstByteLatencyMs:  record.FirstByteLatencyMs,
 			InputTokens:         0,
 			OutputTokens:        0,
 			CacheCreationTokens: 0,

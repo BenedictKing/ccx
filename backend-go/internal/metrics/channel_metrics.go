@@ -83,6 +83,8 @@ type RequestRecord struct {
 	Timestamp                time.Time
 	Success                  bool
 	FailureClass             FailureClass
+	FirstByteLatencyMs       float64
+	pending                  bool
 	InputTokens              int64
 	OutputTokens             int64
 	CacheCreationInputTokens int64
@@ -154,6 +156,10 @@ type TimeWindowStats struct {
 	// CacheHitRate 缓存命中率（Token口径），范围 0-100
 	// 定义：cacheReadTokens / (cacheReadTokens + inputTokens) * 100
 	CacheHitRate float64 `json:"cacheHitRate,omitempty"`
+	// 首字节延迟只统计收到上游响应字节的已完成请求。
+	FirstByteLatencySamples int64   `json:"firstByteLatencySamples,omitempty"`
+	FirstByteLatencyP50Ms   float64 `json:"firstByteLatencyP50Ms,omitempty"`
+	FirstByteLatencyP95Ms   float64 `json:"firstByteLatencyP95Ms,omitempty"`
 }
 
 // MetricsManager 指标管理器
@@ -305,6 +311,7 @@ func (m *MetricsManager) loadFromStore() error {
 				Timestamp:                r.Timestamp,
 				Success:                  r.Success,
 				FailureClass:             normalizeFailureClass(r.Success, r.FailureClass),
+				FirstByteLatencyMs:       r.FirstByteLatencyMs,
 				InputTokens:              r.InputTokens,
 				OutputTokens:             r.OutputTokens,
 				CacheCreationInputTokens: r.CacheCreationTokens,

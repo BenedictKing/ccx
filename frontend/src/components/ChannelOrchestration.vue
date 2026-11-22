@@ -251,16 +251,32 @@
                         <span>{{ formatStats(get15mStats(element.index)) }}</span>
                       </div>
                       <div class="metrics-tooltip-row">
+                        <span>{{ t('orchestration.firstByteLatency') }} · {{ t('orchestration.minutes15') }}:</span>
+                        <span>{{ formatFirstByteLatency(get15mStats(element.index)) }}</span>
+                      </div>
+                      <div class="metrics-tooltip-row">
                         <span>{{ t('orchestration.hour1') }}:</span>
                         <span>{{ formatStats(get1hStats(element.index)) }}</span>
+                      </div>
+                      <div class="metrics-tooltip-row">
+                        <span>{{ t('orchestration.firstByteLatency') }} · {{ t('orchestration.hour1') }}:</span>
+                        <span>{{ formatFirstByteLatency(get1hStats(element.index)) }}</span>
                       </div>
                       <div class="metrics-tooltip-row">
                         <span>{{ t('orchestration.hours6') }}:</span>
                         <span>{{ formatStats(get6hStats(element.index)) }}</span>
                       </div>
                       <div class="metrics-tooltip-row">
+                        <span>{{ t('orchestration.firstByteLatency') }} · {{ t('orchestration.hours6') }}:</span>
+                        <span>{{ formatFirstByteLatency(get6hStats(element.index)) }}</span>
+                      </div>
+                      <div class="metrics-tooltip-row">
                         <span>{{ t('orchestration.hours24') }}:</span>
                         <span>{{ formatStats(get24hStats(element.index)) }}</span>
+                      </div>
+                      <div class="metrics-tooltip-row">
+                        <span>{{ t('orchestration.firstByteLatency') }} · {{ t('orchestration.hours24') }}:</span>
+                        <span>{{ formatFirstByteLatency(get24hStats(element.index)) }}</span>
                       </div>
 
                       <div class="text-caption font-weight-bold mt-2 mb-1">{{ t('orchestration.cacheStats') }}</div>
@@ -303,11 +319,24 @@
 
             <!-- Latency display -->
             <div class="channel-latency" @click.stop>
+              <button
+                v-if="get15mStats(element.index)?.firstByteLatencySamples"
+                class="real-latency-summary"
+                type="button"
+                :disabled="!element.channelUid"
+                :title="t('orchestration.firstByteLatencyTooltip', { samples: get15mStats(element.index)?.firstByteLatencySamples ?? 0 })"
+                @click="openRequestHistory(element, '15m')"
+              >
+                <span>{{ t('orchestration.firstByteP95') }}</span>
+                <strong v-if="(get15mStats(element.index)?.firstByteLatencySamples ?? 0) >= 5">≈{{ Math.round(get15mStats(element.index)!.firstByteLatencyP95Ms || 0) }}ms</strong>
+                <strong v-else>{{ t('orchestration.latencyInsufficient') }}</strong>
+              </button>
               <v-chip
                 v-if="isLatencyValid(element)"
                 size="x-small"
                 :color="getLatencyColor(element.latency!)"
                 variant="tonal"
+                :title="t('orchestration.probeLatency')"
               >
                 {{ element.latency }}ms
               </v-chip>
@@ -634,7 +663,9 @@
       :channel-index="logsChannelIndex"
       :channel-name="logsChannelName"
       :channel-type="channelType"
+      :history-available="!!logsChannel?.channelUid"
       @retest-model="handleRetestModel"
+      @request-history="openLogsHistory"
     />
     <SchedulerDiagnoseDialog
       v-model="showSchedulerDiagnoseDialog"
@@ -648,6 +679,7 @@ import { ref, computed, watch, onMounted, onUnmounted, defineAsyncComponent, nex
 import draggable from 'vuedraggable'
 import { api, type Channel, type ChannelMetrics, type ChannelStatus, type TimeWindowStats, type ChannelRecentActivity, type ChannelLogRetestRequest, type SchedulerStatsResponse } from '../services/api'
 import { getChannelTypeApi } from '../utils/channelTypeApi'
+import type { RoutingHistoryDuration, RoutingHistorySelection } from '../services/routing-types'
 import { useI18n } from '../i18n'
 import { useGlobalTick } from '../composables/useGlobalTick'
 import { useChannelActivity } from '../composables/useChannelActivity'
@@ -678,6 +710,7 @@ const emit = defineEmits<{
   (_e: 'refresh'): void
   (_e: 'error', _message: string): void
   (_e: 'success', _message: string): void
+  (_e: 'requestHistory', _selection: RoutingHistorySelection): void
 }>()
 const { t } = useI18n()
 const getCurrentChannelTypeApi = () => getChannelTypeApi(api, props.channelType)
@@ -709,10 +742,20 @@ const showSchedulerDiagnoseDialog = ref(false)
 const showLogsDialog = ref(false)
 const logsChannelIndex = ref(0)
 const logsChannelName = ref('')
+const logsChannel = computed(() => props.channels.find(ch => ch.index === logsChannelIndex.value))
 const openLogsDialog = (ch: Channel) => {
   logsChannelIndex.value = ch.index
   logsChannelName.value = ch.name
   showLogsDialog.value = true
+}
+const openRequestHistory = (ch: Channel, duration: RoutingHistoryDuration) => {
+  if (!ch.channelUid) return
+  emit('requestHistory', { apiType: props.channelType, channelUid: ch.channelUid, channelName: ch.name, duration })
+}
+const openLogsHistory = () => {
+  if (!logsChannel.value?.channelUid) return
+  showLogsDialog.value = false
+  openRequestHistory(logsChannel.value, '24h')
 }
 const handleRetestModel = (request: ChannelLogRetestRequest) => {
   showLogsDialog.value = false
@@ -754,7 +797,7 @@ const dispatchOverlayResize = () => {
 
 const scheduleChannelMenuReposition = () => {
   nextTick(() => {
-    requestAnimationFrame(dispatchOverlayResize)
+    window.requestAnimationFrame(dispatchOverlayResize)
 
     if (channelMenuRepositionTimer) {
       clearTimeout(channelMenuRepositionTimer)
@@ -1069,6 +1112,17 @@ const formatPromotionRemaining = (until?: string): string => {
 const formatStats = (stats?: TimeWindowStats): string => {
   if (!stats || !stats.requestCount) return '--'
   return `${stats.requestCount} ${t('orchestration.requests')} (${stats.successRate?.toFixed(0)}%)`
+}
+
+const formatFirstByteLatency = (stats?: TimeWindowStats): string => {
+  const samples = stats?.firstByteLatencySamples ?? 0
+  if (!samples) return '--'
+  if (samples < 5) return t('orchestration.latencyInsufficientStats', { samples })
+  return t('orchestration.firstByteLatencyStats', {
+    p50: Math.round(stats?.firstByteLatencyP50Ms ?? 0),
+    p95: Math.round(stats?.firstByteLatencyP95Ms ?? 0),
+    samples
+  })
 }
 
 const formatTokens = (num?: number): string => {

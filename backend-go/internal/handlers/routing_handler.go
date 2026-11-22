@@ -209,6 +209,12 @@ func routingHistoryQuery(c *gin.Context, apiType string, store *metrics.RoutingS
 
 	duration := time.Duration(0)
 	switch c.DefaultQuery("duration", "24h") {
+	case "15m":
+		duration = 15 * time.Minute
+	case "1h":
+		duration = time.Hour
+	case "6h":
+		duration = 6 * time.Hour
 	case "24h":
 		duration = 24 * time.Hour
 	case "7d":

@@ -9,7 +9,9 @@ import { ApiError } from '../services/api-helpers'
 import type { RoutingDistribution } from '../services/routing-types'
 
 vi.mock('../i18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }))
-vi.mock('../services/api', () => ({ api: { getModelRouting: vi.fn(), getRoutingRequests: vi.fn(), getRoutingHistory: vi.fn() } }))
+vi.mock('../services/api', () => ({
+  api: { getModelRouting: vi.fn(), getRoutingRequests: vi.fn(), getRoutingHistory: vi.fn() }
+}))
 vi.mock('vuetify', () => ({ useDisplay: () => ({ smAndDown: ref(false), width: ref(1400) }) }))
 vi.mock('vuetify/components/VNavigationDrawer', () => ({ VNavigationDrawer: { template: '<aside><slot /></aside>' } }))
 
@@ -21,12 +23,14 @@ const Select = defineComponent({
     items: { type: Array as PropType<{ title: string; value: string }[]>, default: () => [] }
   },
   emits: ['update:modelValue'],
-  template: '<select :value="modelValue" @change="$emit(\'update:modelValue\', $event.target.value)"><option v-for="item in items" :key="item.value" :value="item.value">{{ item.title }}</option></select>'
+  template:
+    '<select :value="modelValue" @change="$emit(\'update:modelValue\', $event.target.value)"><option v-for="item in items" :key="item.value" :value="item.value">{{ item.title }}</option></select>'
 })
 const TextField = defineComponent({
   props: { modelValue: { type: String, default: '' } },
   emits: ['update:modelValue', 'keydown'],
-  template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" @keydown.enter="$emit(\'keydown.enter\', $event)" />'
+  template:
+    '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" @keydown.enter="$emit(\'keydown.enter\', $event)" />'
 })
 const result = (model: string): RoutingDistribution => ({
   from: '2026-11-13T00:00:00Z',
@@ -282,6 +286,46 @@ describe('model routing query lifecycle', () => {
     expect(api.getRoutingHistory).toHaveBeenLastCalledWith(
       'chat',
       expect.objectContaining({ duration: '24h', status: 'failed', q: 'timeout', cursor: '', limit: 10 })
+    )
+    wrapper.unmount()
+  })
+  it('opens channel history from the latency window and preserves the channel when searching', async () => {
+    vi.mocked(api.getModelRouting).mockResolvedValue(result('source'))
+    vi.mocked(api.getRoutingHistory).mockResolvedValue({
+      requests: [],
+      nextCursor: '',
+      from: '',
+      to: '',
+      coverage: result('source').coverage
+    })
+    const wrapper = render()
+    await wrapper.setProps({
+      historySelection: { apiType: 'chat', channelUid: 'slow-channel', channelName: 'Slow channel', duration: '15m' }
+    })
+    await flushPromises()
+    expect(api.getRoutingHistory).toHaveBeenLastCalledWith(
+      'chat',
+      expect.objectContaining({ duration: '15m', channelUid: 'slow-channel' })
+    )
+    expect(wrapper.text()).toContain('Slow channel')
+    await wrapper.findAll('.routing-history-filters select')[1]!.setValue('failed')
+    await wrapper.find('.routing-history-filters input').setValue('timeout')
+    await wrapper
+      .findAll('button')
+      .find(button => button.text() === 'routing.search')!
+      .trigger('click')
+    await flushPromises()
+    expect(api.getRoutingHistory).toHaveBeenLastCalledWith(
+      'chat',
+      expect.objectContaining({ duration: '15m', channelUid: 'slow-channel', status: 'failed', q: 'timeout' })
+    )
+    await wrapper.setProps({
+      historySelection: { apiType: 'chat', channelUid: 'other-channel', channelName: 'Other channel', duration: '1h' }
+    })
+    await flushPromises()
+    expect(api.getRoutingHistory).toHaveBeenLastCalledWith(
+      'chat',
+      expect.objectContaining({ duration: '1h', channelUid: 'other-channel', status: '', q: '', cursor: '' })
     )
     wrapper.unmount()
   })

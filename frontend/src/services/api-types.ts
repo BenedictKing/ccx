@@ -13,6 +13,9 @@ export interface TimeWindowStats {
   cacheCreationTokens?: number
   cacheReadTokens?: number
   cacheHitRate?: number
+  firstByteLatencySamples?: number
+  firstByteLatencyP50Ms?: number
+  firstByteLatencyP95Ms?: number
 }
 
 export type CircuitState = 'closed' | 'open' | 'half_open'
