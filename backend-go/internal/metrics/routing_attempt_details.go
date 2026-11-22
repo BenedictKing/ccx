@@ -1,9 +1,9 @@
 package metrics
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"time"
+
+	"github.com/BenedictKing/ccx/internal/utils"
 )
 
 // RoutingAttemptDetails 只保存排障元数据；缺失指针表示该耗时未被观测。
@@ -23,11 +23,7 @@ type RoutingAttemptDetails struct {
 
 // RoutingKeyID 跨 URL 稳定标识同一把上游 Key，接口和持久化均不需要明文。
 func RoutingKeyID(apiKey string) string {
-	if apiKey == "" {
-		return ""
-	}
-	digest := sha256.Sum256([]byte(apiKey))
-	return hex.EncodeToString(digest[:])
+	return utils.APIKeyID(apiKey)
 }
 
 func cloneRoutingAttemptDetails(details *RoutingAttemptDetails) *RoutingAttemptDetails {

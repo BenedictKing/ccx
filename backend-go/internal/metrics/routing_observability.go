@@ -105,6 +105,7 @@ type RoutingStore struct {
 	lastCleanup   time.Time
 	order         []string
 	limited       bool
+	health        persistenceHealth
 }
 
 const maxRoutingRequests = 50000
@@ -569,8 +570,12 @@ func (s *RoutingStore) writeLoop() {
 			if !ok {
 				return
 			}
-			if s.db != nil && s.persist(request) != nil {
-				s.dropped.Add(1)
+			if s.db != nil {
+				err := s.persist(request)
+				s.health.recordWrite(err)
+				if err != nil {
+					s.dropped.Add(1)
+				}
 			}
 			if s.db != nil && s.dropped.Load() != storedDropped {
 				value := s.dropped.Load()
@@ -580,9 +585,7 @@ func (s *RoutingStore) writeLoop() {
 			}
 		case <-timer.C:
 			if s.db != nil {
-				if err := s.cleanupHistory(time.Now()); err != nil {
-					s.dropped.Add(1)
-				}
+				s.health.recordCleanup(s.cleanupHistory(time.Now()))
 			}
 		}
 	}

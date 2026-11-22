@@ -380,6 +380,16 @@ func main() {
 		routingStore, _ = metrics.NewRoutingStore(nil)
 	}
 	defer routingStore.Close()
+	keyOperationStore, keyOperationErr := metrics.NewKeyOperationStore(metricsStore, envCfg.RequestHistoryRetentionDays)
+	if keyOperationErr != nil {
+		log.Printf("[KeyOperations-Init] 持久化不可用: %v", keyOperationErr)
+		keyOperationStore, _ = metrics.NewKeyOperationStore(nil, envCfg.RequestHistoryRetentionDays)
+	}
+	cfgManager.SetKeyOperationObserver(keyOperationStore.Record)
+	defer func() {
+		cfgManager.SetKeyOperationObserver(nil)
+		keyOperationStore.Close()
+	}()
 
 	// 初始化多渠道调度器（Messages、Responses、Gemini、Chat、Images 和 Vectors 使用独立的指标管理器）
 	var messagesMetricsManager, responsesMetricsManager, geminiMetricsManager, chatMetricsManager, imagesMetricsManager, vectorsMetricsManager *metrics.MetricsManager
@@ -654,6 +664,11 @@ func main() {
 		siteaccess.RegisterRoutes(apiGroup, siteAccessDeps)
 		handlers.RegisterSubagentRoutingRoutes(apiGroup, cfgManager)
 		handlers.RegisterRoutingRoutes(apiGroup, routingStore, cfgManager)
+		apiGroup.GET("/diagnostics", handlers.GetDiagnostics(envCfg, metricsStore, routingStore, keyOperationStore, handlers.DiagnosticVersion{Version: Version, GitCommit: GitCommit, BuildTime: BuildTime}))
+		handlers.RegisterKeyObservabilityRoutes(apiGroup, cfgManager, routingStore, keyOperationStore, map[string]*metrics.MetricsManager{
+			"messages": messagesMetricsManager, "chat": chatMetricsManager, "responses": responsesMetricsManager,
+			"gemini": geminiMetricsManager, "images": imagesMetricsManager, "vectors": vectorsMetricsManager,
+		})
 		apiGroup.GET("/reports/usage/channels", handlers.GetUsageReportChannels(cfgManager))
 		apiGroup.GET("/reports/usage.csv", handlers.GetUsageReportCSV(metricsStore, cfgManager))
 
@@ -1075,6 +1090,8 @@ func main() {
 		}
 
 		// 关闭指标持久化存储
+		cfgManager.SetKeyOperationObserver(nil)
+		keyOperationStore.Close()
 		routingStore.Close()
 		if metricsStore != nil {
 			if err := metricsStore.Close(); err != nil {

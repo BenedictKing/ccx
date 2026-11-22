@@ -337,7 +337,8 @@ const historyDurationItems = computed(() =>
     { title: t('chart.6h'), value: '6h' },
     { title: t('chart.24h'), value: '24h' },
     { title: t('chart.7d'), value: '7d' },
-    { title: t('chart.30d'), value: '30d' }
+    { title: t('chart.30d'), value: '30d' },
+    { title: t('routing.historyRetained'), value: 'retained' }
   ].map(item => ({
     ...item,
     props: {
@@ -485,13 +486,13 @@ function runHistorySearch() {
   }
   loadRequests()
 }
-function openHistory(selection?: RoutingHistorySelection, keyId = '') {
+function openHistory(selection?: RoutingHistorySelection, keyId = selection?.keyId ?? '') {
   historyKeyId.value = keyId
   historyChannel.value = selection
   if (selection) {
     historyDuration.value = selection.duration
     historyStatus.value = ''
-    historySearch.value = ''
+    historySearch.value = selection.q ?? ''
   }
   historyMode.value = true
   selectedPath.value = undefined

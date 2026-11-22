@@ -620,6 +620,7 @@ type ConfigManager struct {
 	closeOnce             sync.Once     // 确保 Close 只执行一次
 	backgroundWG          sync.WaitGroup
 	configChangeCallbacks []func(Config)
+	keyOperationObserver  func(KeyOperationEvent)
 	// selfWriteSum 由 mu 保护，记录最后一次自身保存的文件摘要。
 	selfWriteSum string
 }
@@ -996,9 +997,10 @@ func NormalizeChannelHistoricalImageTurnLimit(limit int) int {
 // BlacklistKey 将指定 Key 从活跃列表移到拉黑列表（持久化）
 // apiType: Messages/Responses/Gemini/Chat，用于定位 upstream slice
 // channelIndex: 渠道在 upstream slice 中的索引
-func (cm *ConfigManager) BlacklistKey(apiType string, channelIndex int, apiKey string, reason string, message string) error {
+func (cm *ConfigManager) BlacklistKey(apiType string, channelIndex int, apiKey string, reason string, message string) (operationErr error) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
+	defer cm.observeKeyOperationLocked(apiType, channelIndex, apiKey, "blacklist", "automatic", reason)(&operationErr)
 
 	upstreams := cm.getUpstreamSliceLocked(apiType)
 	if upstreams == nil || channelIndex < 0 || channelIndex >= len(*upstreams) {
@@ -1181,9 +1183,10 @@ func (cm *ConfigManager) fireConfigChangeCallbacks() {
 }
 
 // RestoreKey 将指定 Key 从拉黑列表恢复到活跃列表（持久化）
-func (cm *ConfigManager) RestoreKey(apiType string, channelIndex int, apiKey string) error {
+func (cm *ConfigManager) RestoreKey(apiType string, channelIndex int, apiKey string) (operationErr error) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
+	defer cm.observeKeyOperationLocked(apiType, channelIndex, apiKey, "restore", "manual", "")(&operationErr)
 
 	upstreams := cm.getUpstreamSliceLocked(apiType)
 	if upstreams == nil || channelIndex < 0 || channelIndex >= len(*upstreams) {
@@ -1229,9 +1232,10 @@ func (cm *ConfigManager) RestoreKey(apiType string, channelIndex int, apiKey str
 // SuspendKey 手动暂停指定 API Key（设置 Enabled=false，不移出 APIKeys 列表）
 // apiType: Messages/Responses/Gemini/Chat/Images/Vectors
 // channelIndex: 渠道在 upstream slice 中的索引
-func (cm *ConfigManager) SuspendKey(apiType string, channelIndex int, apiKey string) error {
+func (cm *ConfigManager) SuspendKey(apiType string, channelIndex int, apiKey string) (operationErr error) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
+	defer cm.observeKeyOperationLocked(apiType, channelIndex, apiKey, "pause", "manual", "")(&operationErr)
 
 	upstreams := cm.getUpstreamSliceLocked(apiType)
 	if upstreams == nil || channelIndex < 0 || channelIndex >= len(*upstreams) {
@@ -1260,9 +1264,10 @@ func (cm *ConfigManager) SuspendKey(apiType string, channelIndex int, apiKey str
 // ResumeKey 手动恢复指定 API Key（移除 Enabled 限制，恢复为活跃状态）
 // apiType: Messages/Responses/Gemini/Chat/Images/Vectors
 // channelIndex: 渠道在 upstream slice 中的索引
-func (cm *ConfigManager) ResumeKey(apiType string, channelIndex int, apiKey string) error {
+func (cm *ConfigManager) ResumeKey(apiType string, channelIndex int, apiKey string) (operationErr error) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
+	defer cm.observeKeyOperationLocked(apiType, channelIndex, apiKey, "resume", "manual", "")(&operationErr)
 
 	upstreams := cm.getUpstreamSliceLocked(apiType)
 	if upstreams == nil || channelIndex < 0 || channelIndex >= len(*upstreams) {
@@ -1289,7 +1294,7 @@ func (cm *ConfigManager) ResumeKey(apiType string, channelIndex int, apiKey stri
 
 // RestoreAllKeys 恢复指定渠道所有不可用的 Key（被拉黑或手动暂停，持久化）。
 // 返回实际恢复的唯一 Key 数量。
-func (cm *ConfigManager) RestoreAllKeys(apiType string, channelIndex int) (int, error) {
+func (cm *ConfigManager) RestoreAllKeys(apiType string, channelIndex int) (restoredCount int, operationErr error) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
@@ -1300,6 +1305,13 @@ func (cm *ConfigManager) RestoreAllKeys(apiType string, channelIndex int) (int, 
 
 	upstream := &(*upstreams)[channelIndex]
 	disabledCount := len(upstream.DisabledAPIKeys)
+	observedKeys := make(map[string]bool)
+	for _, key := range slices.Concat(upstream.APIKeys, disabledKeys(upstream.DisabledAPIKeys)) {
+		if keyOperationState(upstream, key) != "active" && !observedKeys[key] {
+			observedKeys[key] = true
+			defer cm.observeKeyOperationLocked(apiType, channelIndex, key, "restore", "manual", "")(&operationErr)
+		}
+	}
 	restoredKeys := make(map[string]struct{}, disabledCount)
 	savedConfigs := make(map[string]*APIKeyConfig, disabledCount)
 	for _, dk := range upstream.DisabledAPIKeys {
@@ -1353,7 +1365,7 @@ func (cm *ConfigManager) RestoreAllKeys(apiType string, channelIndex int) (int, 
 }
 
 // RestoreDisabledKeys 恢复指定渠道中命中的被拉黑 Key，并返回实际恢复的 key 列表。
-func (cm *ConfigManager) RestoreDisabledKeys(apiType string, channelIndex int, keys []string) ([]string, error) {
+func (cm *ConfigManager) RestoreDisabledKeys(apiType string, channelIndex int, keys []string) (restoredKeys []string, operationErr error) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
@@ -1377,6 +1389,9 @@ func (cm *ConfigManager) RestoreDisabledKeys(apiType string, channelIndex int, k
 	}
 
 	upstream := &(*upstreams)[channelIndex]
+	for key := range keySet {
+		defer cm.observeKeyOperationLocked(apiType, channelIndex, key, "restore", "automatic", "")(&operationErr)
+	}
 	restored := make([]string, 0, len(keySet))
 	newDisabled := make([]DisabledKeyInfo, 0, len(upstream.DisabledAPIKeys))
 	savedConfigs := make(map[string]*APIKeyConfig)

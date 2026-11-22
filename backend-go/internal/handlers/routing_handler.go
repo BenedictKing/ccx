@@ -228,6 +228,8 @@ func routingHistoryQuery(c *gin.Context, apiType string, store *metrics.RoutingS
 		duration = 7 * 24 * time.Hour
 	case "30d":
 		duration = 30 * 24 * time.Hour
+	case "retained":
+		duration = store.MaxHistoryAge()
 	default:
 		return bad()
 	}

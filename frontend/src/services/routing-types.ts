@@ -103,12 +103,14 @@ export interface RoutingRequestPage {
   to: string
   coverage: RoutingCoverage
 }
-export type RoutingHistoryDuration = '15m' | '1h' | '6h' | '24h' | '7d' | '30d'
+export type RoutingHistoryDuration = '15m' | '1h' | '6h' | '24h' | '7d' | '30d' | 'retained'
 export interface RoutingHistorySelection {
   apiType: ChannelKind
   channelUid: string
   channelName: string
   duration: RoutingHistoryDuration
+  keyId?: string
+  q?: string
 }
 export interface RoutingQuery {
   keyId?: string

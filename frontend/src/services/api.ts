@@ -43,8 +43,26 @@ export * from './api-helpers'
 export * from './api-types'
 
 import type { RoutingDistribution, RoutingQuery, RoutingRequestPage } from "./routing-types"
+import type { KeyOverviewResponse, KeyOperationsPage } from './key-observability-types'
+export * from './key-observability-types'
+import type { DiagnosticReport } from './diagnostic-types'
+export * from './diagnostic-types'
 
 export class ApiService {
+  async getDiagnostics(): Promise<DiagnosticReport> {
+    return this.request('/diagnostics')
+  }
+
+  async getKeyOverview(type: string, channelUid: string): Promise<KeyOverviewResponse> {
+    return this.request(`/${type}/keys/overview?${new URLSearchParams({ channelUid })}`)
+  }
+
+  async getKeyOperations(type: string, channelUid: string, keyId = '', before = 0): Promise<KeyOperationsPage> {
+    return this.request(
+      `/${type}/keys/operations?${new URLSearchParams({ channelUid, keyId, before: String(before) })}`
+    )
+  }
+
   async getModelRouting(type: string, query: RoutingQuery): Promise<RoutingDistribution> {
     return this.request(`/${type}/models/routing?${this.routingQuery(query)}`)
   }

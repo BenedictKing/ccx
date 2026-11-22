@@ -192,6 +192,19 @@
         </v-list>
       </v-menu>
 
+      <!-- 运行诊断 -->
+      <v-btn
+        v-if="isAuthenticated"
+        icon
+        variant="text"
+        size="small"
+        class="header-btn"
+        :title="t('diagnostics.title')"
+        @click="showDiagnostics = true"
+      >
+        <v-icon size="20">mdi-information</v-icon>
+      </v-btn>
+
       <!-- 新用户指引 -->
       <v-btn
         icon
@@ -667,6 +680,7 @@
       </v-card>
     </v-dialog>
 
+    <DiagnosticsDialog v-if="isAuthenticated" v-model="showDiagnostics" />
     <!-- 通用确认对话框（替代 window.confirm，兼容 Wails 桌面 iframe） -->
     <v-dialog v-model="dialogStore.showConfirmDialog" max-width="420" persistent>
       <v-card rounded="lg">
@@ -720,6 +734,8 @@ import type { RoutingHistorySelection } from './services/routing-types'
 
 // 异步加载图表组件，减少首屏 JS 体积
 const GlobalStatsPanel = defineAsyncComponent(() => import('./components/GlobalStatsPanel.vue'))
+const DiagnosticsDialog = defineAsyncComponent(() => import('./components/DiagnosticsDialog.vue'))
+const showDiagnostics = ref(false)
 const requestHistorySelection = ref<RoutingHistorySelection>()
 function openRequestHistory(selection: RoutingHistorySelection) {
   requestHistorySelection.value = selection

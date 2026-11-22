@@ -38,6 +38,7 @@ type SQLiteStore struct {
 	flushMu      sync.Mutex     // 串行化 flush 与 delete 操作，避免并发竞态
 	asyncFlushWg sync.WaitGroup // 追踪 AddRecord 触发的异步 flush goroutine
 	flushing     atomic.Bool    // 原子标记：是否有 flush goroutine 正在运行/排队
+	health       persistenceHealth
 }
 
 // SQLiteStoreConfig SQLite 存储配置
@@ -650,7 +651,9 @@ func (s *SQLiteStore) flush() {
 	s.bufferMu.Unlock()
 
 	// 批量写入
-	if err := s.batchInsertRecords(records); err != nil {
+	err := s.batchInsertRecords(records)
+	s.health.recordWrite(err)
+	if err != nil {
 		log.Printf("[SQLite-Flush] 警告: 批量写入指标记录失败: %v", err)
 		s.requeueRecords(records, "[SQLite-Flush]")
 	}
@@ -1015,6 +1018,7 @@ func (s *SQLiteStore) cleanupLoop() {
 func (s *SQLiteStore) doCleanup() {
 	cutoff := time.Now().AddDate(0, 0, -s.retentionDays)
 	deleted, err := s.CleanupOldRecords(cutoff)
+	s.health.recordCleanup(err)
 	if err != nil {
 		log.Printf("[SQLite-Cleanup] 警告: 清理过期指标记录失败: %v", err)
 	} else if deleted > 0 {
@@ -1214,4 +1218,5 @@ func (s *SQLiteStore) requeueRecords(records []PersistentRecord, logPrefix strin
 	}
 
 	log.Printf("%s 警告: 写入缓冲区已满，丢弃 %d 条记录", logPrefix, len(records))
+	s.health.recordDrop(len(records))
 }

@@ -459,6 +459,10 @@
                     </template>
                     <v-list-item-title>{{ t('addChannel.testCapability') }}</v-list-item-title>
                   </v-list-item>
+                  <v-list-item v-if="element.channelUid" @click="openKeyOperations(element)">
+                    <template #prepend><v-icon size="small">mdi-key</v-icon></template>
+                    <v-list-item-title>{{ t('keyOps.title') }}</v-list-item-title>
+                  </v-list-item>
                   <v-list-item @click="copyChannelInfo(element)">
                     <template #prepend>
                       <v-icon size="small">mdi-content-copy</v-icon>
@@ -634,6 +638,10 @@
                 </v-btn>
               </template>
               <v-list density="compact">
+                <v-list-item v-if="channel.channelUid" @click="openKeyOperations(channel)">
+                  <template #prepend><v-icon size="small">mdi-key</v-icon></template>
+                  <v-list-item-title>{{ t('keyOps.title') }}</v-list-item-title>
+                </v-list-item>
                 <v-list-item @click="$emit('edit', channel)">
                   <template #prepend>
                     <v-icon size="small">mdi-pencil</v-icon>
@@ -688,6 +696,13 @@
       v-model="showSchedulerDiagnoseDialog"
       :channel-type="channelType"
     />
+    <KeyOperationsDialog
+      v-if="keyOperationsChannel"
+      v-model="showKeyOperations"
+      :channel="keyOperationsChannel"
+      :channel-type="channelType"
+      @request-history="emit('requestHistory', $event)"
+    />
   </v-card>
 </template>
 
@@ -705,6 +720,7 @@ import ChannelStatusBadge from './ChannelStatusBadge.vue'
 const KeyTrendChart = defineAsyncComponent(() => import('./KeyTrendChart.vue'))
 import ChannelLogsDialog from './ChannelLogsDialog.vue'
 import SchedulerDiagnoseDialog from './SchedulerDiagnoseDialog.vue'
+const KeyOperationsDialog = defineAsyncComponent(() => import('./KeyOperationsDialog.vue'))
 import { availableChannelApiKeyCount, disabledChannelApiKeyCount, pausedChannelApiKeyCount } from '../utils/channelApiKeys'
 
 const props = defineProps<{
@@ -754,6 +770,15 @@ const schedulerStats = ref<SchedulerStatsResponse | null>(null)
 const isLoadingMetrics = ref(false)
 const isSavingOrder = ref(false)
 const showSchedulerDiagnoseDialog = ref(false)
+const showKeyOperations = ref(false)
+const keyOperationsChannelUid = ref('')
+const keyOperationsChannel = computed(() =>
+  props.channels.find(channel => channel.channelUid === keyOperationsChannelUid.value)
+)
+const openKeyOperations = (channel: Channel) => {
+  keyOperationsChannelUid.value = channel.channelUid ?? ''
+  showKeyOperations.value = true
+}
 
 // Channel logs dialog state
 const showLogsDialog = ref(false)

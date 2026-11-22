@@ -97,6 +97,38 @@ beforeEach(() => {
   vi.resetAllMocks()
 })
 describe('model routing query lifecycle', () => {
+  it('preserves the Key and failed-attempt search when opening retained history', async () => {
+    vi.mocked(api.getModelRouting).mockResolvedValue(result('model'))
+    vi.mocked(api.getRoutingHistory).mockResolvedValue({
+      requests: [],
+      nextCursor: '',
+      from: '',
+      to: '',
+      coverage: result('model').coverage
+    })
+    const wrapper = render()
+    await wrapper.setProps({
+      historySelection: {
+        apiType: 'chat',
+        channelUid: 'channel',
+        channelName: 'Channel',
+        duration: 'retained',
+        keyId: 'a'.repeat(64),
+        q: 'failed-attempt'
+      }
+    })
+    await flushPromises()
+    expect(api.getRoutingHistory).toHaveBeenLastCalledWith(
+      'chat',
+      expect.objectContaining({
+        duration: 'retained',
+        channelUid: 'channel',
+        keyId: 'a'.repeat(64),
+        q: 'failed-attempt'
+      })
+    )
+    wrapper.unmount()
+  })
   it('shows persisted attempt details and filters the same channel by a stable Key ID', async () => {
     const keyId = 'a'.repeat(64)
     const page: RoutingRequestPage = {
