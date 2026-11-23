@@ -46,6 +46,7 @@ func TestResolveAgentModelProfile_LatestBuiltins(t *testing.T) {
 		{"claude-opus-5-5", "Claude Opus 5.5", 1000000},
 		{"claude-sonnet-5-5", "Claude Sonnet 5.5", 1000000},
 		{"claude-haiku-5-5", "Claude Haiku 5.5", 1000000},
+		{"glm-5.4[1m]", "GLM-5.4", 1048576},
 	} {
 		t.Run(tt.model, func(t *testing.T) {
 			profile := ResolveAgentModelProfile(tt.model, nil)
@@ -365,6 +366,27 @@ func TestResolveUpstreamCapability_MimoVisionCapabilities(t *testing.T) {
 	}
 	if !multimodal.Capability.Capabilities["audioInput"] {
 		t.Fatal("mimo-v2.5 should advertise audioInput")
+	}
+}
+
+func TestResolveUpstreamCapability_GLM54Builtin(t *testing.T) {
+	resolved := ResolveUpstreamCapability("GLM-5.4[1m]", nil, nil)
+	if !resolved.Known || resolved.Source != "builtin" {
+		t.Fatalf("source = %q known=%v, want builtin known", resolved.Source, resolved.Known)
+	}
+	if resolved.Capability.DisplayName != "GLM-5.4" {
+		t.Fatalf("DisplayName = %q, want GLM-5.4", resolved.Capability.DisplayName)
+	}
+	if !resolved.Capability.Capabilities["vision"] || !resolved.Capability.Capabilities["toolCalls"] || !resolved.Capability.Capabilities["reasoning"] {
+		t.Fatalf("missing GLM-5.4 capabilities: %v", resolved.Capability.Capabilities)
+	}
+	for _, effort := range []string{"low", "high", "max"} {
+		if !containsString(resolved.Capability.ReasoningEfforts, effort) {
+			t.Errorf("ReasoningEfforts = %v, want %s", resolved.Capability.ReasoningEfforts, effort)
+		}
+	}
+	if resolved.Capability.Pricing != nil {
+		t.Fatalf("Pricing = %+v, want unpublished", resolved.Capability.Pricing)
 	}
 }
 

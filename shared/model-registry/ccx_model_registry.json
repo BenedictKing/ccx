@@ -1164,6 +1164,26 @@
       ]
     },
     {
+      "patterns": ["(?:^|[-/])glm-5\\.4(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?:\\[1m\\])?(?=$|@)"],
+      "provider": "zai",
+      "displayName": "GLM-5.4",
+      "description": "Multimodal Loop Transformer flagship available in GLM Coding Plan. Supports 1M context via the [1m] suffix and low/high/max thinking intensity. Max output is provisionally inherited from GLM-5.3 pending an official GLM-5.4 model API page; standard API pricing is not yet published.",
+      "contextWindowTokens": 1048576,
+      "maxOutputTokens": 131072,
+      "thinkingMode": "thinking",
+      "reasoningEfforts": ["low", "high", "max"],
+      "capabilities": {
+        "toolCalls": true,
+        "reasoning": true,
+        "vision": true
+      },
+      "sources": [
+        "https://z.ai/blog/glm-5.4",
+        "https://docs.z.ai/devpack/latest-model",
+        "https://docs.bigmodel.cn/cn/coding-plan/latest-model"
+      ]
+    },
+    {
       "patterns": [
         "(?:^|[-/])glm-5\\.3(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?:\\[1m\\])?(?=$|@)",
         "(?:^|[-/])glm-5p3(?=$|@)"

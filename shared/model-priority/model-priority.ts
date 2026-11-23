@@ -77,6 +77,7 @@ const modelPriorityPatterns: RegExp[] = [
   /grok-4/i,
 
   // 智谱 GLM
+  /glm-?5\.4/i,
   /glm-?5\.3-flash/i,
   /glm-?5\.3/i,
   /glm-?5\.2/i,

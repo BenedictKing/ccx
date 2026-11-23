@@ -258,6 +258,12 @@ func BuiltinAgentModelProfiles() map[string]AgentModelProfile {
 			TruncationLimit:        10000,
 			ReasoningEfforts:       []string{"low", "medium", "high", "xhigh", "max"},
 		},
+		"glm-5.4*": {
+			DisplayName:         "GLM-5.4",
+			ContextWindowTokens: 1048576,
+			MaxOutputTokens:     131072,
+			ReasoningEfforts:    []string{"low", "high", "max"},
+		},
 		"claude-haiku-4-5*": {
 			DisplayName:         "Claude Haiku 4.5",
 			ContextWindowTokens: 200000,
