@@ -48,9 +48,10 @@
 
 ### 存储与查询
 
-- `routing_records_v1` 以逻辑请求 ID 保存请求及全部尝试的原子 JSON 快照；异步写入、关闭排空，启动加载最近窗口并将遗留在途标为未知。
+- `routing_records_v1` 以逻辑请求 ID 保存请求及全部尝试的原子 JSON 快照；异步写入、关闭排空。启动时分批将全部持久化遗留在途请求及其在途尝试标为未知，再加载最近内存窗口；超过内存窗口或容量的记录同样恢复，已完成尝试与已有耗时不得改写。
 - 模型去向接口为 `/api/{type}/models/routing`、`/requests`、`/requests/{id}`；首屏聚合使用同一快照和 `asOf`，键集游标绑定筛选与窗口。
-- 长期历史使用 `/history`，支持独立状态/搜索/Key 过滤。游标 15 分钟过期，改变筛选必须重新查询；410 与空结果区分。
+- 长期历史使用 `/history`，支持独立状态/搜索/Key 过滤。同一请求以内存快照为准，磁盘旧快照不得因状态、模型、搜索或 Key 筛选重新出现，也不得造成短页或漏页。
+- 游标固定首次查询的时间范围，15 分钟内可翻页；“全部保留范围”同样适用，不能因保留窗口随时间推进而提前拒绝。范围长度仍不得超过保留期，清理额外保留 15 分钟分页宽限；超时返回 410，改变筛选必须重新查询。
 - 请求历史与 Key 操作保留期由 `REQUEST_HISTORY_RETENTION_DAYS` 独立控制，默认 14 天、范围 1–366；聚合指标由 `METRICS_RETENTION_DAYS` 控制。
 - 最近失败摘要最多扫描该渠道最近 1000 个保留请求，包含最终成功请求中的失败尝试；达到扫描上限时展示覆盖提示。
 
@@ -66,6 +67,7 @@
 
 - 观测只保存模型、渠道、状态、时间、延迟、用量和必要调度元信息；不保存提示词、响应正文、完整 Key、Authorization 或带查询参数 URL。
 - Key 运维使用 SHA-256 Key ID 和脱敏显示，操作记录不保存完整 Key、上游错误正文或操作者身份；单管理密钥模式不能区分人员。
+- 渠道日志费用优先按已有指标身份匹配 Key 倍率；无法匹配指标身份的旧日志，仅在脱敏 Key 唯一对应当前凭证时使用其倍率，冲突或无法匹配时按倍率 1 估算，不套用其他 Key 的倍率。
 - 所有历史、Key 运维、诊断和报表接口要求管理员认证，并按入口协议隔离，跨协议 request ID 不可读取。
 - `/api/diagnostics` 只返回版本、策略、计数和时间等白名单字段，不包含 Key、正文、内部路径或环境变量。
 - SQLite 不可用时相关接口明确返回失败或 503，不把查询失败当成空库；指标可降级内存，但导出和长期历史能力随之受限。
@@ -90,10 +92,12 @@
 
 ## 7. 实现与测试索引
 
-- 请求记录与存储：`backend-go/internal/metrics/routing_observability.go`及测试。
-- 查询接口：`handlers/routing_handler.go`、`routing_handler_test.go`、`routing_integration_test.go`。
-- 渠道日志：`metrics/channel_log.go`；写入钩子位于 `handlers/common/routing_observation.go`；流式标识由 `handlers/common/channel_log_helper.go` 的 `WithStreamMode` 写入，单条费用在 `handlers/channel_logs_handler.go` 查询时估算；Web 展示为 `ChannelLogsDialog.vue` 及测试。
+- 请求记录与存储：`backend-go/internal/metrics/routing_observability.go`；启动恢复位于 `metrics/routing_recovery.go`，历史快照、分批恢复与清理宽限回归位于 `metrics/routing_history_regression_test.go`。
+- 查询接口：`handlers/routing_handler.go`、`routing_handler_test.go`、`routing_integration_test.go`；完整保留范围的游标寿命、过期和越界回归位于 `handlers/routing_history_regression_test.go`。
+- 渠道日志：`metrics/channel_log.go`；写入钩子位于 `handlers/common/routing_observation.go`；流式标识由 `handlers/common/channel_log_helper.go` 的 `WithStreamMode` 写入，单条费用在 `handlers/channel_logs_handler.go` 查询时估算，指标身份与脱敏 Key 冲突回归位于 `handlers/channel_logs_cost_test.go`；Web 展示为 `ChannelLogsDialog.vue` 及测试。
 - Key 运维：`handlers/key_observability.go`、`metrics/key_operations.go`及测试。
 - 运行诊断：`handlers/diagnostics.go`。
 - 用量报表：`handlers/usage_report_handler.go`、`usage_report_handler_test.go`、`group_multiplier_cost_test.go`。
 - Web 展示：`GlobalStatsChart.vue`、`ModelRoutingFlow.vue`、`ModelRoutingPanel.vue`、`KeyOperationsDialog.vue`及对应测试。
+
+2026-11-23 本地验收：定向回归、后端全量测试、metrics/handlers race、`go vet`、全栈与前端构建通过；使用临时 SQLite，不涉及真实上游或运行实例重启。运行实例生效与真实环境验收仍需另行执行。

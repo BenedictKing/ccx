@@ -247,7 +247,7 @@ func routingHistoryQuery(c *gin.Context, apiType string, store *metrics.RoutingS
 	var cursor routingHistoryCursor
 	if raw := c.Query("cursor"); raw != "" {
 		payload, err := base64.RawURLEncoding.DecodeString(raw)
-		if err != nil || json.Unmarshal(payload, &cursor) != nil || cursor.Fingerprint != fingerprint || cursor.IssuedAt.IsZero() || time.Since(cursor.IssuedAt) > metrics.RoutingSnapshotMaxAge {
+		if err != nil || json.Unmarshal(payload, &cursor) != nil || cursor.Fingerprint != fingerprint || cursor.IssuedAt.IsZero() || cursor.IssuedAt.After(time.Now().Add(time.Minute)) || time.Since(cursor.IssuedAt) > metrics.RoutingSnapshotMaxAge {
 			c.JSON(http.StatusGone, gin.H{"error": "Request history cursor expired; run the search again", "code": "routing_history_cursor_expired"})
 			return filter, nil, 0, false
 		}
@@ -257,7 +257,8 @@ func routingHistoryQuery(c *gin.Context, apiType string, store *metrics.RoutingS
 		cursor.IssuedAt = cursor.To
 		cursor.Fingerprint = fingerprint
 	}
-	if !cursor.From.Before(cursor.To) || cursor.To.After(time.Now().Add(time.Minute)) || time.Since(cursor.From) > store.MaxHistoryAge()+time.Minute {
+	maxAge := store.MaxHistoryAge()
+	if !cursor.From.Before(cursor.To) || cursor.To.After(time.Now().Add(time.Minute)) || cursor.To.Sub(cursor.From) > maxAge+time.Minute || time.Since(cursor.From) > maxAge+metrics.RoutingSnapshotMaxAge+time.Minute {
 		return bad()
 	}
 	return filter, &cursor, limit, true

@@ -161,11 +161,13 @@ func (s *RoutingStore) init() error {
 		return err
 	}
 	s.dropped.Store(dropped)
+	if err := s.recoverInterruptedRequests(); err != nil {
+		return fmt.Errorf("recover interrupted routing history: %w", err)
+	}
 	rows, err := s.db.Query("SELECT payload FROM routing_records_v1 WHERE received_at >= ? ORDER BY received_at DESC LIMIT ?", time.Now().Add(-routingHistoryWindow).UnixNano(), maxRoutingRequests+1)
 	if err != nil {
 		return err
 	}
-	var recovered []RoutingRequest
 	for rows.Next() {
 		var payload string
 		if err := rows.Scan(&payload); err != nil {
@@ -181,16 +183,6 @@ func (s *RoutingStore) init() error {
 			s.limited = true
 			continue
 		}
-		if request.Status == RoutingStatusInProgress {
-			now := time.Now()
-			request.Status, request.CompletedAt = RoutingStatusUnknown, &now
-			for i := range request.Attempts {
-				if request.Attempts[i].Status == RoutingStatusInProgress {
-					request.Attempts[i].Status, request.Attempts[i].CompletedAt = RoutingStatusUnknown, &now
-				}
-			}
-			recovered = append(recovered, request)
-		}
 		s.requests[request.GatewayRequestID] = request
 		s.order = append(s.order, request.GatewayRequestID)
 	}
@@ -201,11 +193,6 @@ func (s *RoutingStore) init() error {
 	}
 	if err != nil {
 		return err
-	}
-	for _, request := range recovered {
-		if err := s.persist(request); err != nil {
-			return err
-		}
 	}
 	return nil
 }
@@ -384,13 +371,19 @@ func (s *RoutingStore) QueryRequests(apiType string, from, to time.Time, filter 
 		memoryTo = now
 	}
 	requests := make([]RoutingRequest, 0, limit+1)
+	db := s.db
+	var memoryIDs []string
 	for _, request := range s.requests {
-		if request.APIType != apiType || request.ReceivedAt.Before(from) || !request.ReceivedAt.Before(memoryTo) || !afterRoutingCursor(request, after, afterID) || !matchesRoutingHistoryFilter(request, filter) {
+		if request.APIType != apiType || request.ReceivedAt.Before(from) || !request.ReceivedAt.Before(memoryTo) || !afterRoutingCursor(request, after, afterID) {
 			continue
 		}
-		requests = append(requests, cloneRoutingRequest(request))
+		if db != nil {
+			memoryIDs = append(memoryIDs, request.GatewayRequestID)
+		}
+		if matchesRoutingHistoryFilter(request, filter) {
+			requests = append(requests, cloneRoutingRequest(request))
+		}
 	}
-	db := s.db
 	s.mu.RUnlock()
 
 	sortRoutingRequests(requests)
@@ -398,21 +391,12 @@ func (s *RoutingStore) QueryRequests(apiType string, from, to time.Time, filter 
 		requests = requests[:limit+1]
 	}
 	if db != nil {
-		persisted, err := queryRoutingRequests(db, apiType, from, to, filter, after, afterID, limit+1)
+		// 在 SQL 分页前排除全部内存身份，避免旧快照重新命中筛选或占满候选页。
+		persisted, err := queryRoutingRequests(db, apiType, from, to, filter, after, afterID, limit+1, memoryIDs)
 		if err != nil {
 			return nil, false, coverage, fmt.Errorf("query persistent routing history: %w", err)
 		}
-		byID := make(map[string]RoutingRequest, len(requests)+len(persisted))
-		for _, request := range persisted {
-			byID[request.GatewayRequestID] = request
-		}
-		for _, request := range requests {
-			byID[request.GatewayRequestID] = request
-		}
-		requests = requests[:0]
-		for _, request := range byID {
-			requests = append(requests, request)
-		}
+		requests = append(requests, persisted...)
 	}
 	sortRoutingRequests(requests)
 	hasMore := len(requests) > limit
@@ -422,10 +406,18 @@ func (s *RoutingStore) QueryRequests(apiType string, from, to time.Time, filter 
 	return requests, hasMore, routingCoverageForRequests(coverage, requests), nil
 }
 
-func queryRoutingRequests(db *sql.DB, apiType string, from, to time.Time, filter RoutingHistoryFilter, after time.Time, afterID string, limit int) ([]RoutingRequest, error) {
+func queryRoutingRequests(db *sql.DB, apiType string, from, to time.Time, filter RoutingHistoryFilter, after time.Time, afterID string, limit int, excludeIDs []string) ([]RoutingRequest, error) {
+	if excludeIDs == nil {
+		excludeIDs = []string{}
+	}
+	excluded, err := json.Marshal(excludeIDs)
+	if err != nil {
+		return nil, err
+	}
 	pattern := "%" + escapeLike(strings.ToLower(strings.TrimSpace(filter.Search))) + "%"
 	query := `SELECT r.payload FROM routing_records_v1 AS r
 		WHERE r.api_type = ? AND r.received_at >= ? AND r.received_at < ?
+		AND r.request_id NOT IN (SELECT value FROM json_each(?))
 		AND (? = '' OR json_extract(r.payload, '$.status') = ?)
 		AND (? = '' OR json_extract(r.payload, '$.requestedModel') = ?)
 		AND ((? = '' AND ? = '' AND ? = '') OR EXISTS (
@@ -450,6 +442,7 @@ func queryRoutingRequests(db *sql.DB, apiType string, from, to time.Time, filter
 		ORDER BY r.received_at DESC, r.request_id DESC LIMIT ?`
 	rows, err := db.Query(query,
 		apiType, from.UnixNano(), to.UnixNano(),
+		string(excluded),
 		filter.Status, filter.Status,
 		filter.RequestedModel, filter.RequestedModel,
 		filter.ChannelUID, filter.SentModel, filter.KeyID, filter.ChannelUID, filter.ChannelUID, filter.SentModel, filter.SentModel, filter.KeyID, filter.KeyID,
@@ -556,7 +549,7 @@ func (s *RoutingStore) persist(request RoutingRequest) error {
 }
 
 func (s *RoutingStore) cleanupHistory(now time.Time) error {
-	_, err := s.db.Exec("DELETE FROM routing_records_v1 WHERE received_at < ?", now.Add(-time.Duration(s.retentionDays)*24*time.Hour).UnixNano())
+	_, err := s.db.Exec("DELETE FROM routing_records_v1 WHERE received_at < ?", now.Add(-time.Duration(s.retentionDays)*24*time.Hour-RoutingSnapshotMaxAge).UnixNano())
 	return err
 }
 func (s *RoutingStore) writeLoop() {

@@ -33,9 +33,44 @@ func TestApplyChannelLogCosts(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			logEntry := tc.log
-			applyChannelLogCosts([]*metrics.ChannelLog{&logEntry}, upstream, nil)
+			applyChannelLogCosts([]*metrics.ChannelLog{&logEntry}, upstream, "chat", nil)
 			if math.Abs(logEntry.CostUSD-tc.wantUSD) > 1e-9 {
 				t.Fatalf("CostUSD = %v, want %v", logEntry.CostUSD, tc.wantUSD)
+			}
+		})
+	}
+}
+
+func TestApplyChannelLogCostsSeparatesCollidingKeyMasks(t *testing.T) {
+	discountKey, standardKey := "sk-abc-discount-xyz", "sk-abc-standard-xyz"
+	if utils.MaskAPIKey(discountKey) != utils.MaskAPIKey(standardKey) {
+		t.Fatal("fixture does not collide")
+	}
+	discount, price := 0.5, 2.0
+	upstream := &config.UpstreamConfig{
+		BaseURL: "https://relay.example", APIKeys: []string{discountKey, standardKey},
+		APIKeyConfigs:     []config.APIKeyConfig{{Key: discountKey, GroupMultiplier: &discount}},
+		ModelCapabilities: map[string]config.UpstreamModelCapability{"private-model": {Pricing: &config.ModelPricing{Currency: "USD", InputCacheMissPrice: &price}}},
+	}
+	for _, tc := range []struct {
+		name, metricsKey string
+		want             float64
+	}{
+		{"discount", metrics.GenerateMetricsIdentityKey(upstream.BaseURL, discountKey, "chat"), 1},
+		{"standard", metrics.GenerateMetricsIdentityKey(upstream.BaseURL, standardKey, "chat"), 2},
+		{"legacy-ambiguous", "", 2},
+		{"unknown-identity", "unknown", 2},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			log := &metrics.ChannelLog{MetricsKey: tc.metricsKey, Model: "private-model", KeyMask: utils.MaskAPIKey(standardKey), InputTokens: 1_000_000}
+			if tc.metricsKey != "" {
+				store := metrics.NewChannelLogStore()
+				store.Record(tc.metricsKey, log)
+				log = store.Get(tc.metricsKey)[0]
+			}
+			applyChannelLogCosts([]*metrics.ChannelLog{log}, upstream, "chat", nil)
+			if math.Abs(log.CostUSD-tc.want) > 1e-9 {
+				t.Fatalf("CostUSD=%v want=%v", log.CostUSD, tc.want)
 			}
 		})
 	}
