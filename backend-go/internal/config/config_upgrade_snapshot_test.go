@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"sort"
 	"testing"
 )
 
@@ -57,6 +58,13 @@ func TestLegacyConfigSnapshotUpgrade(t *testing.T) {
 			}
 			for i, old := range pair.before {
 				current := pair.after[i]
+				// 未配置的优先级在升级时补写为显式值；已有正数值保持不变。
+				if old.Priority > 0 && old.Priority != current.Priority {
+					t.Errorf("%s: %s[%d].priority 发生变化", stage, pair.kind, i)
+				}
+				if old.Priority <= 0 && current.Priority <= 0 {
+					t.Errorf("%s: %s[%d].priority 未补写显式优先级", stage, pair.kind, i)
+				}
 				for _, field := range []struct {
 					name string
 					old  any
@@ -69,7 +77,6 @@ func TestLegacyConfigSnapshotUpgrade(t *testing.T) {
 					{"apiKeyConfigs", old.APIKeyConfigs, current.APIKeyConfigs},
 					{"disabledApiKeys", old.DisabledAPIKeys, current.DisabledAPIKeys},
 					{"historicalApiKeys", old.HistoricalAPIKeys, current.HistoricalAPIKeys},
-					{"priority", old.Priority, current.Priority},
 					{"supportedModels", old.SupportedModels, current.SupportedModels},
 					{"routePrefix", old.RoutePrefix, current.RoutePrefix},
 					{"customHeaders", old.CustomHeaders, current.CustomHeaders},
@@ -90,6 +97,10 @@ func TestLegacyConfigSnapshotUpgrade(t *testing.T) {
 						t.Errorf("%s: %s[%d].modelMapping 中已有映射发生变化", stage, pair.kind, i)
 					}
 				}
+			}
+			// 升级前后的调度顺序必须一致；未配置的优先级按 2.9 规则回退为数组下标。
+			if order := effectiveChannelOrder(pair.after); !reflect.DeepEqual(order, effectiveChannelOrder(pair.before)) {
+				t.Errorf("%s: %s 渠道顺序在升级后发生变化", stage, pair.kind)
 			}
 		}
 	}
@@ -133,6 +144,19 @@ func TestLegacyConfigSnapshotUpgrade(t *testing.T) {
 	}
 }
 
+// effectiveChannelOrder 返回按有效优先级得到的调度顺序，元素为渠道数组下标。
+// 未配置的优先级回退为数组下标，同值保持数组顺序，与调度器的排序一致。
+func effectiveChannelOrder(channels []UpstreamConfig) []int {
+	order := make([]int, len(channels))
+	for i := range order {
+		order[i] = i
+	}
+	sort.SliceStable(order, func(a, b int) bool {
+		return GetChannelPriority(&channels[order[a]], order[a]) < GetChannelPriority(&channels[order[b]], order[b])
+	})
+	return order
+}
+
 func checkLegacyJSONFields(t *testing.T, source, saved []byte) {
 	t.Helper()
 	var oldRoot, newRoot map[string]json.RawMessage
@@ -145,6 +169,12 @@ func checkLegacyJSONFields(t *testing.T, source, saved []byte) {
 	for field, oldRaw := range oldRoot {
 		switch field {
 		case "upstream", "responsesUpstream", "chatUpstream", "geminiUpstream", "imagesUpstream", "vectorsUpstream", "currentUpstream", "currentResponsesUpstream":
+			continue
+		case "overrideTtlMinutes":
+			// 驾驶舱 TTL 配置随驾驶舱退役一并删除，属于有意移除的 2.9 字段。
+			if _, kept := newRoot[field]; kept {
+				t.Errorf("已退役的全局设置 %s 不应保留", field)
+			}
 			continue
 		}
 		var oldValue, newValue any

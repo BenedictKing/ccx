@@ -16,10 +16,12 @@ func TestLoadConfigNormalizesChannelPriorities(t *testing.T) {
 		in   []int
 		want []int
 	}{
-		{"mixed", []int{0, 4, 0, 2}, []int{5, 4, 6, 2}},
+		{"mixed", []int{0, 4, 0, 2}, []int{1, 4, 2, 2}},
 		{"legacy", []int{0, 0, 0}, []int{1, 2, 3}},
 		{"explicit", []int{7, 2}, []int{7, 2}},
-		{"nonpositive", []int{-1, 2}, []int{3, 2}},
+		{"nonpositive", []int{-1, 2}, []int{1, 2}},
+		{"unconfigured before larger explicit", []int{10, 0, 0, 2}, []int{10, 1, 2, 2}},
+		{"trailing unconfigured", []int{3, 1, 0}, []int{3, 1, 2}},
 		{"empty", []int{}, []int{}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -65,6 +67,18 @@ func TestLoadConfigNormalizesChannelPriorities(t *testing.T) {
 				}
 				if !reflect.DeepEqual(got, tt.want) {
 					t.Errorf("%s priorities = %v, want %v", protocol, got, tt.want)
+				}
+				// 补写只把“未配置回退为数组下标”落成显式值，补写前后的调度顺序必须一致。
+				legacy := make([]UpstreamConfig, len(tt.in))
+				for i, priority := range tt.in {
+					legacy[i].Priority = priority
+				}
+				loaded := make([]UpstreamConfig, len(channels))
+				for i, channel := range channels {
+					loaded[i].Priority = channel.Priority
+				}
+				if order := effectiveChannelOrder(loaded); !reflect.DeepEqual(order, effectiveChannelOrder(legacy)) {
+					t.Errorf("%s 顺序在补写后变化: %v -> %v", protocol, effectiveChannelOrder(legacy), order)
 				}
 			}
 			before, err := os.Stat(path)

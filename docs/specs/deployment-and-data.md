@@ -73,6 +73,7 @@ CCX 以单个 Go 进程承载嵌入 Web UI、管理 API 和六类代理 API，�
 | `logs/app.log*`                 | 默认单文件 100MB、10 个备份、30 天、gzip 压缩，可禁用文件输出。                                   |
 
 - 配置加载应用缺省值、UID、serviceType、旧字段和 priority 迁移；保存迁移前先备份。热重载忽略自身写入摘要，外部修改成功后通知运行组件。
+- priority 迁移只为未配置（`<= 0`）的渠道补写显式优先级，已有正数值保持不变，补写前后调度顺序一致；全部未配置的协议按原数组顺序分配 `1..N`。已随驾驶舱退役的 `overrideTtlMinutes` 在迁移保存时移除，其余 2.9 字段保留。
 - 含 `channelsV3` 或 `channelAuthoritativeVersion` 的 3.0 权威配置直接拒载，保护原文件；当前精简版只接受 2.9 协议渠道格式。
 - SQLite 使用增量 schema 迁移和身份键迁移；升级验证使用真实快照副本，不在正式数据库上演练。
 - 新字段必须覆盖深拷贝、变更检测、导入/导出、备份恢复和旧配置缺省读取，防止热重载或保存时丢字段。
@@ -98,7 +99,7 @@ CCX 以单个 Go 进程承载嵌入 Web UI、管理 API 和六类代理 API，�
 | 访问密钥矩阵       | 主/额外代理 Key 权限正确，额外 Key 无管理权，缺独立管理 Key 启动失败。        |
 | HTTP/HTTPS         | 同端口兼容，证书成对校验，自签名 SAN 正确，非法配置拒绝启动。                 |
 | 配置保存与热重载   | 0600/0700、备份上限、原子/副本保存、自写忽略和外部重载正确。                  |
-| 2.9 与 3.0 配置    | 2.9 快照迁移保留字段；channelsV3/authoritativeVersion 拒载且原文件不变。      |
+| 2.9 与 3.0 配置    | 2.9 快照迁移保留字段和顺序；channelsV3/authoritativeVersion 拒载且原文件不变。|
 | 数据降级与恢复     | SQLite 故障有诊断，内存降级边界明确；各保留期和恢复检查点正确。               |
 | 关闭与回滚         | 队列排空、状态 flush、后台停止；旧版本回滚不同时遗留不兼容新配置。            |
 
@@ -108,7 +109,7 @@ CCX 以单个 Go 进程承载嵌入 Web UI、管理 API 和六类代理 API，�
 
 - 启动、CLI 和关闭：`backend-go/main.go`。
 - 环境变量与密钥校验：`config/env.go`及 `middleware/auth_test.go`。
-- 配置加载与迁移：`config/config_loader.go`、`config_upgrade_29_test.go`、`config_upgrade_snapshot_test.go`。
+- 配置加载与迁移：`config/config_loader.go`、`config_upgrade_29_test.go`、`config_priority_migration_test.go`、`config_upgrade_snapshot_test.go`。
 - 配置备份：`config/config_loader.go`的 save/backup 实现。
 - 指标与历史：`metrics/sqlite_store.go`、`routing_observability.go`及迁移测试。
 - Thinking/会话：`thinkingcache/thinking_cache.go`、`conversation/persistence.go`。

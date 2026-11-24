@@ -579,24 +579,31 @@ func (cm *ConfigManager) validateChannelKeys() bool {
 	return modified
 }
 
-// normalizeChannelPriorities 将未配置的优先级按数组顺序排到显式优先级之后。
-// 六类渠道分别归一化，保留已有正数优先级；全未配置时按旧索引顺序分配 1..N。
+// normalizeChannelPriorities 为未配置的优先级补写显式值，且不改变补写前的调度顺序。
+// 调度把未配置（<=0）的优先级回退为数组下标：混合配置因此按下标补写，下标 0 取 1 仍排最前。
+// 六类渠道分别归一化，保留已有正数优先级；全未配置时没有显式优先级需要穿插，按旧索引顺序分配 1..N。
 func (cm *ConfigManager) normalizeChannelPriorities() bool {
 	changed := false
 	normalize := func(channels []UpstreamConfig) {
-		maxPriority := 0
-		for _, ch := range channels {
-			if ch.Priority > maxPriority {
-				maxPriority = ch.Priority
+		hasExplicit := false
+		for i := range channels {
+			if channels[i].Priority > 0 {
+				hasExplicit = true
+				break
 			}
 		}
 		for i := range channels {
 			if channels[i].Priority > 0 {
 				continue
 			}
-			maxPriority++
-			channels[i].Priority = maxPriority
-			changed = true
+			priority := i + 1
+			if hasExplicit {
+				priority = max(i, 1)
+			}
+			if channels[i].Priority != priority {
+				channels[i].Priority = priority
+				changed = true
+			}
 		}
 	}
 	normalize(cm.config.Upstream)
