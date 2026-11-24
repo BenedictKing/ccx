@@ -49,6 +49,8 @@ jobs:
           file: Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
+          # 阿里云个人版镜像仓库不接受 buildx 默认附带的证明清单（application/vnd.oci.empty.v1+json）。
+          provenance: false
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
