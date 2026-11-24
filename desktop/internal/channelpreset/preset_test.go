@@ -46,6 +46,12 @@ func TestBuildPayload(t *testing.T) {
 				"opus":   "deepseek-flash",
 				"sonnet": "deepseek-flash",
 			},
+			wantReasoning: map[string]string{
+				"fable":  "max",
+				"haiku":  "high",
+				"opus":   "max",
+				"sonnet": "max",
+			},
 		},
 		{
 			name:          "deepseek chat (openai endpoint)",
@@ -224,9 +230,15 @@ func TestBuildPayload(t *testing.T) {
 			wantNormalizeSystem: true,
 			wantModelMap: map[string]string{
 				"fable":  "kimi-k3.1-pro",
-				"haiku":  "kimi-k3.1-pro",
+				"haiku":  "kimi-k3",
 				"opus":   "kimi-k3.1-pro",
 				"sonnet": "kimi-k3.1-pro",
+			},
+			wantReasoning: map[string]string{
+				"fable":  "max",
+				"haiku":  "high",
+				"opus":   "max",
+				"sonnet": "max",
 			},
 		},
 		{

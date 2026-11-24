@@ -35,11 +35,17 @@ describe('网关一键预设', () => {
           expect(Object.fromEntries(rows.value.map(row => [row.source, row.target]))).toEqual({
             fable: 'glm-5.4', haiku: 'glm-5.3-flash', opus: 'glm-5.4', sonnet: 'glm-5.3-flash',
           })
-          expect(Object.fromEntries(rows.value.map(row => [row.source, row.reasoning]))).toEqual({
-            fable: 'max', haiku: 'high', opus: 'max', sonnet: 'max',
+        } else if (provider === 'kimi' && channelType === 'messages') {
+          expect(Object.fromEntries(rows.value.map(row => [row.source, row.target]))).toEqual({
+            fable: 'kimi-k3.1-pro', haiku: 'kimi-k3', opus: 'kimi-k3.1-pro', sonnet: 'kimi-k3.1-pro',
           })
         } else {
           expect(rows.value.every(row => row.target === target)).toBe(true)
+        }
+        if (channelType === 'messages') {
+          expect(Object.fromEntries(rows.value.map(row => [row.source, row.reasoning]))).toEqual({
+            fable: 'max', haiku: 'high', opus: 'max', sonnet: 'max',
+          })
         }
         expect(form.serviceType).toBe(serviceType)
         expect(form.noVision).toBe(provider === 'glm')

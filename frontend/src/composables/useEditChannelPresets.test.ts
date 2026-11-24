@@ -35,9 +35,15 @@ describe('网关一键预设', () => {
           expect(form.modelMapping).toEqual({
             fable: 'glm-5.4', haiku: 'glm-5.3-flash', opus: 'glm-5.4', sonnet: 'glm-5.3-flash',
           })
-          expect(form.reasoningMapping).toEqual({ fable: 'max', haiku: 'high', opus: 'max', sonnet: 'max' })
+        } else if (provider === 'kimi' && channelType === 'messages') {
+          expect(form.modelMapping).toEqual({
+            fable: 'kimi-k3.1-pro', haiku: 'kimi-k3', opus: 'kimi-k3.1-pro', sonnet: 'kimi-k3.1-pro',
+          })
         } else {
           expect(Object.values(form.modelMapping)).toEqual(Array(channelType === 'responses' ? 5 : 4).fill(target))
+        }
+        if (channelType === 'messages') {
+          expect(form.reasoningMapping).toEqual({ fable: 'max', haiku: 'high', opus: 'max', sonnet: 'max' })
         }
         expect(form.serviceType).toBe(serviceType)
         expect(form.noVision).toBe(provider === 'glm')

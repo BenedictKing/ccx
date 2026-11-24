@@ -31,7 +31,12 @@ export const claudeMessagesPresets: Record<string, ClaudeMessagesPreset> = {
       "opus": "deepseek-flash",
       "sonnet": "deepseek-flash"
     },
-    "reasoningMapping": {},
+    "reasoningMapping": {
+      "fable": "max",
+      "haiku": "high",
+      "opus": "max",
+      "sonnet": "max"
+    },
     "reasoningParamStyle": "reasoning",
     "authHeader": "",
     "passbackReasoningContent": false,
@@ -137,11 +142,16 @@ export const claudeMessagesPresets: Record<string, ClaudeMessagesPreset> = {
   "kimi": {
     "modelMapping": {
       "fable": "kimi-k3.1-pro",
-      "haiku": "kimi-k3.1-pro",
+      "haiku": "kimi-k3",
       "opus": "kimi-k3.1-pro",
       "sonnet": "kimi-k3.1-pro"
     },
-    "reasoningMapping": {},
+    "reasoningMapping": {
+      "fable": "max",
+      "haiku": "high",
+      "opus": "max",
+      "sonnet": "max"
+    },
     "reasoningParamStyle": "reasoning_effort",
     "authHeader": "",
     "passbackReasoningContent": false,

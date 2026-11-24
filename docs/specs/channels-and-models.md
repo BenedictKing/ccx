@@ -33,6 +33,7 @@ Web/Desktop 的渠道列表按协议分组；新增、复制和编辑使用同�
 - 管理接口返回渠道视图时不得暴露完整上游 Key；真实 Key 只在新增/编辑所需的最小范围内处理。
 - Vectors 的 `serviceType` 固定为 OpenAI 兼容；没有默认模型候选，模型可拉取或手工输入。Embedding 配置键匹配映射后的实际模型。
 - 编辑渠道的 GLM 一键模型重定向模板按入口分层：Messages 入口将 `fable`/`opus` 映射到 `glm-5.4`，将 `haiku`/`sonnet` 映射到 `glm-5.3-flash`，推理档位分别为 `max`/`max`/`high`/`max`；Responses 入口将 `astra`/`codex-auto-review`/`luna`/`sol`/`terra` 映射到 `glm-5.4`。应用模板只更新当前表单草稿，不改写已保存渠道，其他厂商模板保持原映射。
+- Messages 的 DeepSeek 模板将四个源模型映射到 `deepseek-flash`；Kimi 模板将 `haiku` 映射到 `kimi-k3`，其余源模型映射到 `kimi-k3.1-pro`。两者均将 `haiku` 推理档位设为 `high`，其余源模型设为 `max`；Responses 模板保持原映射与推理配置。
 
 ## 3. 模型解析与能力判定
 
@@ -114,5 +115,5 @@ Web/Desktop 还需验证长模型名、加载、空态、部分失败、无 Key�
 - 连通性测试：`capability_test_handler.go`、`capability_test_jobs.go`、`capability_test_http_test.go`。
 - Web 表单与结果：`EditChannelModal.vue`、`CapabilityTestDialog.vue`及组件测试。
 - Desktop 对应实现：`desktop/frontend/src/components/`中的渠道编辑、发现和连通性组件。
-- GLM 一键模板源：`shared/channel-presets/claude-messages.json`、`shared/channel-presets/codex-responses.json`；生成物由 `scripts/generate-channel-presets.mjs` 同步到 Web、Desktop 与 Desktop Go。
-- 模板回归测试：`useEditChannelPresets.test.ts`、`useChannelEditPresets.test.ts`、`desktop/internal/channelpreset/glm_compat_test.go`；本次仅做本地生成与自动化检查，未执行 GLM 真实上游请求验收。
+- 一键模板源：`shared/channel-presets/claude-messages.json`、`shared/channel-presets/codex-responses.json`；生成物由 `scripts/generate-channel-presets.mjs` 同步到 Web、Desktop 与 Desktop Go。
+- 模板回归测试：`useEditChannelPresets.test.ts`、`useChannelEditPresets.test.ts`、`desktop/internal/channelpreset/preset_test.go`、`desktop/internal/channelpreset/glm_compat_test.go`；本次仅做本地生成与自动化检查，未执行 DeepSeek、Kimi、GLM 真实上游请求验收。

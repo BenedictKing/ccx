@@ -8,6 +8,12 @@
         "opus": "deepseek-flash",
         "sonnet": "deepseek-flash"
       },
+      "reasoningMapping": {
+        "fable": "max",
+        "haiku": "high",
+        "opus": "max",
+        "sonnet": "max"
+      },
       "reasoningParamStyle": "reasoning",
       "passbackReasoningContent": false,
       "passbackThinkingBlocks": false,
@@ -65,9 +71,15 @@
     "kimi": {
       "modelMapping": {
         "fable": "kimi-k3.1-pro",
-        "haiku": "kimi-k3.1-pro",
+        "haiku": "kimi-k3",
         "opus": "kimi-k3.1-pro",
         "sonnet": "kimi-k3.1-pro"
+      },
+      "reasoningMapping": {
+        "fable": "max",
+        "haiku": "high",
+        "opus": "max",
+        "sonnet": "max"
       },
       "reasoningParamStyle": "reasoning_effort",
       "normalizeSystemRoleToTopLevel": true
