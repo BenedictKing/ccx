@@ -189,6 +189,41 @@ describe('SubagentRoutingPanel', () => {
     expect(wrapper.findAll('.model-preview')[0].text()).toContain('sol-target')
   })
 
+  it('普通请求禁用的渠道仍留在序列里，并随保存整表写回', async () => {
+    const data = cloneView()
+    data.policy.channels.splice(1, 0, { channelUid: 'c', enabled: true })
+    data.channels.splice(1, 0, {
+      ...data.channels[1],
+      channelUid: 'c',
+      channelIndex: 2,
+      channelName: 'C',
+      status: 'disabled',
+      effectiveState: 'disabled',
+      resolvedModel: 'actual-c'
+    })
+    vi.mocked(api.getSubagentRouting).mockResolvedValue(data)
+    vi.mocked(api.updateSubagentRouting).mockResolvedValue(data)
+    const wrapper = mountPanel()
+    await flushPromises()
+    expect(wrapper.text()).toContain('status.disabled')
+    expect(wrapper.findAll('.sa-name').map(name => name.text())).toEqual(['A', 'C', 'B'])
+    await wrapper.findAll('.policy-switch')[0].setValue(false)
+    await wrapper
+      .findAll('button')
+      .find(button => button.text().includes('app.actions.save'))!
+      .trigger('click')
+    await flushPromises()
+    // 保存会整表覆盖策略：漏写 C 会让这个子代理已启用的渠道被静默移出
+    expect(api.updateSubagentRouting).toHaveBeenCalledWith('responses', 'r1', {
+      model: 'sol',
+      channels: [
+        { channelUid: 'a', enabled: false },
+        { channelUid: 'c', enabled: true },
+        { channelUid: 'b', enabled: true }
+      ]
+    })
+  })
+
   it('协议切换后忽略前一协议的延迟保存响应', async () => {
     let resolveSave!: (_view: SubagentRoutingView) => void
     vi.mocked(api.updateSubagentRouting).mockImplementation(() => new Promise(resolve => { resolveSave = resolve }))

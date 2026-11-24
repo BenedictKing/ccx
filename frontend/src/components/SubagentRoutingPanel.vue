@@ -1,116 +1,131 @@
 <template>
-  <v-card elevation="0" rounded="lg" variant="flat" class="subagent-panel mb-6">
-    <v-alert v-if="!activated && legacyModels.length" type="info" variant="tonal" density="comfortable" class="mb-4">
-      <div>{{ t('subagentRouting.legacyHint') }}</div>
-      <div v-if="legacyMixed" class="mt-2 d-flex flex-wrap ga-2">
-        <v-chip v-for="item in legacyModels" :key="item.channelUid" size="small" variant="outlined">
-          {{ item.channelName }}: {{ item.model }}
-        </v-chip>
+  <div class="subagent-panel">
+    <div v-if="!activated && legacyModels.length" class="sa-notice sa-notice--info">
+      <v-icon size="small" class="sa-notice__icon">mdi-information</v-icon>
+      <div>
+        <div>{{ t('subagentRouting.legacyHint') }}</div>
+        <div v-if="legacyMixed" class="sa-notice__chips">
+          <v-chip v-for="item in legacyModels" :key="item.channelUid" size="small" variant="outlined" class="sa-badge">
+            {{ item.channelName }}: {{ item.model }}
+          </v-chip>
+        </div>
       </div>
-    </v-alert>
-    <v-alert v-if="errorMessage" type="error" variant="tonal" density="comfortable" class="mb-4" closable @click:close="errorMessage = ''">
+    </div>
+    <v-alert v-if="errorMessage" type="error" variant="tonal" density="comfortable" class="sa-alert" closable @click:close="errorMessage = ''">
       {{ errorMessage }}
     </v-alert>
 
-    <v-skeleton-loader v-if="loading && !channels.length" type="list-item-three-line" />
+    <v-skeleton-loader v-if="loading && !channels.length" type="list-item-three-line" class="sa-skeleton" />
     <template v-else>
-      <section class="sa-model-toolbar">
-      <v-autocomplete
-        v-model="draftModel"
-        :items="modelOptions"
-        :return-object="false"
-        :loading="fetchingModels"
-        clearable
-        :disabled="saving || loading"
-        :label="t('subagentRouting.modelLabel')"
-        :hint="t('subagentRouting.modelHint')"
-        persistent-hint
-        variant="outlined"
-        density="comfortable"
-        prepend-inner-icon="mdi-robot-outline"
-        class="model-field sa-model"
-        :placeholder="t('subagentRouting.keepRequestModel')"
-        @update:menu="onModelMenu"
-      >
-        <template #selection="{ internalItem }">
-          <span class="v-autocomplete__selection-text">{{ internalItem.title }}</span>
-        </template>
-      </v-autocomplete>
+      <section class="sa-config sa-model-toolbar">
+        <div class="sa-config__col">
+          <div class="sa-config__label">
+            <span class="sa-config__mark"><v-icon size="14">mdi-robot-outline</v-icon></span>
+            {{ t('subagentRouting.modelLabel') }}
+          </div>
+          <v-autocomplete
+            v-model="draftModel"
+            :items="modelOptions"
+            :return-object="false"
+            :loading="fetchingModels"
+            clearable
+            :disabled="saving || loading"
+            :placeholder="t('subagentRouting.keepRequestModel')"
+            :aria-label="t('subagentRouting.modelLabel')"
+            :title="t('subagentRouting.modelHint')"
+            variant="outlined"
+            density="compact"
+            prepend-inner-icon="mdi-robot-outline"
+            hide-details
+            class="sa-field sa-model"
+            @update:menu="onModelMenu"
+          >
+            <template #selection="{ internalItem }">
+              <span class="v-autocomplete__selection-text">{{ internalItem.title }}</span>
+            </template>
+          </v-autocomplete>
+        </div>
         <v-text-field
           v-model="searchQuery"
           density="compact"
           variant="outlined"
           :placeholder="t('orchestration.searchPlaceholder')"
+          :aria-label="t('orchestration.searchPlaceholder')"
           prepend-inner-icon="mdi-magnify"
           clearable
           hide-details
           single-line
+          :disabled="saving || loading"
           class="sa-search"
         />
       </section>
-      <div v-if="modelsUnavailable" class="text-caption text-warning mt-2">{{ t('subagentRouting.modelsUnavailable') }}</div>
+      <div v-if="modelsUnavailable" class="text-caption text-warning mb-2">{{ t('subagentRouting.modelsUnavailable') }}</div>
       <v-divider />
-
-      <div class="sa-sequence-toolbar">
-        <div class="text-subtitle-2 text-medium-emphasis d-flex align-center flex-shrink-0 text-no-wrap">
-          <v-icon size="small" class="mr-1" color="success">mdi-play-circle</v-icon>
-          {{ t('subagentRouting.channelSequence') }}
-          <v-chip size="x-small" class="ml-2">{{ enabledCount }}</v-chip>
+      <div class="sa-list-wrap">
+        <div class="sa-sequence-toolbar">
+          <div class="text-subtitle-2 text-medium-emphasis d-flex align-center flex-shrink-0 text-no-wrap">
+            <v-icon size="small" class="mr-1" color="success">mdi-play-circle</v-icon>
+            {{ t('subagentRouting.channelSequence') }}
+            <v-chip size="x-small" class="ml-2">{{ enabledCount }}</v-chip>
+          </div>
+        </div>
+        <div v-if="!enabledCount" class="sa-notice sa-notice--warn">
+          <v-icon size="small" class="sa-notice__icon">mdi-alert</v-icon>
+          <span>{{ t('subagentRouting.noEnabled') }}</span>
         </div>
 
+        <draggable
+          v-model="channels"
+          item-key="channelUid"
+          handle=".drag-handle"
+          ghost-class="ghost"
+          :disabled="searchActive || saving"
+          class="sa-list"
+        >
+          <template #item="{ element, index }">
+            <div v-show="matchesSearch(element)" class="sa-row" :class="{ 'sa-row--off': !element.enabled, 'sa-row--paused': element.status === 'suspended' }">
+              <span class="sa-drag drag-handle" :title="t('subagentRouting.priorityHint')" :aria-label="t('subagentRouting.priorityHint')">
+                <v-icon size="small">mdi-drag-vertical</v-icon>
+              </span>
+              <span class="sa-rank">{{ index + 1 }}</span>
+              <div class="sa-row__body">
+                <div class="sa-row__title">
+                  <span class="sa-name">{{ element.channelName }}</span>
+                  <v-chip v-if="element.status !== 'active'" size="x-small" color="warning" variant="tonal" class="sa-badge sa-badge--warn">
+                    {{ t(`status.${element.status === 'suspended' ? 'paused' : element.status}`) }}
+                  </v-chip>
+                </div>
+              </div>
+              <div class="sa-row__model">
+                <div v-if="normalizedModel" class="model-preview sa-preview">
+                  <span class="sa-preview__mark">↳</span>
+                  <span>{{ previewModel(element) }}</span>
+                  <span v-if="previewModel(element) !== normalizedModel" class="sa-preview__from">{{ normalizedModel }} →</span>
+                  <v-icon v-if="!element.modelSupported" size="14" color="warning" class="ml-1">mdi-alert-circle-outline</v-icon>
+                </div>
+              </div>
+              <div class="sa-row__tools">
+                <div class="sa-toggle" :title="t('subagentRouting.channelEnabled')">
+                  <span class="sa-toggle__text">{{ t('subagentRouting.enabledShort') }}</span>
+                  <v-switch v-model="element.enabled" color="primary" density="compact" hide-details inset :disabled="saving" :aria-label="t('subagentRouting.channelEnabled')" />
+                </div>
+              </div>
+            </div>
+          </template>
+        </draggable>
+
+        <div v-if="!channels.length" class="sa-empty">{{ t('subagentRouting.noChannels') }}</div>
       </div>
-      <div v-if="!enabledCount" class="text-caption text-warning mb-2">{{ t('subagentRouting.noEnabled') }}</div>
 
-      <draggable
-        v-model="channels"
-        item-key="channelUid"
-        handle=".drag-handle"
-        ghost-class="ghost"
-        :disabled="Boolean(searchQuery?.trim()) || saving"
-        class="channel-list"
-      >
-        <template #item="{ element, index }">
-          <div v-show="matchesSearch(element)" class="channel-row" :class="{ 'channel-disabled': !element.enabled }">
-            <v-icon class="drag-handle" size="small" color="grey">mdi-drag-vertical</v-icon>
-            <span class="order-number">{{ index + 1 }}</span>
-            <div class="channel-identity">
-              <div class="d-flex align-center flex-wrap ga-2">
-                <span class="font-weight-medium">{{ element.channelName }}</span>
-                <span class="text-caption text-disabled">{{ element.serviceType }}</span>
-                <v-chip v-if="element.status !== 'active'" size="x-small" color="warning" variant="tonal">
-                  {{ t(`status.${element.status === 'suspended' ? 'paused' : element.status}`) }}
-                </v-chip>
-              </div>
-              <div class="text-caption text-medium-emphasis model-preview">
-                <template v-if="normalizedModel">
-                  {{ normalizedModel }} → {{ previewModel(element) }}
-                </template>
-                <template v-else>{{ t('subagentRouting.keepRequestModel') }}</template>
-                <v-icon v-if="normalizedModel && !element.modelSupported" size="14" color="warning" class="ml-1">mdi-alert-circle-outline</v-icon>
-              </div>
-            </div>
-            <div class="move-actions">
-              <v-btn icon size="x-small" variant="text" :disabled="index === 0 || saving" :title="t('subagentRouting.moveUp')" @click="move(index, -1)">
-                <v-icon size="small">mdi-arrow-up-bold</v-icon>
-              </v-btn>
-              <v-btn icon size="x-small" variant="text" :disabled="index === channels.length - 1 || saving" :title="t('subagentRouting.moveDown')" @click="move(index, 1)">
-                <v-icon size="small">mdi-arrow-down</v-icon>
-              </v-btn>
-            </div>
-            <v-switch v-model="element.enabled" color="primary" density="compact" hide-details inset :disabled="saving" :aria-label="t('subagentRouting.channelEnabled')" />
-          </div>
-        </template>
-      </draggable>
-
-      <div v-if="!channels.length" class="empty-list">{{ t('subagentRouting.noChannels') }}</div>
-      <div class="panel-actions">
-        <span v-if="dirty" class="text-caption text-medium-emphasis">{{ t('subagentRouting.unsaved') }}</span>
+      <div class="sa-foot">
+        <span v-if="dirty" class="sa-foot__dirty"><span class="sa-foot__dot"></span>{{ t('subagentRouting.unsaved') }}</span>
+        <span v-else class="sa-foot__hint">{{ enabledCount }}/{{ channels.length }} {{ t('subagentRouting.enabledShort') }}</span>
         <v-spacer />
-        <v-btn variant="text" :disabled="!dirty || saving" @click="cancel">{{ t('app.actions.cancel') }}</v-btn>
-        <v-btn color="primary" :loading="saving" :disabled="!canSave" @click="save">{{ t('app.actions.save') }}</v-btn>
+        <v-btn variant="outlined" class="sa-btn" :disabled="!dirty || saving" @click="cancel">{{ t('app.actions.cancel') }}</v-btn>
+        <v-btn color="primary" variant="flat" class="sa-btn sa-btn--primary" :loading="saving" :disabled="!canSave" @click="save">{{ t('app.actions.save') }}</v-btn>
       </div>
     </template>
-  </v-card>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -142,6 +157,7 @@ let latestView: SubagentRoutingView | undefined
 
 const normalizedModel = computed(() => (typeof draftModel.value === 'string' ? draftModel.value.trim() : ''))
 const enabledCount = computed(() => channels.value.filter(channel => channel.enabled).length)
+const searchActive = computed(() => Boolean(searchQuery.value?.trim()))
 const currentState = computed(() => JSON.stringify({ model: normalizedModel.value, channels: channels.value.map(channel => ({ channelUid: channel.channelUid, enabled: channel.enabled })) }))
 const dirty = computed(() => Boolean(savedState.value) && currentState.value !== savedState.value)
 const canSave = computed(() => Boolean(savedState.value) && !loading.value && !saving.value && (dirty.value || !activated.value))
@@ -153,6 +169,7 @@ function onModelMenu(open: boolean) {
   if (open) void fetchModelOptions()
 }
 
+// 普通请求 disabled 的渠道在子代理侧仍可启用：必须留在列表并随保存整表写回，否则会被移出策略。
 function viewChannels(view: SubagentRoutingView) {
   return (view.channels || []).map(channel => ({
     ...channel, enabled: view.policy.channels.find(entry => entry.channelUid === channel.channelUid)?.enabled ?? channel.enabled
@@ -222,14 +239,6 @@ function previewModel(channel: SubagentRoutingChannelView) {
   return resolveMappedModel(model, channel.modelMapping)
 }
 
-function move(index: number, offset: number) {
-  if (saving.value || loading.value) return
-  const target = index + offset
-  if (target < 0 || target >= channels.value.length) return
-  const [channel] = channels.value.splice(index, 1)
-  channels.value.splice(target, 0, channel)
-}
-
 function cancel() {
   if (latestView) applyView(latestView)
 }
@@ -285,34 +294,252 @@ onBeforeRouteLeave(() => confirmDiscard())
 </script>
 
 <style scoped>
+/* Neo-brutalism, the same system as the regular channel orchestration tab. */
+.subagent-panel {
+  --sa-ink: rgb(var(--v-theme-on-surface));
+  --sa-edge: 2px solid var(--sa-ink);
+  --sa-shadow: 4px 4px 0 0 var(--sa-ink);
+  position: relative;
+  margin: 0 0 24px;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  overflow: visible;
+}
+.v-theme--dark .subagent-panel { --sa-ink: rgba(255, 255, 255, 0.78); }
+.v-theme--dark .sa-foot__hint,
+.v-theme--dark .sa-toggle__text { color: rgba(var(--v-theme-on-surface), 0.82); }
+
+/* Shared retro badge */
+.sa-badge.v-chip {
+  border: 1px solid var(--sa-ink);
+  border-radius: 0 !important;
+  height: 22px;
+  font-size: 0.75rem;
+  letter-spacing: 0;
+}
+.sa-badge--warn.v-chip {
+  color: rgb(var(--v-theme-warning));
+  border-color: rgb(var(--v-theme-warning));
+  background: rgba(var(--v-theme-warning), 0.12) !important;
+}
+
+/* Buttons */
+.sa-btn.v-btn {
+  border: var(--sa-edge);
+  border-radius: 0;
+  box-shadow: 3px 3px 0 0 var(--sa-ink);
+  letter-spacing: 0;
+}
+.sa-btn.v-btn:hover { transform: translate(-1px, -1px); box-shadow: 4px 4px 0 0 var(--sa-ink); }
+.sa-btn.v-btn:active { transform: translate(2px, 2px); box-shadow: none; }
+.sa-btn--primary.v-btn { color: #fff; }
+
+/* Notices */
+.sa-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 14px 20px 0;
+  padding: 10px 12px;
+  border: var(--sa-edge);
+  box-shadow: var(--sa-shadow);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  background: rgba(var(--v-theme-info), 0.08);
+}
+.sa-notice--warn { background: rgba(var(--v-theme-warning), 0.12); }
+.sa-notice__icon { flex: 0 0 auto; margin-top: 2px; }
+.sa-notice__chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.sa-alert.v-alert {
+  margin: 14px 20px 0;
+  border: var(--sa-edge);
+  border-radius: 0;
+  box-shadow: var(--sa-shadow);
+}
+.sa-skeleton { padding: 20px; }
+
+/* Default model configuration */
 .sa-model-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 0; }
 .sa-model-toolbar > .sa-model { flex: 1; margin-bottom: 0; }
+.sa-config__col { display: flex; align-items: center; flex: 1; gap: 10px; min-width: 0; }
+.sa-config__col .sa-field { flex: 1 1 auto; min-width: 0; }
+.sa-config__label {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 6px;
+  flex: 0 0 auto;
+  white-space: nowrap;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  line-height: 1.3;
+  color: rgb(var(--v-theme-on-surface));
+}
+.sa-config__mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--sa-ink);
+  background: rgba(var(--v-theme-primary), 0.14);
+}
+.sa-sequence-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 8px;
+}
+.sa-model { width: 100%; max-width: 360px; }
+.sa-model.v-autocomplete--active-menu :deep(.v-autocomplete__selection) { display: none; }
 .sa-search { width: clamp(220px, 28vw, 320px); max-width: 100%; flex: 0 1 auto; }
+/* Retro form fields: hard 2px outline, square corners */
+.sa-field :deep(.v-field__outline) {
+  --v-field-border-width: 2px;
+  --v-field-border-opacity: 1;
+  color: var(--sa-ink);
+}
+.sa-field :deep(.v-field) { border-radius: 0 !important; box-shadow: 3px 3px 0 0 var(--sa-ink); }
+
+/* Channel list */
+.sa-list-wrap { padding: 12px 0 8px; }
+.sa-list { display: flex; flex-direction: column; gap: 8px; }
+.sa-row {
+  display: grid;
+  grid-template-columns: 30px 28px minmax(0, 1fr) minmax(140px, 240px) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 60px;
+  margin: 2px;
+  padding: 10px 12px;
+  background: rgb(var(--v-theme-surface));
+  border: var(--sa-edge);
+  box-shadow: var(--sa-shadow);
+  transition: transform 0.1s ease, box-shadow 0.1s ease, background-color 0.1s ease, opacity 0.1s ease;
+}
+.sa-row:hover { transform: translate(-2px, -2px); box-shadow: 6px 6px 0 0 var(--sa-ink); background: rgba(var(--v-theme-primary), 0.06); }
+/* 与普通请求页签的暂停行共用同一组状态色变量，不另立一套配色 */
+.sa-row--paused {
+  background: var(--ccx-channel-row-suspended-bg);
+  border-color: var(--ccx-channel-row-suspended-border);
+  box-shadow: var(--ccx-channel-row-shadow);
+}
+.sa-row--paused:hover {
+  background: var(--ccx-channel-row-suspended-hover-bg);
+  box-shadow: var(--ccx-channel-row-shadow-hover);
+}
+.sa-row--off { opacity: 0.58; }
+.ghost { opacity: 0.5; background: rgba(var(--v-theme-primary), 0.18); border: 2px dashed rgb(var(--v-theme-primary)); box-shadow: none; }
+
+.sa-drag {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 32px;
+  cursor: grab;
+  color: rgba(var(--v-theme-on-surface), 0.82);
+}
+.sa-drag:hover { background: rgba(var(--v-theme-primary), 0.18); }
+.sa-drag:active { cursor: grabbing; }
+.sa-rank {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: var(--sa-edge);
+  background: rgb(var(--v-theme-primary));
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.sa-row__body { min-width: 0; min-height: 38px; display: flex; flex-direction: column; justify-content: center; }
+.sa-row__title { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-width: 0; }
+.sa-name { font-size: 0.875rem; font-weight: 700; color: rgb(var(--v-theme-on-surface)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sa-row__model {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  min-height: 38px;
+}
+.sa-preview {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 0.75rem;
+  color: rgba(var(--v-theme-on-surface), 0.78);
+  overflow-wrap: anywhere;
+}
+.sa-preview__mark { color: rgba(var(--v-theme-on-surface), 0.62); font-weight: 700; }
+.sa-preview__from { color: rgba(var(--v-theme-on-surface), 0.55); }
+
+.sa-row__tools { display: flex; align-items: center; }
+.sa-toggle { display: flex; align-items: center; gap: 8px; }
+.sa-toggle__text { font-size: 0.75rem; font-weight: 700; color: rgba(var(--v-theme-on-surface), 0.72); white-space: nowrap; }
+.sa-toggle :deep(.v-switch__track) { border-radius: 0 !important; border: var(--sa-edge); }
+.sa-toggle :deep(.v-switch__thumb) { border-radius: 0 !important; }
+
+.sa-empty {
+  padding: 34px 16px;
+  text-align: center;
+  font-size: 0.8125rem;
+  color: rgba(var(--v-theme-on-surface), 0.62);
+  border: 2px dashed var(--sa-ink);
+}
+
+/* Save bar stays reachable on long channel lists */
+.sa-foot {
+  position: sticky;
+  bottom: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 20px;
+  border-top: var(--sa-edge);
+  background: rgb(var(--v-theme-surface));
+}
+.sa-foot__hint { font-size: 0.8125rem; color: rgba(var(--v-theme-on-surface), 0.72); }
+.sa-foot__dirty {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: rgb(var(--v-theme-warning));
+}
+.sa-foot__dot { width: 8px; height: 8px; background: rgb(var(--v-theme-warning)); border: 1px solid var(--sa-ink); }
+
+@media (max-width: 1100px) {
+  .sa-row { grid-template-columns: 30px 28px minmax(0, 1fr) auto; }
+  .sa-row__body { grid-column: 3; grid-row: 1; }
+  .sa-row__model { grid-column: 3; grid-row: 2; min-height: 0; padding-left: 0; border-left: 0; }
+  .sa-row__tools { grid-column: 4; grid-row: 1 / 3; }
+}
+@media (max-width: 900px) {
+  .sa-config__col { flex-direction: column; align-items: stretch; gap: 4px; }
+  .sa-config__col .sa-field { width: 100%; }
+  .sa-model { max-width: 100%; }
+}
 @media (max-width: 700px) {
   .sa-model-toolbar { flex-direction: column; align-items: stretch; gap: 8px; }
   .sa-search { width: 100%; }
+  .sa-notice, .sa-alert.v-alert { margin: 12px 14px 0; }
+  .sa-foot { padding: 12px 14px; }
+  .sa-row { grid-template-columns: 26px 28px minmax(0, 1fr) auto; gap: 8px; padding: 9px; }
+  .sa-row__body { grid-column: 3; grid-row: 1; min-height: 0; }
+  .sa-row__model { grid-column: 3; grid-row: 2; }
+  .sa-row__tools { grid-column: 4; grid-row: 1 / 3; justify-content: flex-end; }
+  .sa-toggle__text { display: none; }
+  .sa-row:hover { transform: none; }
 }
-.sa-model.v-autocomplete--active-menu :deep(.v-autocomplete__selection) { display: none; }
-.subagent-panel { margin: 0 0 24px; border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); }
-.model-field { max-width: 720px; margin-bottom: 20px; }
-.sa-sequence-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 8px; }
-
-.channel-list { display: flex; flex-direction: column; gap: 6px; }
-.channel-row { display: grid; grid-template-columns: 24px 32px minmax(0, 1fr) auto auto; align-items: center; gap: 10px; min-height: 64px; padding: 8px 12px; border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); border-radius: 8px; background: rgb(var(--v-theme-surface)); transition: border-color 160ms ease, opacity 160ms ease; }
-.channel-row:hover { border-color: rgba(var(--v-theme-primary), 0.45); }
-.channel-disabled { opacity: 0.62; }
-.drag-handle { cursor: grab; }
-.order-number { color: rgba(var(--v-theme-on-surface), 0.55); font-variant-numeric: tabular-nums; }
-.channel-identity { min-width: 0; }
-.model-preview { margin-top: 3px; overflow-wrap: anywhere; }
-.move-actions { display: flex; gap: 2px; }
-.ghost { opacity: 0.4; }
-.empty-list { padding: 32px; text-align: center; color: rgba(var(--v-theme-on-surface), 0.6); border: 1px dashed rgba(var(--v-border-color), var(--v-border-opacity)); }
-.panel-actions { display: flex; align-items: center; gap: 8px; margin-top: 16px; }
-@media (max-width: 700px) {
-  .sa-sequence-toolbar { align-items: stretch; flex-direction: column; }
-  .channel-row { grid-template-columns: 20px 24px minmax(0, 1fr) auto; gap: 6px; padding: 8px; }
-  .move-actions { grid-column: 3; }
-  .channel-row :deep(.v-switch) { grid-column: 4; grid-row: 1 / 3; }
+@media (prefers-reduced-motion: reduce) {
+  .sa-row, .sa-btn.v-btn { transition: none; }
+  .sa-row:hover, .sa-btn.v-btn:hover { transform: none; }
 }
 </style>
