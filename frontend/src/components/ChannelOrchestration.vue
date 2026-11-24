@@ -333,21 +333,8 @@
               </div>
             </div>
 
-            <!-- Latency display -->
+            <!-- Probe latency display（真实首字节/首内容 P95 已在指标 tooltip 中按时间窗展示） -->
             <div class="channel-latency" @click.stop>
-              <button
-                v-for="latency in realLatencySummaries(get15mStats(element.index))"
-                :key="latency.kind"
-                class="real-latency-summary"
-                type="button"
-                :disabled="!element.channelUid"
-                :title="t(`orchestration.${latency.kind}LatencyTooltip`, { samples: latency.samples })"
-                @click="openRequestHistory(element, '15m')"
-              >
-                <span>{{ t(`orchestration.${latency.kind}P95`) }}</span>
-                <strong v-if="latency.samples >= 5">≈{{ Math.round(latency.p95) }}ms</strong>
-                <strong v-else>{{ t('orchestration.latencyInsufficient') }}</strong>
-              </button>
               <v-chip
                 v-if="isLatencyValid(element)"
                 size="x-small"
@@ -1164,11 +1151,6 @@ const requestLatencyValues = (stats: TimeWindowStats | undefined, kind: RequestL
   p50: stats?.[`${kind}LatencyP50Ms`] ?? 0,
   p95: stats?.[`${kind}LatencyP95Ms`] ?? 0
 })
-
-const realLatencySummaries = (stats?: TimeWindowStats) =>
-  (['firstByte', 'firstContent'] as const)
-    .map(kind => requestLatencyValues(stats, kind))
-    .filter(latency => latency.samples > 0)
 
 const formatRequestLatency = (stats?: TimeWindowStats, kind: RequestLatencyKind = 'firstByte'): string => {
   const { samples, p50, p95 } = requestLatencyValues(stats, kind)
