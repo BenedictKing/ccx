@@ -87,14 +87,14 @@
                     {{ log.interfaceType }}
                   </v-chip>
                   <v-chip
-                    v-if="singleReasoningEffort(log)"
+                    v-if="reasoningEffortLabel(log)"
                     size="x-small"
-                    :color="reasoningEffortColor(singleReasoningEffort(log))"
+                    :color="reasoningEffortColor(displayedReasoningEffort(log))"
                     variant="tonal"
                     class="log-reasoning-chip"
-                    :title="singleReasoningEffort(log)"
+                    :title="reasoningEffortLabel(log)"
                   >
-                    {{ formatReasoningEffort(singleReasoningEffort(log)) }}
+                    {{ reasoningEffortLabel(log) }}
                   </v-chip>
                   <v-chip v-if="log.agentRole === 'subagent'" size="x-small" color="warning" variant="tonal" class="text-uppercase">
                     SUBAGENT<span v-if="log.agentConfidence === 'heuristic'" class="ml-1">?</span>
@@ -246,9 +246,6 @@
                       </div>
                       <div v-if="log.operation" class="log-detail-row">
                         <dt>{{ t('channelLogs.operation') }}</dt><dd>{{ log.operation }}</dd>
-                      </div>
-                      <div v-if="reasoningEffortTransition(log)" class="log-detail-row">
-                        <dt>{{ t('channelLogs.reasoning.label') }}</dt><dd>{{ reasoningEffortTransition(log) }}</dd>
                       </div>
                       <div v-if="log.keyMask" class="log-detail-row">
                         <dt>{{ t('channelLogs.key') }}</dt><dd class="log-detail-code">{{ log.keyMask }}</dd>
@@ -604,13 +601,19 @@ const singleReasoningEffort = (log: ChannelLogEntry): string => {
   return original.toLowerCase() === actual.toLowerCase() ? actual : ''
 }
 
-// 原始与实际推理不一致时合并为一行展示，例如 "none → high"
-const reasoningEffortTransition = (log: ChannelLogEntry): string => {
+// 列表标签：一致时显示单值，被重定向时显示 "none → high"
+const reasoningEffortLabel = (log: ChannelLogEntry): string => {
+  const single = singleReasoningEffort(log)
+  if (single) return formatReasoningEffort(single)
   const original = normalizedReasoningEffort(log.originalReasoningEffort)
   const actual = normalizedReasoningEffort(log.actualReasoningEffort)
-  if (!original || !actual || singleReasoningEffort(log)) return ''
-  return `${original} → ${actual}`
+  if (!original || !actual) return ''
+  return `${formatReasoningEffort(original)} → ${formatReasoningEffort(actual)}`
 }
+
+// 标签配色以实际发往上游的推理强度为准
+const displayedReasoningEffort = (log: ChannelLogEntry): string =>
+  singleReasoningEffort(log) || normalizedReasoningEffort(log.actualReasoningEffort)
 
 const reasoningEffortColor = (effort: string): string => {
   const value = effort.toLowerCase()

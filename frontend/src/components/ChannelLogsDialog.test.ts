@@ -137,10 +137,9 @@ describe('渠道日志列表', () => {
       await failedLog.trigger('click')
       expect(wrapper.find('.log-error-preview').exists()).toBe(false)
       expect(wrapper.find('#channel-log-details-1 .log-error-detail').text()).toBe('upstream overloaded')
-      // 原始与实际推理不一致时合并为单行
-      const failedDetails = wrapper.find('#channel-log-details-1').text()
-      expect(failedDetails).toContain('channelLogs.reasoning.label')
-      expect(failedDetails).toContain('medium → high')
+      // 推理强度被重定向时在列表标签中显示，不再占用明细行
+      expect(failedLog.find('.log-reasoning-chip').text()).toBe('medium → high')
+      expect(wrapper.find('#channel-log-details-1').text()).not.toContain('medium → high')
     } finally {
       wrapper.unmount()
     }

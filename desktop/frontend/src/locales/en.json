@@ -933,8 +933,6 @@
   "channelLogs.sourceCapabilityTest": "Model connectivity test",
   "channelLogs.copyEntry": "Copy this log",
   "channelLogs.copiedEntry": "Log copied",
-  "channelLogs.reasoning.original": "Original",
-  "channelLogs.reasoning.actual": "Sent",
   "channelLogs.retry": "Retry",
   "channelLogs.duration.connect": "Connect",
   "channelLogs.duration.firstByte": "First byte",

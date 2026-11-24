@@ -589,7 +589,6 @@
   "channelLogs.sourceCapabilityTest": "模型连通性测试",
   "channelLogs.selectionReason": "调度",
   "channelLogs.subagentPolicy": "子代理策略模型",
-  "channelLogs.reasoning.label": "推理强度",
   "channelLogs.duration.connect": "连接",
   "channelLogs.duration.firstByte": "首字",
   "channelLogs.duration.firstContent": "首内容",

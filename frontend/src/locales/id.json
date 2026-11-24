@@ -589,7 +589,6 @@
   "channelLogs.sourceCapabilityTest": "Tes Konektivitas Model",
   "channelLogs.selectionReason": "Seleksi",
   "channelLogs.subagentPolicy": "Model kebijakan subagent",
-  "channelLogs.reasoning.label": "Reasoning",
   "channelLogs.duration.connect": "Koneksi",
   "channelLogs.duration.firstByte": "Byte Pertama",
   "channelLogs.duration.firstContent": "Konten Pertama",

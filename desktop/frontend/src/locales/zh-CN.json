@@ -933,8 +933,6 @@
   "channelLogs.sourceCapabilityTest": "模型连通性测试",
   "channelLogs.copyEntry": "复制此条日志",
   "channelLogs.copiedEntry": "已复制日志",
-  "channelLogs.reasoning.original": "原始",
-  "channelLogs.reasoning.actual": "发出",
   "channelLogs.retry": "重试",
   "channelLogs.duration.connect": "连接",
   "channelLogs.duration.firstByte": "首字节",

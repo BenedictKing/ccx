@@ -589,7 +589,6 @@
   "channelLogs.sourceCapabilityTest": "Model Connectivity Test",
   "channelLogs.selectionReason": "Selection",
   "channelLogs.subagentPolicy": "Subagent policy model",
-  "channelLogs.reasoning.label": "Reasoning",
   "channelLogs.duration.connect": "Connect",
   "channelLogs.duration.firstByte": "First Byte",
   "channelLogs.duration.firstContent": "First Content",

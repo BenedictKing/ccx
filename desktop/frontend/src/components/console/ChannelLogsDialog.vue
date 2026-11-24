@@ -212,6 +212,21 @@ function singleReasoningEffort(log: ChannelLogEntry) {
   return original.toLowerCase() === actual.toLowerCase() ? actual : ''
 }
 
+// 列表标签：一致时显示单值，被重定向时显示 "none → high"
+function reasoningEffortLabel(log: ChannelLogEntry) {
+  const single = singleReasoningEffort(log)
+  if (single) return formatReasoningEffort(single)
+  const original = normalizedReasoningEffort(log.originalReasoningEffort)
+  const actual = normalizedReasoningEffort(log.actualReasoningEffort)
+  if (!original || !actual) return ''
+  return `${formatReasoningEffort(original)} → ${formatReasoningEffort(actual)}`
+}
+
+// 标签配色以实际发往上游的推理强度为准
+function displayedReasoningEffort(log: ChannelLogEntry) {
+  return singleReasoningEffort(log) || normalizedReasoningEffort(log.actualReasoningEffort)
+}
+
 function reasoningEffortClass(effort: string) {
   const value = effort.toLowerCase()
   if (value === 'none' || value === 'disabled' || value === 'false') return 'border-border bg-muted/30 text-muted-foreground'
@@ -377,31 +392,13 @@ onBeforeUnmount(() => {
                     <span v-if="log.originalModel" class="text-muted-foreground">{{ log.originalModel }} →</span>
                     <span class="font-medium">{{ log.model }}</span>
                     <span
-                      v-if="singleReasoningEffort(log)"
+                      v-if="reasoningEffortLabel(log)"
                       class="inline-flex border px-1.5 py-0.5 text-[10px] font-bold"
-                      :class="reasoningEffortClass(singleReasoningEffort(log))"
-                      :title="singleReasoningEffort(log)"
+                      :class="reasoningEffortClass(displayedReasoningEffort(log))"
+                      :title="reasoningEffortLabel(log)"
                     >
-                      {{ formatReasoningEffort(singleReasoningEffort(log)) }}
+                      {{ reasoningEffortLabel(log) }}
                     </span>
-                    <template v-else>
-                      <span
-                        v-if="log.originalReasoningEffort"
-                        class="inline-flex border px-1.5 py-0.5 text-[10px] font-bold"
-                        :class="reasoningEffortClass(log.originalReasoningEffort)"
-                        :title="log.originalReasoningEffort"
-                      >
-                        {{ t('channelLogs.reasoning.original') }} {{ formatReasoningEffort(log.originalReasoningEffort) }}
-                      </span>
-                      <span
-                        v-if="log.actualReasoningEffort"
-                        class="inline-flex border px-1.5 py-0.5 text-[10px] font-bold"
-                        :class="reasoningEffortClass(log.actualReasoningEffort)"
-                        :title="log.actualReasoningEffort"
-                      >
-                        {{ t('channelLogs.reasoning.actual') }} {{ formatReasoningEffort(log.actualReasoningEffort) }}
-                      </span>
-                    </template>
                     <code class="max-w-[130px] truncate bg-secondary px-1 py-0.5 font-mono text-[10px] text-muted-foreground">{{ log.keyMask }}</code>
                     <code v-if="log.baseUrl" class="max-w-[220px] truncate bg-secondary px-1 py-0.5 font-mono text-[10px] text-muted-foreground" :title="log.baseUrl">
                       {{ log.baseUrl }}
