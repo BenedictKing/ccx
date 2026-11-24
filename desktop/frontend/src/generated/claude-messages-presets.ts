@@ -141,10 +141,10 @@ export const claudeMessagesPresets: Record<string, ClaudeMessagesPreset> = {
   },
   "kimi": {
     "modelMapping": {
-      "fable": "kimi-k3.1-pro",
+      "fable": "k3.1-pro",
       "haiku": "kimi-for-coding",
-      "opus": "kimi-k3.1-pro",
-      "sonnet": "kimi-k3.1-pro"
+      "opus": "k3.1-pro",
+      "sonnet": "k3.1-pro"
     },
     "reasoningMapping": {
       "fable": "max",

@@ -229,10 +229,10 @@ func TestBuildPayload(t *testing.T) {
 			wantService:         "claude",
 			wantNormalizeSystem: true,
 			wantModelMap: map[string]string{
-				"fable":  "kimi-k3.1-pro",
+				"fable":  "k3.1-pro",
 				"haiku":  "kimi-for-coding",
-				"opus":   "kimi-k3.1-pro",
-				"sonnet": "kimi-k3.1-pro",
+				"opus":   "k3.1-pro",
+				"sonnet": "k3.1-pro",
 			},
 			wantReasoning: map[string]string{
 				"fable":  "max",
