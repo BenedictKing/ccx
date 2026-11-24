@@ -29,17 +29,20 @@ func newSubagentRoutingTestManager(t *testing.T, cfg Config) *ConfigManager {
 func TestSubagentRoutingLegacyDraftAndAtomicSave(t *testing.T) {
 	cm := newSubagentRoutingTestManager(t, Config{ResponsesUpstream: []UpstreamConfig{
 		{Name: "a", ChannelUID: "uid-a", Status: "active", SubagentModel: " sol ", ModelMapping: map[string]string{"sol": "actual-a"}},
-		{Name: "b", ChannelUID: "uid-b", Status: "disabled", SubagentModel: "luna"},
+		{Name: "b", ChannelUID: "uid-b", Status: "suspended", SubagentModel: "luna"},
+		{Name: "standby", ChannelUID: "uid-c", Status: "disabled", SubagentModel: "standby-model"},
 	}})
 	view, err := cm.GetSubagentRouting("responses")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if view.Activated || view.Policy.Model != "" || !view.LegacyMixed || len(view.Policy.Channels) != 2 {
+	if view.Activated || view.Policy.Model != "" || !view.LegacyMixed || len(view.Policy.Channels) != 2 || len(view.Channels) != 2 {
 		t.Fatalf("unexpected legacy draft: %+v", view)
 	}
-	if view.Policy.Channels[1].Enabled {
-		t.Fatal("普通 disabled 渠道在转换草稿中应关闭")
+	for _, channel := range view.Channels {
+		if channel.ChannelUID == "uid-c" || channel.Status == "disabled" {
+			t.Fatalf("备用池渠道不得出现在迁移草稿: %+v", channel)
+		}
 	}
 
 	saved, err := cm.UpdateSubagentRouting("responses", view.Revision, SubagentRoutingPolicy{
@@ -139,8 +142,8 @@ func TestSubagentRoutingTracksAddedAndRemovedChannels(t *testing.T) {
 	}
 	cfg := cm.GetConfig()
 	added := cfg.SubagentRouting["messages"].Channels[1]
-	if added.ChannelUID != cfg.Upstream[0].ChannelUID || added.Enabled {
-		t.Fatalf("新增渠道应追加且默认关闭: %+v", added)
+	if added.ChannelUID != cfg.Upstream[0].ChannelUID || !added.Enabled {
+		t.Fatalf("新增渠道应追加且默认开启: %+v", added)
 	}
 	if _, err := cm.RemoveUpstream(0); err != nil {
 		t.Fatal(err)
@@ -148,5 +151,47 @@ func TestSubagentRoutingTracksAddedAndRemovedChannels(t *testing.T) {
 	channels := cm.GetConfig().SubagentRouting["messages"].Channels
 	if len(channels) != 1 || channels[0].ChannelUID != "uid-a" {
 		t.Fatalf("删除渠道应清理 UID 引用: %+v", channels)
+	}
+}
+
+func TestSubagentRoutingDefaultsNewChannelsEnabledAndHidesStandby(t *testing.T) {
+	cfg := Config{
+		Upstream: []UpstreamConfig{
+			{Name: "existing", ChannelUID: "uid-a", Status: "active"},
+			{Name: "new", ChannelUID: "uid-b", Status: "active"},
+			{Name: "standby", ChannelUID: "uid-c", Status: "disabled"},
+		},
+		SubagentRouting: map[string]SubagentRoutingPolicy{
+			"messages": {Channels: []SubagentRoutingChannel{{ChannelUID: "uid-a", Enabled: false}}},
+		},
+	}
+	cm := newSubagentRoutingTestManager(t, cfg)
+	view, err := cm.GetSubagentRouting("messages")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(view.Policy.Channels) != 2 || len(view.Channels) != 2 {
+		t.Fatalf("视图应只包含两个非备用渠道: %+v", view)
+	}
+	for _, channel := range view.Channels {
+		if channel.ChannelUID == "uid-c" || channel.Status == "disabled" {
+			t.Fatalf("备用池渠道不得进入子代理视图: %+v", channel)
+		}
+		if channel.ChannelUID == "uid-b" && !channel.Enabled {
+			t.Fatal("已激活策略中缺失的新渠道应默认开启")
+		}
+	}
+
+	policy, apply := ResolveSubagentRouting(cfg, "messages", "subagent", "exact")
+	if !apply || policy == nil || len(policy.Channels) != 2 {
+		t.Fatalf("调度策略应补全新渠道并排除备用池: %+v", policy)
+	}
+	for _, channel := range policy.Channels {
+		if channel.ChannelUID == "uid-c" {
+			t.Fatal("备用池渠道不得补入调度策略")
+		}
+		if channel.ChannelUID == "uid-b" && !channel.Enabled {
+			t.Fatal("调度策略中的新渠道应默认开启")
+		}
 	}
 }

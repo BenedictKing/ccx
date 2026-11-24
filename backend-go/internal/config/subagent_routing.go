@@ -95,11 +95,33 @@ func SubagentRoutingForConfig(cfg Config, protocol string) (*SubagentRoutingPoli
 	return &policy, true
 }
 
+// appendMissingSubagentChannels 让新增渠道默认进入子代理选择空间；备用池渠道始终不补入。
+func appendMissingSubagentChannels(cfg Config, protocol string, policy *SubagentRoutingPolicy) {
+	if policy == nil {
+		return
+	}
+	existing := make(map[string]struct{}, len(policy.Channels))
+	for _, channel := range policy.Channels {
+		existing[channel.ChannelUID] = struct{}{}
+	}
+	for _, upstream := range UpstreamsForProtocol(cfg, protocol) {
+		if GetChannelStatus(&upstream) == "disabled" {
+			continue
+		}
+		if _, ok := existing[upstream.ChannelUID]; ok {
+			continue
+		}
+		policy.Channels = append(policy.Channels, SubagentRoutingChannel{ChannelUID: upstream.ChannelUID, Enabled: true})
+		existing[upstream.ChannelUID] = struct{}{}
+	}
+}
+
 func ResolveSubagentRouting(cfg Config, protocol, agentRole, confidence string) (*SubagentRoutingPolicy, bool) {
 	policy, activated := SubagentRoutingForConfig(cfg, protocol)
 	if !activated {
 		return nil, false
 	}
+	appendMissingSubagentChannels(cfg, protocol, policy)
 	return policy, agentRole == "subagent" && confidence == "exact"
 }
 
@@ -124,6 +146,9 @@ func BuildSubagentRoutingView(cfg Config, protocol string) (SubagentRoutingView,
 	legacyModels := make([]SubagentRoutingLegacyModel, 0)
 	uniqueModels := map[string]struct{}{}
 	for _, upstream := range upstreams {
+		if GetChannelStatus(&upstream) == "disabled" {
+			continue
+		}
 		model := strings.TrimSpace(upstream.SubagentModel)
 		if model == "" {
 			continue
@@ -142,28 +167,33 @@ func BuildSubagentRoutingView(cfg Config, protocol string) (SubagentRoutingView,
 			upstream UpstreamConfig
 			index    int
 		}
-		ordered := make([]indexedUpstream, len(upstreams))
+		ordered := make([]indexedUpstream, 0, len(upstreams))
 		for i, upstream := range upstreams {
-			ordered[i] = indexedUpstream{upstream: upstream, index: i}
+			if GetChannelStatus(&upstream) == "disabled" {
+				continue
+			}
+			ordered = append(ordered, indexedUpstream{upstream: upstream, index: i})
 		}
 		sort.SliceStable(ordered, func(i, j int) bool {
 			return GetChannelPriority(&ordered[i].upstream, ordered[i].index) < GetChannelPriority(&ordered[j].upstream, ordered[j].index)
 		})
 		for _, item := range ordered {
-			policy.Channels = append(policy.Channels, SubagentRoutingChannel{ChannelUID: item.upstream.ChannelUID, Enabled: GetChannelStatus(&item.upstream) != "disabled"})
+			policy.Channels = append(policy.Channels, SubagentRoutingChannel{ChannelUID: item.upstream.ChannelUID, Enabled: true})
 		}
 	}
+	appendMissingSubagentChannels(cfg, protocol, policy)
 
-	byUID := make(map[string]SubagentRoutingChannel, len(policy.Channels))
-	for _, channel := range policy.Channels {
-		byUID[channel.ChannelUID] = channel
-	}
+	visibleChannels := make([]SubagentRoutingChannel, 0, len(policy.Channels))
 	views := make([]SubagentRoutingChannelView, 0, len(policy.Channels))
 	for _, entry := range policy.Channels {
 		for index, upstream := range upstreams {
 			if upstream.ChannelUID != entry.ChannelUID {
 				continue
 			}
+			if GetChannelStatus(&upstream) == "disabled" {
+				break
+			}
+			visibleChannels = append(visibleChannels, entry)
 			requestModel := policy.Model
 			resolvedModel := ""
 			supported := true
@@ -179,22 +209,7 @@ func BuildSubagentRoutingView(cfg Config, protocol string) (SubagentRoutingView,
 			break
 		}
 	}
-	for index, upstream := range upstreams {
-		if _, exists := byUID[upstream.ChannelUID]; exists {
-			continue
-		}
-		policy.Channels = append(policy.Channels, SubagentRoutingChannel{ChannelUID: upstream.ChannelUID, Enabled: false})
-		views = append(views, SubagentRoutingChannelView{
-			ChannelUID: upstream.ChannelUID, ChannelIndex: index, ChannelName: upstream.Name,
-			ServiceType: upstream.ServiceType, Status: GetChannelStatus(&upstream), EffectiveState: GetChannelEffectiveState(&upstream),
-			Enabled: false, RequestModel: policy.Model, ResolvedModel: func() string {
-				if policy.Model == "" {
-					return ""
-				}
-				return RedirectModel(policy.Model, &upstream)
-			}(), ModelSupported: true, ModelMapping: upstream.ModelMapping,
-		})
-	}
+	policy.Channels = visibleChannels
 	return SubagentRoutingView{
 		Protocol: protocol, Activated: activated, Revision: SubagentRoutingRevision(cfg, protocol), Policy: *policy,
 		Channels: views, LegacyModels: legacyModels, LegacyMixed: len(uniqueModels) > 1,
@@ -256,7 +271,7 @@ func appendSubagentChannelLocked(cfg *Config, protocol, uid string) {
 	if !activated {
 		return
 	}
-	policy.Channels = append(policy.Channels, SubagentRoutingChannel{ChannelUID: uid, Enabled: false})
+	policy.Channels = append(policy.Channels, SubagentRoutingChannel{ChannelUID: uid, Enabled: true})
 	cfg.SubagentRouting[protocol] = *policy
 }
 

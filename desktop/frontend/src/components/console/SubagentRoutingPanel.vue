@@ -48,9 +48,10 @@ const modelOptions = computed(() => props.type === 'messages'
 function applyView(view: SubagentRoutingView) {
   activated.value = view.activated
   revision.value = view.revision
-  legacyModels.value = view.legacyModels || []
+  channels.value = (view.channels || []).filter(channel => channel.status !== 'disabled').map(channel => ({ ...channel, enabled: view.policy.channels.find(entry => entry.channelUid === channel.channelUid)?.enabled ?? channel.enabled }))
+  const visibleUIDs = new Set(channels.value.map(channel => channel.channelUid))
+  legacyModels.value = (view.legacyModels || []).filter(item => visibleUIDs.has(item.channelUid))
   legacyMixed.value = view.legacyMixed
-  channels.value = (view.channels || []).map(channel => ({ ...channel, enabled: view.policy.channels.find(entry => entry.channelUid === channel.channelUid)?.enabled ?? channel.enabled }))
   draftModel.value = view.policy.model
   savedState.value = JSON.stringify({ model: view.policy.model.trim(), channels: channels.value.map(channel => ({ channelUid: channel.channelUid, enabled: channel.enabled })) })
   errorMessage.value = ''

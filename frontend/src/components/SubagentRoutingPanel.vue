@@ -91,8 +91,8 @@
               <div class="sa-row__body">
                 <div class="sa-row__title">
                   <span class="sa-name">{{ element.channelName }}</span>
-                  <v-chip v-if="element.status !== 'active'" size="x-small" color="warning" variant="tonal" class="sa-badge sa-badge--warn">
-                    {{ t(`status.${element.status === 'suspended' ? 'paused' : element.status}`) }}
+                  <v-chip v-if="element.status === 'suspended'" size="x-small" color="warning" variant="tonal" class="sa-badge sa-badge--warn">
+                    {{ t('status.paused') }}
                   </v-chip>
                 </div>
               </div>
@@ -169,9 +169,9 @@ function onModelMenu(open: boolean) {
   if (open) void fetchModelOptions()
 }
 
-// 普通请求 disabled 的渠道在子代理侧仍可启用：必须留在列表并随保存整表写回，否则会被移出策略。
+// 备用池不属于子代理选择空间；保存时只写回可见渠道。
 function viewChannels(view: SubagentRoutingView) {
-  return (view.channels || []).map(channel => ({
+  return (view.channels || []).filter(channel => channel.status !== 'disabled').map(channel => ({
     ...channel, enabled: view.policy.channels.find(entry => entry.channelUid === channel.channelUid)?.enabled ?? channel.enabled
   }))
 }
@@ -408,15 +408,17 @@ onBeforeRouteLeave(() => confirmDiscard())
 .sa-list { display: flex; flex-direction: column; gap: 8px; }
 .sa-row {
   display: grid;
-  grid-template-columns: 30px 28px minmax(0, 1fr) minmax(140px, 240px) auto;
+  grid-template-columns: 28px 28px minmax(0, 1fr) minmax(140px, 240px) auto;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
+  height: 60px;
   min-height: 60px;
   margin: 2px;
   padding: 10px 12px;
   background: rgb(var(--v-theme-surface));
   border: var(--sa-edge);
   box-shadow: var(--sa-shadow);
+  overflow: hidden;
   transition: transform 0.1s ease, box-shadow 0.1s ease, background-color 0.1s ease, opacity 0.1s ease;
 }
 .sa-row:hover { transform: translate(-2px, -2px); box-shadow: 6px 6px 0 0 var(--sa-ink); background: rgba(var(--v-theme-primary), 0.06); }
@@ -437,7 +439,7 @@ onBeforeRouteLeave(() => confirmDiscard())
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
+  width: 32px;
   height: 32px;
   cursor: grab;
   color: rgba(var(--v-theme-on-surface), 0.82);
@@ -457,14 +459,14 @@ onBeforeRouteLeave(() => confirmDiscard())
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
-.sa-row__body { min-width: 0; min-height: 38px; display: flex; flex-direction: column; justify-content: center; }
+.sa-row__body { min-width: 0; min-height: 36px; display: flex; flex-direction: column; justify-content: center; }
 .sa-row__title { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-width: 0; }
 .sa-name { font-size: 0.875rem; font-weight: 700; color: rgb(var(--v-theme-on-surface)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sa-row__model {
   display: flex;
   align-items: center;
   min-width: 0;
-  min-height: 38px;
+  min-height: 36px;
 }
 .sa-preview {
   display: flex;
@@ -516,7 +518,7 @@ onBeforeRouteLeave(() => confirmDiscard())
 .sa-foot__dot { width: 8px; height: 8px; background: rgb(var(--v-theme-warning)); border: 1px solid var(--sa-ink); }
 
 @media (max-width: 1100px) {
-  .sa-row { grid-template-columns: 30px 28px minmax(0, 1fr) auto; }
+  .sa-row { grid-template-columns: 26px 26px minmax(0, 1fr) auto; gap: 4px; height: auto; }
   .sa-row__body { grid-column: 3; grid-row: 1; }
   .sa-row__model { grid-column: 3; grid-row: 2; min-height: 0; padding-left: 0; border-left: 0; }
   .sa-row__tools { grid-column: 4; grid-row: 1 / 3; }

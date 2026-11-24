@@ -40,7 +40,7 @@ func (s *ChannelScheduler) restoreSubagentContinuation(cfg *config.Config, opts 
 		if upstream.ChannelUID != source.ChannelUID {
 			continue
 		}
-		if opts.FailedChannels[index] || config.GetChannelStatus(upstream) == "suspended" || !s.channelIsRuntimeAvailable(upstream, opts.Kind, index) {
+		if opts.FailedChannels[index] || config.GetChannelStatus(upstream) != "active" || !s.channelIsRuntimeAvailable(upstream, opts.Kind, index) {
 			return failure("来源不可用")
 		}
 		if opts.ChannelName != "" && opts.ChannelName != upstream.Name {

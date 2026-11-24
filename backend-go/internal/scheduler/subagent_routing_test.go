@@ -9,7 +9,7 @@ import (
 	"github.com/BenedictKing/ccx/internal/conversation"
 )
 
-func TestSubagentRoutingUsesIndependentUIDOrderAndStatus(t *testing.T) {
+func TestSubagentRoutingUsesIndependentUIDOrderAndExcludesStandby(t *testing.T) {
 	cfg := config.Config{ChatUpstream: []config.UpstreamConfig{
 		{Name: "ordinary-disabled", ChannelUID: "uid-a", BaseURL: "https://a.example", APIKeys: []string{"a"}, Status: "disabled", Priority: 0, ModelMapping: map[string]string{"sol": "actual-a"}},
 		{Name: "subagent-first", ChannelUID: "uid-b", BaseURL: "https://b.example", APIKeys: []string{"b"}, Status: "active", Priority: 2, ModelMapping: map[string]string{"sol": "actual-b"}},
@@ -30,15 +30,12 @@ func TestSubagentRoutingUsesIndependentUIDOrderAndStatus(t *testing.T) {
 	if result.ChannelIndex != 1 || config.RedirectModel("astra", result.Upstream) != "actual-b" {
 		t.Fatalf("子代理应使用独立顺序和映射，实际 channel=%d upstream=%+v", result.ChannelIndex, result.Upstream)
 	}
-	result, err = s.SelectChannelWithOptions(context.Background(), SelectionOptions{
+	_, err = s.SelectChannelWithOptions(context.Background(), SelectionOptions{
 		Kind: ChannelKindChat, Model: "astra", AgentRole: "subagent", AgentConfidence: "exact",
 		SubagentRouting: policy, ApplySubagentRouting: true, FailedChannels: map[int]bool{1: true},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if result.ChannelIndex != 0 || result.Upstream.Status != "disabled" {
-		t.Fatalf("普通 disabled 不应排除子代理渠道，实际 %+v", result)
+	if err == nil {
+		t.Fatal("唯一剩余候选在备用池时，子代理应明确失败而不是选择备用渠道")
 	}
 	main, err := s.SelectChannelWithOptions(context.Background(), SelectionOptions{
 		Kind: ChannelKindChat, Model: "astra", AgentRole: "main", SubagentRouting: policy,

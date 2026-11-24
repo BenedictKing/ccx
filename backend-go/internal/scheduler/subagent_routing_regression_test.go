@@ -55,6 +55,23 @@ func TestSubagentRoutingClosedEncryptedSourceFails(t *testing.T) {
 		t.Fatal("closed encrypted source silently failed over to B")
 	}
 }
+func TestSubagentRoutingStandbyEncryptedSourceFails(t *testing.T) {
+	s, close := createTestScheduler(t, subagentContinuationConfig())
+	defer close()
+	tracker := conversation.NewConversationTracker(time.Hour, 24*time.Hour)
+	defer tracker.Stop()
+	tracker.Track("responses", "child", "astra", 0, "A", "", "hello", 1, "subagent")
+	s.SetConversationTracker(tracker)
+	source := s.ConfigSnapshot().ResponsesUpstream[0].Clone()
+	s.RecordSuccessfulResponse("child", "astra", "subagent", 0, source, "cheap-actual", source.BaseURL)
+	if err := s.configManager.SetResponsesChannelStatus(0, "disabled"); err != nil {
+		t.Fatal(err)
+	}
+	_, err := s.SelectChannelWithOptions(context.Background(), SelectionOptions{UserID: "child", Kind: ChannelKindResponses, Model: "astra", AgentRole: "subagent", AgentConfidence: "exact", SubagentRouting: &config.SubagentRoutingPolicy{Model: "sol", Channels: []config.SubagentRoutingChannel{{ChannelUID: "uid-a", Enabled: true}, {ChannelUID: "uid-b", Enabled: true}}}, ApplySubagentRouting: true, PreserveTraceAffinity: true})
+	if err == nil {
+		t.Fatal("standby encrypted source silently failed over to B")
+	}
+}
 func TestSubagentRoutingDeletionDuringSelectionUsesSnapshot(t *testing.T) {
 	cfg := subagentContinuationConfig()
 	cfg.ChatUpstream = cfg.ResponsesUpstream

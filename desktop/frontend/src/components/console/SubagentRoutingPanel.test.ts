@@ -105,6 +105,28 @@ describe('SubagentRoutingPanel', () => {
     })
   })
 
+  it('备用池渠道不展示，也不会随保存写回策略', async () => {
+    const view = channelView()
+    view.channels[1].status = 'disabled'
+    get.mockResolvedValue(view)
+    put.mockResolvedValue({ ...view, activated: true })
+    const container = await renderPanel()
+    const rows = [...container.querySelectorAll<HTMLElement>('[draggable]')]
+    expect(rows.map(row => row.textContent)).toEqual([
+      expect.stringContaining('Match A'), expect.stringContaining('Match B')
+    ])
+    expect(container.textContent).not.toContain('Hidden')
+    const save = [...container.querySelectorAll('button')].find(button => button.textContent?.includes('common.save'))!
+    save.click()
+    await Promise.resolve()
+    await nextTick()
+    expect(put).toHaveBeenCalledWith('/api/responses/channels/subagent-routing', {
+      revision: 'r1', policy: { model: 'sol-sun', channels: [
+        { channelUid: '0', enabled: true }, { channelUid: '2', enabled: true }
+      ] }
+    })
+  })
+
   it('拖拽调整顺序后按新序列保存', async () => {
     const view = channelView()
     get.mockResolvedValue(view)

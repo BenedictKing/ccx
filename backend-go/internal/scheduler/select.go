@@ -1000,9 +1000,6 @@ func (s *ChannelScheduler) getActiveChannelsWithTrace(cfg config.Config, kind Ch
 				continue
 			}
 			priority = policyOrder[upstream.ChannelUID]
-			if status == "disabled" {
-				status = "active"
-			}
 		}
 		ch := ChannelInfo{Index: i, Name: upstream.Name, Priority: priority, Status: status}
 		if status == "disabled" {
