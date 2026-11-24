@@ -247,11 +247,8 @@
                       <div v-if="log.operation" class="log-detail-row">
                         <dt>{{ t('channelLogs.operation') }}</dt><dd>{{ log.operation }}</dd>
                       </div>
-                      <div v-if="log.originalReasoningEffort && !singleReasoningEffort(log)" class="log-detail-row">
-                        <dt>{{ t('channelLogs.reasoning.original') }}</dt><dd>{{ log.originalReasoningEffort }}</dd>
-                      </div>
-                      <div v-if="log.actualReasoningEffort && !singleReasoningEffort(log)" class="log-detail-row">
-                        <dt>{{ t('channelLogs.reasoning.actual') }}</dt><dd>{{ log.actualReasoningEffort }}</dd>
+                      <div v-if="reasoningEffortTransition(log)" class="log-detail-row">
+                        <dt>{{ t('channelLogs.reasoning.label') }}</dt><dd>{{ reasoningEffortTransition(log) }}</dd>
                       </div>
                       <div v-if="log.keyMask" class="log-detail-row">
                         <dt>{{ t('channelLogs.key') }}</dt><dd class="log-detail-code">{{ log.keyMask }}</dd>
@@ -264,9 +261,6 @@
                       </div>
                       <div v-if="log.selectionReason" class="log-detail-row">
                         <dt>{{ t('channelLogs.selectionReason') }}</dt><dd>{{ log.selectionReason }}</dd>
-                      </div>
-                      <div v-if="log.selectionTraceSummary" class="log-detail-row">
-                        <dt>{{ t('channelLogs.selectionTrace') }}</dt><dd>{{ log.selectionTraceSummary }}</dd>
                       </div>
                     </dl>
                   </section>
@@ -608,6 +602,14 @@ const singleReasoningEffort = (log: ChannelLogEntry): string => {
   if (!original) return actual
   if (!actual) return original
   return original.toLowerCase() === actual.toLowerCase() ? actual : ''
+}
+
+// 原始与实际推理不一致时合并为一行展示，例如 "none → high"
+const reasoningEffortTransition = (log: ChannelLogEntry): string => {
+  const original = normalizedReasoningEffort(log.originalReasoningEffort)
+  const actual = normalizedReasoningEffort(log.actualReasoningEffort)
+  if (!original || !actual || singleReasoningEffort(log)) return ''
+  return `${original} → ${actual}`
 }
 
 const reasoningEffortColor = (effort: string): string => {

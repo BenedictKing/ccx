@@ -119,7 +119,8 @@ describe('渠道日志列表', () => {
       await firstLog.trigger('click')
       expect(firstLog.attributes('aria-expanded')).toBe('true')
       expect(wrapper.find('#channel-log-details-0').text()).toContain('https://upstream.test')
-      expect(wrapper.find('#channel-log-details-0').text()).toContain('highest priority')
+      // 调度摘要仅随复制日志导出，界面不展示
+      expect(wrapper.find('#channel-log-details-0').text()).not.toContain('highest priority')
       expect(wrapper.find('#channel-log-details-0').text()).toContain('channelLogs.duration.connect')
       expect(wrapper.find('#channel-log-details-0').text()).toContain('channelLogs.input')
 
@@ -136,6 +137,10 @@ describe('渠道日志列表', () => {
       await failedLog.trigger('click')
       expect(wrapper.find('.log-error-preview').exists()).toBe(false)
       expect(wrapper.find('#channel-log-details-1 .log-error-detail').text()).toBe('upstream overloaded')
+      // 原始与实际推理不一致时合并为单行
+      const failedDetails = wrapper.find('#channel-log-details-1').text()
+      expect(failedDetails).toContain('channelLogs.reasoning.label')
+      expect(failedDetails).toContain('medium → high')
     } finally {
       wrapper.unmount()
     }
