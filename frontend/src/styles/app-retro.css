@@ -1157,14 +1157,11 @@ a.api-type-text {
     display: none;
   }
 
+  /* Vuetify 4 栅格使用 gap 而非列 padding，需通过变量收紧间距 */
   .stat-cards-row {
+    --v-col-gap-x: 8px;
+    --v-col-gap-y: 8px;
     margin-bottom: 12px !important;
-    margin-left: -4px !important;
-    margin-right: -4px !important;
-  }
-
-  .stat-cards-row .v-col {
-    padding: 4px !important;
   }
 
   /* --- 操作按钮区域 --- */
