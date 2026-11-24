@@ -1,11 +1,55 @@
 package responses
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/BenedictKing/ccx/internal/config"
 	"github.com/BenedictKing/ccx/internal/types"
+	"github.com/BenedictKing/ccx/internal/utils"
 )
+
+func TestPatchResponsesUsage_EstimatesOutputByResponseType(t *testing.T) {
+	// 输出估算按 Responses item 类型计数：函数调用参数在 arguments、推理摘要在 summary，
+	// 只读 Content 的旧估算会把这两种输出估成 0。
+	for _, tt := range []struct {
+		name    string
+		output  string
+		wantMin int
+	}{
+		{"function_call_arguments", `[
+			{"type":"function_call","call_id":"call_1","name":"get_weather","arguments":"{\"location\":\"Paris\",\"unit\":\"celsius\"}"}
+		]`, 1},
+		{"reasoning_summary", `[
+			{"type":"reasoning","summary":[{"type":"summary_text","text":"Checking the weather forecast for Paris before answering."}]}
+		]`, 1},
+		{"mixed", `[
+			{"type":"reasoning","summary":[{"type":"summary_text","text":"Need the forecast first."}]},
+			{"type":"message","role":"assistant","content":[{"type":"output_text","text":"It will be sunny in Paris."}]},
+			{"type":"function_call","call_id":"call_1","name":"get_weather","arguments":"{\"location\":\"Paris\"}"}
+		]`, 1},
+		{"no_output", `[]`, 0},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			resp := &types.ResponsesResponse{}
+			if err := json.Unmarshal([]byte(`{"output":`+tt.output+`}`), resp); err != nil {
+				t.Fatal(err)
+			}
+
+			patchResponsesUsage(resp, []byte(`{"model":"gpt","input":"weather in paris"}`), &config.EnvConfig{})
+
+			if want := utils.EstimateResponsesOutputTokens(resp.Output); resp.Usage.OutputTokens != want {
+				t.Fatalf("OutputTokens = %d, want %d", resp.Usage.OutputTokens, want)
+			}
+			if resp.Usage.OutputTokens < tt.wantMin {
+				t.Fatalf("OutputTokens = %d, want >= %d", resp.Usage.OutputTokens, tt.wantMin)
+			}
+			if resp.Usage.TotalTokens != calculateTotalTokensWithCache(resp.Usage.InputTokens, resp.Usage.OutputTokens, 0, 0, 0, 0) {
+				t.Fatalf("TotalTokens = %d, want input %d + output %d", resp.Usage.TotalTokens, resp.Usage.InputTokens, resp.Usage.OutputTokens)
+			}
+		})
+	}
+}
 
 func TestCalculateTotalTokensWithCache(t *testing.T) {
 	if got := calculateTotalTokensWithCache(100, 20, 30, 5, 7, 3); got != 155 {

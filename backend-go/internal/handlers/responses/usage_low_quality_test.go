@@ -21,7 +21,8 @@ func TestPatchResponsesUsageLowQualityReplacesOutliersAndPreservesCache(t *testi
 	requestBody := []byte(`{"model":"gpt-5","input":"` + strings.Repeat("prompt ", 240) + `"}`)
 	estimatedInput := utils.EstimateResponsesRequestTokens(requestBody)
 	outputText := strings.Repeat("answer ", 80)
-	estimatedOutput := utils.EstimateTokens(outputText)
+	// 与生产路径使用同一个输出估算器，期望值才是“本地估算”本身。
+	estimatedOutput := utils.EstimateResponsesOutputTokens([]types.ResponsesItem{{Type: "message", Content: outputText}})
 
 	resp := &types.ResponsesResponse{
 		Output: []types.ResponsesItem{{Type: "message", Content: outputText}},

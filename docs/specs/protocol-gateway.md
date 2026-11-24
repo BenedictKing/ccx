@@ -17,12 +17,12 @@ CCX 在同一监听端口提供六类代理入口，将客户端协议适配到�
 ## 2. 协议与能力边界
 
 | 对外入口  | 当前端点与行为                                                                                                                                                  |
-| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- | ----------------------------------------------------------------------------------------------- |
+| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Messages  | `POST /v1/messages`；支持 Claude 原生及跨协议流式/非流式请求。`POST /v1/messages/count_tokens` 在本地估算并返回 `input_tokens`，不调用上游。                    |
 | Chat      | `POST /v1/chat/completions`；支持 OpenAI Chat 原生及与其他文本协议的转换。                                                                                      |
 | Responses | `POST /v1/responses`；`GET` 同路径仅接受 WebSocket Upgrade。`POST /v1/responses/compact` 使用上游原生 compact，或在非 Responses 上游/不支持场景走本地压缩流程。 |
 | Gemini    | `POST /v1beta/models/*modelAction`；按路径中的模型和 action 处理 `generateContent`、`streamGenerateContent` 等当前 handler 支持的原生操作。                     |
-| Images    | `POST /v1/images/generations                                                                                                                                    | edits | variations`；保留 JSON 或 multipart 语义，操作类型记录为 `generations`、`edits`、`variations`。 |
+| Images    | `POST /v1/images/generations \| edits \| variations`；保留 JSON 或 multipart 语义，操作类型记录为 `generations`、`edits`、`variations`。                        |
 | Vectors   | `POST /v1/embeddings`；要求非空 `model` 和合法 `input`，`dimensions` 若存在必须为正整数；只接受当前 OpenAI 兼容 serviceType。                                   |
 | Models    | `GET /v1/models`、`GET /v1/models/:model`；按渠道聚合或查询模型信息，模型能力可包含上下文与输出上限。                                                           |
 
@@ -40,7 +40,7 @@ CCX 在同一监听端口提供六类代理入口，将客户端协议适配到�
 4. 原生路径默认使用原始字节。需要模型映射或兼容处理时使用请求副本；JSON 重写保留大整数精度，查询参数保留重复值和编码，CCX 的 `key` 鉴权参数不转发。
 5. 上游请求清除 CCX 专用及转发头，设置上游认证，再应用渠道自定义头。Base URL 末尾 `#` 表示跳过自动 `/v1` 拼接的当前约定，具体端点构造由各 provider 负责。
 6. 原生非流式响应保留上游状态码、Content-Type 和正文；原生 SSE 字节透传，解析仅用于预检、指标、会话及观测，不默认合成终态或补 usage。
-7. 跨协议响应经转换器生成目标协议事件与最终响应；首字节提交后持续监控流活动并记录真实终态。
+7. 跨协议响应经转换器生成目标协议事件与最终响应；首字节提交后持续监控流活动并记录真实终态。非原生的 Responses 非流式响应在 usage 缺失或明显偏低时，按 Responses item 类型本地估算输出 token，覆盖推理摘要和函数调用参数。
 
 Responses 特殊流程：
 
@@ -96,5 +96,5 @@ Responses 特殊流程：
 - 公共重试与流处理：`backend-go/internal/handlers/common/`。
 - 原生字节契约：`messages/native_passthrough_test.go`、`chat/native_passthrough_test.go`、`responses/native_passthrough_test.go`、`gemini/native_passthrough_test.go`。
 - Responses WS 与 compact：`websocket.go`、`compact.go`、`compact_local.go`及同目录测试。
-- Images/Vectors：`images/handler.go`、`vectors/handler.go`及各自 `native_passthrough_test.go`、响应矩阵测试。
-- 响应与错误矩阵：各协议目录的 `handler_response_matrix_test.go`，公共 `upstream_rejected_response_test.go`、`stream_data_error_test.go`、`client_error_test.go`。
+- Images/Vectors：`images/handler.go`、`vectors/handler.go`及各自 `native_passthrough_test.go`、`handler_test.go`。
+- 响应与错误矩阵：`messages`、`chat`、`responses`、`gemini` 四个目录的 `handler_response_matrix_test.go`，公共 `upstream_rejected_response_test.go`、`stream_data_error_test.go`、`client_error_test.go`。
