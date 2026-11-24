@@ -79,8 +79,9 @@ tasks:
       - "darwin/icons.icns"
       - "windows/icon.ico"
     cmds:
-      - wails3 generate icons -input appicon.png -macfilename darwin/icons.icns
-      - wails3 generate icons -input appicon-windows.png -windowsfilename windows/icon.ico
+      # Wails 3.1.0 起两个输出参数都有非空默认值，必须显式清空另一个，否则会去写 build/<platform>/ 下不存在的目录。
+      - wails3 generate icons -input appicon.png -macfilename darwin/icons.icns -windowsfilename ""
+      - wails3 generate icons -input appicon-windows.png -windowsfilename windows/icon.ico -macfilename ""
 
   dev:frontend:
     summary: Runs the frontend in development mode
