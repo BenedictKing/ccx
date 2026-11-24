@@ -284,7 +284,7 @@ func TestBuildPayload(t *testing.T) {
 			wantBaseURL:   "https://open.bigmodel.cn/api/paas/v4#",
 			wantService:   "openai",
 			wantNormalize: true,
-			wantVision:    true,
+			wantVision:    false,
 		},
 		{
 			name:           "glm responses",
@@ -293,7 +293,7 @@ func TestBuildPayload(t *testing.T) {
 			wantService:    "openai",
 			wantCodex:      true,
 			wantStripCodex: true,
-			wantVision:     true,
+			wantVision:     false,
 		},
 		{
 			name:          "minimax chat",
@@ -548,7 +548,7 @@ func TestBuildPayload(t *testing.T) {
 			wantService:    "openai",
 			wantCodex:      true,
 			wantStripCodex: true,
-			wantVision:     true,
+			wantVision:     false,
 			wantModelMap:   map[string]string{"sol": "glm-5.4", "astra": "glm-5.4"},
 		},
 		{

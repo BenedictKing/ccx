@@ -98,8 +98,7 @@
         "sonnet": "max"
       },
       "reasoningParamStyle": "reasoning_effort",
-      "normalizeSystemRoleToTopLevel": true,
-      "noVision": true
+      "normalizeSystemRoleToTopLevel": true
     },
     "sensenova": {
       "modelMapping": {

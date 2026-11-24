@@ -19,8 +19,7 @@
       "reasoningParamStyle": "reasoning_effort"
     },
     "glm": {
-      "reasoningParamStyle": "reasoning_effort",
-      "noVision": true
+      "reasoningParamStyle": "reasoning_effort"
     },
     "runapi": {},
     "unity2": {},

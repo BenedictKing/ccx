@@ -185,7 +185,7 @@ export const claudeMessagesPresets: Record<string, ClaudeMessagesPreset> = {
     "normalizeSystemRoleToTopLevel": true,
     "stripImageGenerationTool": false,
     "normalizeNonstandardChatRoles": false,
-    "noVision": true,
+    "noVision": false,
     "noVisionModels": [],
     "visionFallbackModel": ""
   },

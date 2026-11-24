@@ -157,8 +157,7 @@
         "sol": "glm-5.4",
         "terra": "glm-5.4"
       },
-      "reasoningParamStyle": "reasoning_effort",
-      "noVision": true
+      "reasoningParamStyle": "reasoning_effort"
     },
     "sensenova": {
       "modelMapping": {

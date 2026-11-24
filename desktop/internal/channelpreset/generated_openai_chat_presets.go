@@ -8,7 +8,7 @@ func generatedOpenAIChatTargetConfigs() map[string]channelTargetConfig {
 		"mimo":         channelTargetConfig{ReasoningParamStyle: "thinking", NoVisionModels: []string{"mimo-v2.5-pro"}, VisionFallbackModel: "mimo-v2.5", RateLimitRPM: 80},
 		"compshare":    channelTargetConfig{ReasoningParamStyle: "reasoning", NoVisionModels: []string{"glm-5.2", "deepseek-v4-flash"}, VisionFallbackModel: "MiniMax-M2.7"},
 		"kimi":         channelTargetConfig{ReasoningParamStyle: "reasoning_effort"},
-		"glm":          channelTargetConfig{ReasoningParamStyle: "reasoning_effort", NoVision: true},
+		"glm":          channelTargetConfig{ReasoningParamStyle: "reasoning_effort"},
 		"runapi":       channelTargetConfig{},
 		"unity2":       channelTargetConfig{},
 		"openrouter":   channelTargetConfig{},

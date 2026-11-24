@@ -16,8 +16,8 @@ func TestGLMDefaultsUseChatCompletion(t *testing.T) {
 			if payload.BaseURL != "https://open.bigmodel.cn/api/paas/v4#" || payload.ServiceType != "openai" {
 				t.Fatalf("wrong default endpoint: %+v", payload)
 			}
-			if !payload.NoVision {
-				t.Fatal("text-only GLM preset enables vision")
+			if payload.NoVision {
+				t.Fatal("vision-capable GLM preset disables vision")
 			}
 			if payload.ReasoningParamStyle != "reasoning_effort" {
 				t.Fatalf("style=%q", payload.ReasoningParamStyle)
@@ -50,7 +50,7 @@ func TestGLMCodingPlanMessagesUsesChatCompletion(t *testing.T) {
 	if payload.ServiceType != "openai" || payload.BaseURL != "https://open.bigmodel.cn/api/coding/paas/v4#" {
 		t.Fatalf("wrong coding endpoint: %+v", payload)
 	}
-	if payload.ModelMapping["sonnet"] != "glm-5.3-flash" || payload.ReasoningMapping["sonnet"] != "max" || !payload.NoVision {
+	if payload.ModelMapping["sonnet"] != "glm-5.3-flash" || payload.ReasoningMapping["sonnet"] != "max" || payload.NoVision {
 		t.Fatalf("wrong coding model config: %+v", payload)
 	}
 }

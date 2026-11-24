@@ -48,7 +48,7 @@ describe('网关一键预设', () => {
           })
         }
         expect(form.serviceType).toBe(serviceType)
-        expect(form.noVision).toBe(provider === 'glm')
+        expect(form.noVision).toBe(false)
         if (provider !== 'deepseek') expect(form.reasoningParamStyle).toBe('reasoning_effort')
       })
     }

@@ -256,7 +256,7 @@ export const codexResponsesPresets: Record<string, CodexResponsesPreset> = {
     "stripCodexClientTools": true,
     "stripImageGenerationTool": false,
     "normalizeNonstandardChatRoles": false,
-    "noVision": true,
+    "noVision": false,
     "noVisionModels": [],
     "visionFallbackModel": ""
   },
