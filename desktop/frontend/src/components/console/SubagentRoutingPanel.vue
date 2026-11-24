@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
-import { ArrowDown, ArrowUp, Bot, GripVertical, Loader2, RefreshCw } from 'lucide-vue-next'
+import { Bot, GripVertical, Loader2, RefreshCw } from 'lucide-vue-next'
 import { AdminApiError, useAdminApi } from '@/composables/useAdminApi'
 import { useLanguage } from '@/composables/useLanguage'
 import type { SubagentRoutingChannelView, SubagentRoutingView, TextChannelKind } from '@/services/admin-api'
@@ -73,18 +73,6 @@ async function load() {
 function previewModel(channel: SubagentRoutingChannelView) {
   if (!normalizedModel.value) return t('subagentRouting.keepRequestModel')
   return resolveMappedModel(normalizedModel.value, channel.modelMapping)
-}
-
-function move(uid: string, offset: number) {
-  if (saving.value || loading.value) return
-  const visibleIndex = visibleChannels.value.findIndex(channel => channel.channelUid === uid)
-  const neighbour = visibleChannels.value[visibleIndex + offset]
-  if (visibleIndex < 0 || !neighbour) return
-  const index = channels.value.findIndex(channel => channel.channelUid === uid)
-  const target = channels.value.findIndex(channel => channel.channelUid === neighbour.channelUid)
-  const channel = channels.value[index]
-  channels.value[index] = channels.value[target]
-  channels.value[target] = channel
 }
 
 function drop(targetUID: string) {
@@ -219,11 +207,7 @@ watch(() => props.type, () => {
                 {{ normalizedModel ? `${normalizedModel} → ${previewModel(channel)}` : t('subagentRouting.keepRequestModel') }}
               </div>
             </div>
-            <div class="flex items-center gap-1">
-              <Button variant="ghost" size="icon" class="h-7 w-7" :disabled="index === 0 || saving || loading" :title="t('subagentRouting.moveUp')" @click="move(channel.channelUid, -1)"><ArrowUp class="h-3.5 w-3.5" /></Button>
-              <Button variant="ghost" size="icon" class="h-7 w-7" :disabled="index === visibleChannels.length - 1 || saving || loading" :title="t('subagentRouting.moveDown')" @click="move(channel.channelUid, 1)"><ArrowDown class="h-3.5 w-3.5" /></Button>
-              <Switch v-model="channel.enabled" :disabled="saving" :aria-label="t('subagentRouting.channelEnabled')" />
-            </div>
+            <Switch v-model="channel.enabled" :disabled="saving" :aria-label="t('subagentRouting.channelEnabled')" />
           </div>
           <div v-if="!channels.length" class="py-8 text-center text-xs text-muted-foreground">{{ t('subagentRouting.noChannels') }}</div>
         </div>

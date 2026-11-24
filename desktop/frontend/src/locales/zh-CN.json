@@ -43,8 +43,6 @@
   "subagentRouting.channelSequence": "子代理渠道顺序",
   "subagentRouting.noEnabled": "子代理暂无可用渠道；保存后精确子代理请求会明确失败，不影响普通请求。",
   "subagentRouting.channelEnabled": "参与子代理调度",
-  "subagentRouting.moveUp": "上移",
-  "subagentRouting.moveDown": "下移",
   "subagentRouting.noChannels": "尚无渠道，请先添加渠道。",
   "subagentRouting.unsaved": "有未保存的修改",
   "subagentRouting.saved": "子代理调度已保存",

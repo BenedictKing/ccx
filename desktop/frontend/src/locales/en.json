@@ -43,8 +43,6 @@
   "subagentRouting.channelSequence": "Subagent channel sequence",
   "subagentRouting.noEnabled": "No subagent channels are enabled. Precise subagent requests will fail after saving; regular requests are unaffected.",
   "subagentRouting.channelEnabled": "Use for subagents",
-  "subagentRouting.moveUp": "Move up",
-  "subagentRouting.moveDown": "Move down",
   "subagentRouting.noChannels": "No channels yet. Add a channel first.",
   "subagentRouting.unsaved": "Unsaved changes",
   "subagentRouting.saved": "Subagent routing saved",

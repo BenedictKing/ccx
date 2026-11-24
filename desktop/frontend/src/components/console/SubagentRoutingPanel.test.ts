@@ -82,35 +82,54 @@ describe('SubagentRoutingPanel', () => {
     expect(put).not.toHaveBeenCalled()
   })
 
-  it('过滤排序交换匹配项并保留隐藏渠道的位置，边界按钮同步更新', async () => {
+  it('搜索时只显示匹配项并禁止拖动，保存仍写回完整序列', async () => {
     const view = channelView()
     get.mockResolvedValue(view)
     put.mockResolvedValue({ ...view, activated: true })
     const container = await renderPanel()
     const search = container.querySelector<HTMLInputElement>('input[placeholder="orchestration.searchPlaceholder"]')!
     await setInput(search, 'Match')
-    expect(container.querySelectorAll('[draggable]')).toHaveLength(2)
-    const down = container.querySelector<HTMLButtonElement>('button[title="subagentRouting.moveDown"]')!
-    expect(down.disabled).toBe(false)
-    down.click()
-    await nextTick()
-    expect([...container.querySelectorAll('[draggable]')].map(row => row.textContent)).toEqual([
-      expect.stringContaining('Match B'), expect.stringContaining('Match A')
+    const rows = [...container.querySelectorAll<HTMLElement>('[draggable]')]
+    expect(rows.map(row => row.textContent)).toEqual([
+      expect.stringContaining('Match A'), expect.stringContaining('Match B')
     ])
-    expect(container.querySelector<HTMLButtonElement>('button[title="subagentRouting.moveUp"]')!.disabled).toBe(true)
-    expect([...container.querySelectorAll<HTMLButtonElement>('button[title="subagentRouting.moveDown"]')][1].disabled).toBe(true)
+    expect(rows.every(row => row.getAttribute('draggable') === 'false')).toBe(true)
     const save = [...container.querySelectorAll('button')].find(button => button.textContent?.includes('common.save'))!
     save.click()
     await Promise.resolve()
     await nextTick()
     expect(put).toHaveBeenCalledWith('/api/responses/channels/subagent-routing', {
       revision: 'r1', policy: { model: 'sol-sun', channels: [
-        { channelUid: '2', enabled: true }, { channelUid: '1', enabled: true }, { channelUid: '0', enabled: true }
+        { channelUid: '0', enabled: true }, { channelUid: '1', enabled: true }, { channelUid: '2', enabled: true }
       ] }
     })
   })
 
-  it('慢速保存期间锁定模型、排序、开关、拖动和重新加载，失败后保留草稿', async () => {
+  it('拖拽调整顺序后按新序列保存', async () => {
+    const view = channelView()
+    get.mockResolvedValue(view)
+    put.mockResolvedValue({ ...view, activated: true })
+    const container = await renderPanel()
+    const row = (name: string) => [...container.querySelectorAll<HTMLElement>('[draggable]')].find(row => row.textContent?.includes(name))!
+    row('Match A').dispatchEvent(new Event('dragstart'))
+    await nextTick()
+    row('Hidden').dispatchEvent(new Event('drop'))
+    await nextTick()
+    expect([...container.querySelectorAll('[draggable]')].map(row => row.textContent)).toEqual([
+      expect.stringContaining('Hidden'), expect.stringContaining('Match A'), expect.stringContaining('Match B')
+    ])
+    const save = [...container.querySelectorAll('button')].find(button => button.textContent?.includes('common.save'))!
+    save.click()
+    await Promise.resolve()
+    await nextTick()
+    expect(put).toHaveBeenCalledWith('/api/responses/channels/subagent-routing', {
+      revision: 'r1', policy: { model: 'sol-sun', channels: [
+        { channelUid: '1', enabled: true }, { channelUid: '0', enabled: true }, { channelUid: '2', enabled: true }
+      ] }
+    })
+  })
+
+  it('慢速保存期间锁定模型、开关、拖动和重新加载，失败后保留草稿', async () => {
     get.mockResolvedValue(channelView())
     let rejectSave!: (error: Error) => void
     put.mockImplementation(() => new Promise((_, reject) => { rejectSave = reject }))
