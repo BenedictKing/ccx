@@ -111,6 +111,7 @@
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useTheme } from 'vuetify'
 import VueApexCharts from 'vue3-apexcharts'
+import type { ApexOptions } from 'apexcharts'
 import { api, type ChannelKeyMetricsHistoryResponse, type GlobalStatsSummary } from '../services/api'
 import { useGlobalTick } from '../composables/useGlobalTick'
 import { useI18n } from '../i18n'
@@ -427,7 +428,7 @@ const _allDataPoints = computed(() => {
 })
 
 // Computed: chart options
-const chartOptions = computed<ApexCharts.ApexOptions>(() => {
+const chartOptions = computed<ApexOptions>(() => {
   const mode = selectedView.value
 
   // Token/cache mode uses dual Y-axes (left for Input/Read, right for Output/Write)
