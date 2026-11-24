@@ -37,7 +37,7 @@ describe('网关一键预设', () => {
           })
         } else if (provider === 'kimi' && channelType === 'messages') {
           expect(form.modelMapping).toEqual({
-            fable: 'kimi-k3.1-pro', haiku: 'kimi-k3', opus: 'kimi-k3.1-pro', sonnet: 'kimi-k3.1-pro',
+            fable: 'kimi-k3.1-pro', haiku: 'kimi-for-coding', opus: 'kimi-k3.1-pro', sonnet: 'kimi-k3.1-pro',
           })
         } else {
           expect(Object.values(form.modelMapping)).toEqual(Array(channelType === 'responses' ? 5 : 4).fill(target))

@@ -230,7 +230,7 @@ func TestBuildPayload(t *testing.T) {
 			wantNormalizeSystem: true,
 			wantModelMap: map[string]string{
 				"fable":  "kimi-k3.1-pro",
-				"haiku":  "kimi-k3",
+				"haiku":  "kimi-for-coding",
 				"opus":   "kimi-k3.1-pro",
 				"sonnet": "kimi-k3.1-pro",
 			},
