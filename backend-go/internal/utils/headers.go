@@ -212,9 +212,13 @@ func PrepareUpstreamHeaders(c *gin.Context, targetHost string) http.Header {
 	headers.Del("Via")
 	headers.Del("Forwarded")
 
-	// 移除 Accept-Encoding，让 Go 的 http.Client 自动处理 gzip 压缩/解压缩
-	// 这样可以避免在原始请求包含 Accept-Encoding 时 Go 不自动解压缩的问题
-	headers.Del("Accept-Encoding")
+	// 保留客户端明确禁用响应压缩的意图；其他编码由 Go transport 协商并自动解压。
+	encodings := headers.Values("Accept-Encoding")
+	if len(encodings) == 1 && strings.EqualFold(strings.TrimSpace(encodings[0]), "identity") {
+		headers.Set("Accept-Encoding", "identity")
+	} else {
+		headers.Del("Accept-Encoding")
+	}
 
 	// 强制去重 Content-Type（部分客户端可能发送重复的 Content-Type 头）
 	headers.Set("Content-Type", "application/json")

@@ -367,7 +367,7 @@ func handleStreamSuccess(
 	// Token 统计状态
 	var outputTextBuffer bytes.Buffer
 	const maxOutputBufferSize = 1024 * 1024 // 1MB 上限，防止内存溢出
-	var collectedUsage responsesStreamUsage
+	collectedUsage := responsesStreamUsage{InputTokensIncludeCache: !needConvert}
 	hasUsage := false
 	needTokenPatch := false
 	clientGone := false
@@ -483,14 +483,7 @@ func handleStreamSuccess(
 					// 更新 collectedUsage 以便最终日志输出
 					collectedUsage.InputTokens = injectedInput
 					collectedUsage.OutputTokens = injectedOutput
-					collectedUsage.TotalTokens = calculateTotalTokensWithCache(
-						injectedInput,
-						injectedOutput,
-						collectedUsage.CacheReadInputTokens,
-						collectedUsage.CacheCreationInputTokens,
-						collectedUsage.CacheCreation5mInputTokens,
-						collectedUsage.CacheCreation1hInputTokens,
-					)
+					collectedUsage.TotalTokens = collectedUsage.totalTokens()
 					if envCfg.EnableResponseLogs && envCfg.ShouldLog("debug") {
 						common.RequestLogf(c, "[Responses-Stream-Token] 上游无usage, 注入本地估算: input=%d, output=%d", injectedInput, injectedOutput)
 					}
@@ -699,14 +692,7 @@ streamEnd:
 					eventToSend, injectedInput, injectedOutput = injectResponsesUsageToCompletedEventWithLogTag(event, originalRequestJSON, outputTextBuffer.String(), envCfg, common.RequestLogTag(c))
 					collectedUsage.InputTokens = injectedInput
 					collectedUsage.OutputTokens = injectedOutput
-					collectedUsage.TotalTokens = calculateTotalTokensWithCache(
-						injectedInput,
-						injectedOutput,
-						collectedUsage.CacheReadInputTokens,
-						collectedUsage.CacheCreationInputTokens,
-						collectedUsage.CacheCreation5mInputTokens,
-						collectedUsage.CacheCreation1hInputTokens,
-					)
+					collectedUsage.TotalTokens = collectedUsage.totalTokens()
 				} else if needTokenPatch || lowQuality {
 					eventToSend = patchResponsesCompletedEventUsageWithLogTag(event, originalRequestJSON, outputTextBuffer.String(), &collectedUsage, envCfg, lowQuality, common.RequestLogTag(c))
 				}
@@ -786,6 +772,7 @@ streamEnd:
 // responsesStreamUsage 流式响应 usage 收集结构
 type responsesStreamUsage struct {
 	InputTokens                int
+	InputTokensIncludeCache    bool // 原生 OpenAI 输入包含缓存，转换器内部输入不包含缓存
 	OutputTokens               int
 	TotalTokens                int // 用于检测 total_tokens 是否需要补全
 	CacheCreationInputTokens   int
@@ -794,6 +781,14 @@ type responsesStreamUsage struct {
 	CacheCreation1hInputTokens int
 	CacheTTL                   string
 	HasClaudeCache             bool // 是否检测到 Claude 原生缓存字段（区别于 OpenAI cached_tokens）
+}
+
+func (usage responsesStreamUsage) totalTokens() int {
+	if usage.InputTokensIncludeCache && !usage.HasClaudeCache {
+		return usage.InputTokens + usage.OutputTokens
+	}
+	return calculateTotalTokensWithCache(usage.InputTokens, usage.OutputTokens, usage.CacheReadInputTokens,
+		usage.CacheCreationInputTokens, usage.CacheCreation5mInputTokens, usage.CacheCreation1hInputTokens)
 }
 
 func normalizeResponsesSSEFieldLine(line string) string {

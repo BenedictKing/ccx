@@ -3,10 +3,27 @@ package utils
 import (
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"testing"
 
 	"github.com/gin-gonic/gin"
 )
+
+func TestPrepareUpstreamHeadersDoesNotForwardAmbiguousEncoding(t *testing.T) {
+	for _, encodings := range [][]string{{"identity", "gzip"}, {"identity, gzip"}} {
+		req := httptest.NewRequest(http.MethodPost, "/v1/messages", nil)
+		req.Header["Accept-Encoding"] = encodings
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		c.Request = req
+		headers := PrepareUpstreamHeaders(c, "upstream.example")
+		if got := headers.Get("Accept-Encoding"); got != "" {
+			t.Errorf("ambiguous encoding forwarded: %q", got)
+		}
+		if !reflect.DeepEqual(req.Header.Values("Accept-Encoding"), encodings) {
+			t.Error("source header mutated")
+		}
+	}
+}
 
 func TestForwardResponseHeadersPreservesResponseContentType(t *testing.T) {
 	for _, upstreamType := range []string{"text/plain", "image/png", "application/json", ""} {

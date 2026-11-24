@@ -42,6 +42,10 @@ CCX 在同一监听端口提供六类代理入口，将客户端协议适配到�
 6. 原生非流式响应保留上游状态码、Content-Type 和正文；原生 SSE 字节透传，解析仅用于预检、指标、会话及观测，不默认合成终态或补 usage。
 7. 跨协议响应经转换器生成目标协议事件与最终响应；首字节提交后持续监控流活动并记录真实终态。非原生的 Responses 非流式响应在 usage 缺失或明显偏低时，按 Responses item 类型本地估算输出 token，覆盖推理摘要和函数调用参数。
 
+- 客户端明确发送单一 `Accept-Encoding: identity` 时，HTTP 上游请求保留该禁用响应压缩意图；其他编码协商头仍移除，非流式由 Go transport 协商和解压 gzip，流式保持 transport 禁用自动压缩的原有行为。渠道自定义头继续按显式配置覆盖，客户端请求头不被原地修改。
+- 转换后的 Responses 客户端出口 `input_tokens` 包含缓存，`total_tokens = input_tokens + output_tokens`；内部指标仍使用不含缓存的输入计数。低质量模式不覆盖有缓存信号的输入计数，本地估算不等同于上游模型 tokenizer 或 llama.cpp 的 `n_tokens`。
+- 原生 OpenAI Responses 的低质量 usage 修补保留包含缓存的输入口径，重新计算 `total_tokens` 时不得重复加缓存；转换路径在完成内部修补后仅在出口加回一次缓存。
+
 Responses 特殊流程：
 
 - `previous_response_id` 在原生路径保留；需要转换时使用会话快照重建必要历史，不能把其他尝试的工具上下文混入。
@@ -87,6 +91,8 @@ Responses 特殊流程：
 | Images JSON/multipart     | 操作路径、模型映射、二进制 part 和 Content-Type 保留；URL 转 base64 遵守大小与安全限制。 |
 | Vectors 请求与响应        | 非法 model/input/dimensions 返回 400；合法 fallback 不混向量空间，非法响应不当作成功。   |
 | 鉴权与查询参数            | CCX key 不泄露到上游，重复查询参数保留；非法代理认证在选渠前失败。                       |
+| 禁用响应压缩              | Messages HTTP/SSE 的假上游实际收到 `identity`；默认 HTTP 协商 gzip、SSE 不自动协商，客户端收到可读响应。 |
+| Chat 转 Responses 缓存用量 | 多轮 HTTP/SSE 的客户端用量包含缓存；原生 Responses 不重复加缓存，内部统计口径保持一致。 |
 
 验收使用本地假上游覆盖 HTTP、SSE、WS 和 multipart，至少核对上游实际收到的字节/模型与客户端实际收到的事件；不只验证 handler 返回 200。
 
@@ -98,3 +104,4 @@ Responses 特殊流程：
 - Responses WS 与 compact：`websocket.go`、`compact.go`、`compact_local.go`及同目录测试。
 - Images/Vectors：`images/handler.go`、`vectors/handler.go`及各自 `native_passthrough_test.go`、`handler_test.go`。
 - 响应与错误矩阵：`messages`、`chat`、`responses`、`gemini` 四个目录的 `handler_response_matrix_test.go`，公共 `upstream_rejected_response_test.go`、`stream_data_error_test.go`、`client_error_test.go`。
+- 压缩协商：`utils/headers.go`、`utils/headers_test.go`、`messages/native_passthrough_test.go`；用量口径：`responses/stream.go`、`responses/usage.go`、`responses/usage_context_regression_test.go`。后者覆盖本地假上游的三轮高缓存 HTTP/SSE、低质量开关及重复 developer 消息；#263 的 llama.cpp 请求样本与 Codex App 实测仍待验证。

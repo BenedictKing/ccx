@@ -556,14 +556,8 @@ func patchResponsesCompletedEventUsageWithLogTag(event string, requestBody []byt
 						currentTotal = int(t)
 					}
 					if patched || (currentTotal == 0 && (collected.InputTokens > 0 || collected.OutputTokens > 0)) {
-						usage["total_tokens"] = calculateTotalTokensWithCache(
-							collected.InputTokens,
-							collected.OutputTokens,
-							collected.CacheReadInputTokens,
-							collected.CacheCreationInputTokens,
-							collected.CacheCreation5mInputTokens,
-							collected.CacheCreation1hInputTokens,
-						)
+						collected.TotalTokens = collected.totalTokens()
+						usage["total_tokens"] = collected.TotalTokens
 					}
 
 					if envCfg.EnableResponseLogs && envCfg.ShouldLog("debug") && patched {
