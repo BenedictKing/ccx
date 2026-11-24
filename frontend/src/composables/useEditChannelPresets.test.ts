@@ -43,7 +43,9 @@ describe('网关一键预设', () => {
           expect(Object.values(form.modelMapping)).toEqual(Array(channelType === 'responses' ? 5 : 4).fill(target))
         }
         if (channelType === 'messages') {
-          expect(form.reasoningMapping).toEqual({ fable: 'max', haiku: 'high', opus: 'max', sonnet: 'max' })
+          expect(form.reasoningMapping).toEqual({
+            fable: 'max', haiku: 'high', opus: 'max', sonnet: provider === 'kimi' ? 'high' : 'max',
+          })
         }
         expect(form.serviceType).toBe(serviceType)
         expect(form.noVision).toBe(provider === 'glm')

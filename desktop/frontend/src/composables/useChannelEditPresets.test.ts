@@ -44,7 +44,7 @@ describe('网关一键预设', () => {
         }
         if (channelType === 'messages') {
           expect(Object.fromEntries(rows.value.map(row => [row.source, row.reasoning]))).toEqual({
-            fable: 'max', haiku: 'high', opus: 'max', sonnet: 'max',
+            fable: 'max', haiku: 'high', opus: 'max', sonnet: provider === 'kimi' ? 'high' : 'max',
           })
         }
         expect(form.serviceType).toBe(serviceType)

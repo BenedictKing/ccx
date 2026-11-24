@@ -79,7 +79,7 @@
         "fable": "max",
         "haiku": "high",
         "opus": "max",
-        "sonnet": "max"
+        "sonnet": "high"
       },
       "reasoningParamStyle": "reasoning_effort",
       "normalizeSystemRoleToTopLevel": true

@@ -238,7 +238,7 @@ func TestBuildPayload(t *testing.T) {
 				"fable":  "max",
 				"haiku":  "high",
 				"opus":   "max",
-				"sonnet": "max",
+				"sonnet": "high",
 			},
 		},
 		{

@@ -150,7 +150,7 @@ export const claudeMessagesPresets: Record<string, ClaudeMessagesPreset> = {
       "fable": "max",
       "haiku": "high",
       "opus": "max",
-      "sonnet": "max"
+      "sonnet": "high"
     },
     "reasoningParamStyle": "reasoning_effort",
     "authHeader": "",
