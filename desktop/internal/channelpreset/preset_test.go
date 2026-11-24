@@ -537,7 +537,7 @@ func TestBuildPayload(t *testing.T) {
 			wantCodex:      true,
 			wantStripCodex: true,
 			wantVision:     true,
-			wantModelMap:   map[string]string{"sol": "glm-5.3", "astra": "glm-5.3"},
+			wantModelMap:   map[string]string{"sol": "glm-5.4", "astra": "glm-5.4"},
 		},
 		{
 			name:                "sensenova messages",

@@ -22,7 +22,7 @@ describe('网关一键预设', () => {
   for (const channelType of ['messages', 'responses'] as const) {
     for (const serviceType of ['openai', 'claude'] as const) {
       it.each([
-        ['deepseek', 'deepseek-flash'], ['kimi', 'kimi-k3.1-pro'], ['glm', 'glm-5.3'],
+        ['deepseek', 'deepseek-flash'], ['kimi', 'kimi-k3.1-pro'], ['glm', 'glm-5.4'],
       ])(`${channelType}/${serviceType} 按入口选择 %s 源模型类别`, (provider, target) => {
         const form = makeForm(serviceType)
         const sync = vi.fn()
@@ -31,7 +31,14 @@ describe('网关一键预设', () => {
           syncModelMappingRowsFromForm: sync,
         }).applyPreset(provider)
         expect(Object.keys(form.modelMapping).sort()).toEqual(channelType === 'responses' ? codexSources : claudeSources)
-        expect(Object.values(form.modelMapping)).toEqual(Array(channelType === 'responses' ? 5 : 4).fill(target))
+        if (provider === 'glm' && channelType === 'messages') {
+          expect(form.modelMapping).toEqual({
+            fable: 'glm-5.4', haiku: 'glm-5.3-flash', opus: 'glm-5.4', sonnet: 'glm-5.3-flash',
+          })
+          expect(form.reasoningMapping).toEqual({ fable: 'max', haiku: 'high', opus: 'max', sonnet: 'max' })
+        } else {
+          expect(Object.values(form.modelMapping)).toEqual(Array(channelType === 'responses' ? 5 : 4).fill(target))
+        }
         expect(form.serviceType).toBe(serviceType)
         expect(form.noVision).toBe(provider === 'glm')
         if (provider !== 'deepseek') expect(form.reasoningParamStyle).toBe('reasoning_effort')

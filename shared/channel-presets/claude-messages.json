@@ -74,10 +74,16 @@
     },
     "glm": {
       "modelMapping": {
-        "fable": "glm-5.3",
-        "haiku": "glm-5.3",
-        "opus": "glm-5.3",
-        "sonnet": "glm-5.3"
+        "fable": "glm-5.4",
+        "haiku": "glm-5.3-flash",
+        "opus": "glm-5.4",
+        "sonnet": "glm-5.3-flash"
+      },
+      "reasoningMapping": {
+        "fable": "max",
+        "haiku": "high",
+        "opus": "max",
+        "sonnet": "max"
       },
       "reasoningParamStyle": "reasoning_effort",
       "normalizeSystemRoleToTopLevel": true,

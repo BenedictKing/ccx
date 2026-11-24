@@ -243,11 +243,11 @@ export const codexResponsesPresets: Record<string, CodexResponsesPreset> = {
   },
   "glm": {
     "modelMapping": {
-      "astra": "glm-5.3",
-      "codex-auto-review": "glm-5.3",
-      "luna": "glm-5.3",
-      "sol": "glm-5.3",
-      "terra": "glm-5.3"
+      "astra": "glm-5.4",
+      "codex-auto-review": "glm-5.4",
+      "luna": "glm-5.4",
+      "sol": "glm-5.4",
+      "terra": "glm-5.4"
     },
     "reasoningMapping": {},
     "reasoningParamStyle": "reasoning_effort",
