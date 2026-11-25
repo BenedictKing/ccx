@@ -21,21 +21,6 @@ CCX 是一个高性能的 AI API 代理与协议转换网关，支持 Claude、O
 
 ## 赞助商
 
-<table>
-<tr>
-<td width="180"><a href="https://www.compshare.cn/?ytag=GPU_YY_git_ccx"><img src="docs/sponsors/youyun-zhisuan.png" alt="优云智算" width="150"></a></td>
-<td>感谢 <a href="https://www.compshare.cn/?ytag=GPU_YY_git_ccx">优云智算</a> 赞助了本项目！优云智算是 UCloud 旗下 AI 云平台，主打包月、按次的高性价比国模 Agent Plan 套餐，低至 49 元/月起。同时提供官转稳定海外模型，支持接入 Claude Code、Codex 及 API 调用，支持企业高并发、7*24 技术支持、自助开票。通过<a href="https://www.compshare.cn/?ytag=GPU_YY_git_ccx">此链接</a>注册的用户，可得免费 5 元平台体验金！</td>
-</tr>
-<tr>
-<td width="180"><a href="https://runapi.co/register?aff=CqQO"><img src="docs/sponsors/runapi.svg" alt="RunAPI" width="150"></a></td>
-<td>感谢 <a href="https://runapi.co/register?aff=CqQO">RunAPI</a> 赞助了本项目！RunAPI 是高效稳定的API OpenRouter平替平台，一个 API Key 即可访问 OpenAI、Claude、Gemini、DeepSeek、Grok 等 150+ 主流模型，低至 1 折，极其稳定，可以无缝兼容 Claude Code、OpenClaw 等工具。RunAPI 为 CCX用户提供专属福利：注册联系管理员即可领取￥7的免费额度</td>
-</tr>
-<tr>
-<td width="180"><a href="https://unity2.ai/register?source=ccx"><img src="docs/sponsors/unity2-ai.jpg" alt="Unity2.ai" width="150"></a></td>
-<td>感谢 <a href="https://unity2.ai/register?source=ccx">Unity2.ai</a> 赞助了本项目！Unity2.ai 是面向个人开发者、团队、企业的高性能 AI 模型 API 中转平台，长期服务国内头部企业，日均承载超 300 亿 token 调用，支持 5000 RPM 级高并发。一个 API Key 即可适配 Claude Code、Codex、OpenAI 模型、IDE 插件和 Agent 工作流等场景。具备企业级稳定供应能力，在高并发、持续调用和团队集中采购场景下依然保持低延迟、高可用。同时支持余额计费、组合订阅、首充优惠、企业开票、专属 1v1 对接，适合个人高频使用和企业长期接入。现在注册 Unity2.ai 可领取 $2 余额，加入官方群再送 $10 余额，合计最高可领 $12 免费额度，适合先体验后长期使用。注册地址：<a href="https://unity2.ai/register?source=ccx">https://unity2.ai/register?source=ccx</a></td>
-</tr>
-</table>
-
 ## 界面预览
 
 ### 渠道编排
