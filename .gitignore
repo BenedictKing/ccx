@@ -258,3 +258,7 @@ __pycache__/
 
 .mcp.json
 store-msix/
+
+.workbuddy/
+.oil-ui/
+.codegraph/
