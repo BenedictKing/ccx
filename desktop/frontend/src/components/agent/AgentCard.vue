@@ -118,7 +118,7 @@ const codexKeyPlaceholder = computed(() => {
 // 支持快捷模式/插件模式切换的 provider 列表
 const codexHasMode = computed(() => {
   const p = props.selectedCodexProvider
-  return p === 'ccx' || p === 'deepseek' || p === 'mimo' || p === 'compshare' || p === 'dashscope' || p === 'runapi' || p === 'kimi' || p === 'glm' || p === 'minimax' || p === 'opencode-zen' || p === 'opencode-go' || p === 'xfyun' || p === 'tencent-lkeap' || p === 'volc-ark' || p === 'qianfan' || p === 'modelscope' || p === 'openrouter'
+  return p === 'ccx' || p === 'deepseek' || p === 'mimo' || p === 'dashscope' || p === 'kimi' || p === 'glm' || p === 'minimax' || p === 'opencode-zen' || p === 'opencode-go' || p === 'xfyun' || p === 'tencent-lkeap' || p === 'volc-ark' || p === 'qianfan' || p === 'modelscope' || p === 'openrouter'
 })
 
 const badgeClass = computed(() => {
@@ -255,8 +255,6 @@ const openFileInEditor = async (editorPath: string, filePath: string) => {
             <option value="openai">{{ t('agent.provider.openaiDirect') }}</option>
             <option value="deepseek">{{ t('agent.provider.deepseekDirect') }}</option>
             <option value="mimo">{{ t('agent.provider.mimoDirect') }}</option>
-            <option value="compshare">{{ t('agent.provider.compshareDirect') }}</option>
-            <option value="runapi">{{ t('agent.provider.runapiDirect') }}</option>
             <option value="kimi">{{ t('agent.provider.kimiDirect') }}</option>
             <option value="glm">{{ t('agent.provider.glmDirect') }}</option>
             <option value="minimax">{{ t('agent.provider.minimaxDirect') }}</option>
@@ -360,8 +358,6 @@ const openFileInEditor = async (editorPath: string, filePath: string) => {
             <option value="ccx">{{ t('agent.provider.localGateway') }}</option>
             <option value="deepseek">{{ t('agent.provider.deepseekDirect') }}</option>
             <option value="mimo">{{ t('agent.provider.mimoDirect') }}</option>
-            <option value="compshare">{{ t('agent.provider.compshareDirect') }}</option>
-            <option value="runapi">{{ t('agent.provider.runapiDirect') }}</option>
             <option value="kimi">{{ t('agent.provider.kimiDirect') }}</option>
             <option value="glm">{{ t('agent.provider.glmDirect') }}</option>
             <option value="sensenova">{{ t('agent.provider.sensenovaDirect') }}</option>

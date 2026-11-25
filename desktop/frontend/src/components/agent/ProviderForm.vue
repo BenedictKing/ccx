@@ -2,7 +2,7 @@
 import { ExternalLink } from 'lucide-vue-next'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
-import { openProviderPromotion, openProviderConsole, providerConsoleLinks, providerPromotionLinks } from '@/lib/external-link'
+import { openProviderConsole, providerConsoleLinks } from '@/lib/external-link'
 import type { AgentProvider } from '@/types'
 import { useLanguage } from '@/composables/useLanguage'
 
@@ -87,9 +87,6 @@ const keyPlaceholder = (provider: AgentProvider) => {
         <option value="ccx">{{ t('agent.provider.localGateway') }}</option>
         <option value="deepseek">{{ t('agent.provider.deepseekDirect') }}</option>
         <option value="mimo">{{ t('agent.provider.mimoDirect') }}</option>
-        <option value="compshare">{{ t('agent.provider.compshareDirect') }}</option>
-        <option value="runapi">{{ t('agent.provider.runapiDirect') }}</option>
-        <option value="unity2">{{ t('agent.provider.unity2Direct') }}</option>
         <option value="kimi">{{ t('agent.provider.kimiDirect') }}</option>
         <option value="glm">{{ t('agent.provider.glmDirect') }}</option>
         <option value="sensenova">{{ t('agent.provider.sensenovaDirect') }}</option>
@@ -107,15 +104,6 @@ const keyPlaceholder = (provider: AgentProvider) => {
     </div>
 
     <div v-if="selectedProvider !== 'ccx'" class="inline-flex items-center gap-3 flex-wrap">
-      <button
-        v-if="providerPromotionLinks[selectedProvider]"
-        type="button"
-        class="inline-flex items-center gap-1.5 text-xs font-medium text-blue-700 dark:text-blue-300 hover:text-blue-800 dark:hover:text-blue-200"
-        @click="openProviderPromotion(selectedProvider)"
-      >
-        {{ t('agent.promo') }}
-        <ExternalLink class="h-3 w-3" />
-      </button>
       <button
         v-if="providerConsoleLinks[selectedProvider]"
         type="button"

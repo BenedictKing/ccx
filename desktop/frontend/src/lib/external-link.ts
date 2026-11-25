@@ -3,9 +3,6 @@ import { Browser } from '@wailsio/runtime'
 export const providerConsoleLinks: Record<string, string> = {
   deepseek: 'https://platform.deepseek.com/usage',
   mimo: 'https://platform.xiaomimimo.com/console/balance',
-  compshare: 'https://console.compshare.cn/light-gpu/model-subscription',
-  runapi: 'https://runapi.co/console',
-  unity2: 'https://unity2.ai/dashboard',
   'tencent-lkeap': 'https://console.cloud.tencent.com/lkeap/token-plan',
   kimi: 'https://platform.moonshot.cn/console/account',
   'volc-ark': 'https://console.volcengine.com/ark/region:cn-beijing/subscription/coding-plan?projectName=default',
@@ -23,24 +20,12 @@ export const providerConsoleLinks: Record<string, string> = {
   xfyun: 'https://console.xfyun.cn/',
 }
 
-export const providerPromotionLinks: Record<string, string> = {
-  compshare: 'https://www.compshare.cn/?ytag=GPU_YY_git_ccx',
-  runapi: 'https://runapi.co/register?aff=CqQO',
-  unity2: 'https://unity2.ai/register?source=ccx',
-}
-
 export function openExternalLink(url: string) {
   return Browser.OpenURL(url)
 }
 
 export function openProviderConsole(provider: string) {
   const url = providerConsoleLinks[provider]
-  if (!url) return Promise.resolve()
-  return openExternalLink(url)
-}
-
-export function openProviderPromotion(provider: string) {
-  const url = providerPromotionLinks[provider]
   if (!url) return Promise.resolve()
   return openExternalLink(url)
 }

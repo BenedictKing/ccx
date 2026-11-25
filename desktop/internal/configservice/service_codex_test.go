@@ -98,67 +98,6 @@ base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 	}
 }
 
-func TestGetStatusCodex_RunAPIQuickProvider(t *testing.T) {
-	svc := newTestService(t)
-	configPath := filepath.Join(svc.homeDir, ".codex", "config.toml")
-	authPath := filepath.Join(svc.homeDir, ".codex", "auth.json")
-	os.MkdirAll(filepath.Dir(configPath), 0o755)
-
-	tomlContent := `model_provider = "openai"
-openai_base_url = "https://runapi.co/v1"
-`
-	os.WriteFile(configPath, []byte(tomlContent), 0o644)
-	writeJSON(authPath, map[string]any{"OPENAI_API_KEY": "runapi-key"})
-
-	status, err := svc.GetStatus(PlatformCodex, 3688)
-	if err != nil {
-		t.Fatalf("GetStatus failed: %v", err)
-	}
-	if status.Provider != ProviderRunAPI {
-		t.Errorf("Provider = %q, want %q", status.Provider, ProviderRunAPI)
-	}
-	if status.Mode != "quick" {
-		t.Errorf("Mode = %q, want quick", status.Mode)
-	}
-	if status.TargetBaseURL != "https://runapi.co/v1" {
-		t.Errorf("TargetBaseURL = %q, want https://runapi.co/v1", status.TargetBaseURL)
-	}
-	if !status.Configured {
-		t.Error("Configured should be true for RunAPI quick provider")
-	}
-}
-
-func TestGetStatusCodex_RunAPIPluginProvider(t *testing.T) {
-	svc := newTestService(t)
-	configPath := filepath.Join(svc.homeDir, ".codex", "config.toml")
-	authPath := filepath.Join(svc.homeDir, ".codex", "auth.json")
-	os.MkdirAll(filepath.Dir(configPath), 0o755)
-
-	tomlContent := `model_provider = "runapi"
-
-[model_providers.runapi]
-base_url = "https://runapi.co/v1"
-wire_api = "responses"
-experimental_bearer_token = "runapi-key"
-`
-	os.WriteFile(configPath, []byte(tomlContent), 0o644)
-	writeJSON(authPath, map[string]any{"OPENAI_API_KEY": "runapi-key"})
-
-	status, err := svc.GetStatus(PlatformCodex, 3688)
-	if err != nil {
-		t.Fatalf("GetStatus failed: %v", err)
-	}
-	if status.Provider != ProviderRunAPI {
-		t.Errorf("Provider = %q, want %q", status.Provider, ProviderRunAPI)
-	}
-	if status.TargetProvider != ProviderRunAPI {
-		t.Errorf("TargetProvider = %q, want %q", status.TargetProvider, ProviderRunAPI)
-	}
-	if !status.Configured {
-		t.Error("Configured should be true for RunAPI plugin provider")
-	}
-}
-
 func TestGetStatusCodex_OpenCodeZenProvider(t *testing.T) {
 	svc := newTestService(t)
 	configPath := filepath.Join(svc.homeDir, ".codex", "config.toml")
@@ -182,86 +121,6 @@ base_url = "https://api.opencode.ai/v1"
 	}
 	if !status.Configured {
 		t.Error("Configured should be true for opencode-zen provider")
-	}
-}
-
-func TestApplyCodex_RunAPIQuickMode(t *testing.T) {
-	svc := newTestService(t)
-	configPath := filepath.Join(svc.homeDir, ".codex", "config.toml")
-	authPath := filepath.Join(svc.homeDir, ".codex", "auth.json")
-	os.MkdirAll(filepath.Dir(configPath), 0o755)
-
-	err := svc.Apply(ApplyAgentConfigRequest{
-		Platform: PlatformCodex,
-		Provider: ProviderRunAPI,
-		Mode:     "quick",
-		APIKey:   "runapi-key",
-	}, 0, "")
-	if err != nil {
-		t.Fatalf("Apply failed: %v", err)
-	}
-
-	content, _ := os.ReadFile(configPath)
-	s := string(content)
-	if !strings.Contains(s, `model_provider = "openai"`) {
-		t.Error("config.toml should contain model_provider = openai")
-	}
-	if !strings.Contains(s, `openai_base_url = "https://runapi.co/v1"`) {
-		t.Error("config.toml should contain RunAPI openai_base_url")
-	}
-	if strings.Contains(s, `[model_providers.runapi]`) {
-		t.Error("config.toml should not contain RunAPI provider block in quick mode")
-	}
-
-	authData, _, _ := readJSONMap(authPath)
-	if authData["OPENAI_API_KEY"] != "runapi-key" {
-		t.Errorf("OPENAI_API_KEY = %v, want runapi-key", authData["OPENAI_API_KEY"])
-	}
-	if authData["auth_mode"] != "apikey" {
-		t.Errorf("auth_mode = %v, want apikey", authData["auth_mode"])
-	}
-}
-
-func TestApplyCodex_RunAPIPluginMode(t *testing.T) {
-	svc := newTestService(t)
-	configPath := filepath.Join(svc.homeDir, ".codex", "config.toml")
-	authPath := filepath.Join(svc.homeDir, ".codex", "auth.json")
-	os.MkdirAll(filepath.Dir(configPath), 0o755)
-
-	err := svc.Apply(ApplyAgentConfigRequest{
-		Platform: PlatformCodex,
-		Provider: ProviderRunAPI,
-		Mode:     "plugin",
-		APIKey:   "runapi-key",
-	}, 0, "")
-	if err != nil {
-		t.Fatalf("Apply failed: %v", err)
-	}
-
-	content, _ := os.ReadFile(configPath)
-	s := string(content)
-	if !strings.Contains(s, `model_provider = "runapi"`) {
-		t.Error("config.toml should contain model_provider = runapi")
-	}
-	if !strings.Contains(s, `[model_providers.runapi]`) {
-		t.Error("config.toml should contain RunAPI provider block")
-	}
-	if !strings.Contains(s, `base_url = "https://runapi.co/v1"`) {
-		t.Error("config.toml should contain RunAPI base_url")
-	}
-	if !strings.Contains(s, `wire_api = "responses"`) {
-		t.Error("config.toml should contain wire_api = responses")
-	}
-	if !strings.Contains(s, `experimental_bearer_token = "runapi-key"`) {
-		t.Error("config.toml should contain experimental_bearer_token")
-	}
-
-	authData, _, _ := readJSONMap(authPath)
-	if authData["OPENAI_API_KEY"] != "runapi-key" {
-		t.Errorf("OPENAI_API_KEY = %v, want runapi-key", authData["OPENAI_API_KEY"])
-	}
-	if authData["auth_mode"] != "apikey" {
-		t.Errorf("auth_mode = %v, want apikey", authData["auth_mode"])
 	}
 }
 
@@ -319,36 +178,6 @@ func TestApplyCodex_MiMoTokenPlanBaseURL(t *testing.T) {
 	}
 	if !strings.Contains(s, `wire_api = "responses"`) {
 		t.Error("plugin config should contain wire_api = responses")
-	}
-}
-
-func TestApplyOpenCode_RunAPIProvider(t *testing.T) {
-	svc := newTestService(t)
-	configPath := filepath.Join(svc.homeDir, ".config", "opencode", "opencode.jsonc")
-	authPath := svc.openCodeAuthPath()
-
-	err := svc.Apply(ApplyAgentConfigRequest{
-		Platform: PlatformOpenCode,
-		Provider: ProviderRunAPI,
-		APIKey:   "runapi-key",
-	}, 0, "")
-	if err != nil {
-		t.Fatalf("Apply failed: %v", err)
-	}
-
-	content, _ := os.ReadFile(configPath)
-	s := string(content)
-	if !strings.Contains(s, `"runapi"`) {
-		t.Error("opencode config should contain runapi provider")
-	}
-	if !strings.Contains(s, `"baseURL": "https://runapi.co/v1"`) {
-		t.Error("opencode config should contain RunAPI baseURL")
-	}
-
-	authData, _, _ := readJSONMap(authPath)
-	_, key := openCodeAuthKeyFromMap(authData, ProviderRunAPI)
-	if key != "runapi-key" {
-		t.Errorf("RunAPI auth key = %q, want runapi-key", key)
 	}
 }
 
@@ -1436,10 +1265,10 @@ wire_api = "responses"
 env_key = "OPENAI_API_KEY"
 requires_openai_auth = false
 
-[model_providers.runapi]
-base_url = "https://runapi.co/v1"
+[model_providers.relay]
+base_url = "https://relay.example.com/v1"
 wire_api = "responses"
-experimental_bearer_token = "stale-runapi-token"
+experimental_bearer_token = "stale-relay-token"
 `
 	os.WriteFile(configPath, []byte(tomlContent), 0o644)
 	writeJSON(authPath, map[string]any{"OPENAI_API_KEY": "test-key", "auth_mode": "apikey"})
@@ -1464,10 +1293,10 @@ func TestGetStatusCodex_ThirdPartyNotDiagnosed(t *testing.T) {
 
 	// 第三方直连不应被本地 CCX 一致性诊断误报
 	tomlContent := `model_provider = "openai"
-openai_base_url = "https://runapi.co/v1"
+openai_base_url = "https://relay.example.com/v1"
 `
 	os.WriteFile(configPath, []byte(tomlContent), 0o644)
-	writeJSON(authPath, map[string]any{"OPENAI_API_KEY": "runapi-key", "auth_mode": "apikey"})
+	writeJSON(authPath, map[string]any{"OPENAI_API_KEY": "relay-key", "auth_mode": "apikey"})
 
 	status, err := svc.GetStatus(PlatformCodex, 3688)
 	if err != nil {

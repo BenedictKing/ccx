@@ -10,19 +10,12 @@
       "visionFallbackModel": "mimo-v2.5",
       "rateLimitRpm": 80
     },
-    "compshare": {
-      "reasoningParamStyle": "reasoning",
-      "noVisionModels": ["glm-5.2", "deepseek-v4-flash"],
-      "visionFallbackModel": "MiniMax-M2.7"
-    },
     "kimi": {
       "reasoningParamStyle": "reasoning_effort"
     },
     "glm": {
       "reasoningParamStyle": "reasoning_effort"
     },
-    "runapi": {},
-    "unity2": {},
     "openrouter": {},
     "sensenova": {
       "normalizeNonstandardChatRoles": true,

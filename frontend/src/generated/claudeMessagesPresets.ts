@@ -80,65 +80,6 @@ export const claudeMessagesPresets: Record<string, ClaudeMessagesPreset> = {
     "visionFallbackModel": "mimo-v2.5",
     "rateLimitRpm": 80
   },
-  "compshare": {
-    "modelMapping": {
-      "fable": "glm-5.2",
-      "haiku": "deepseek-v4-flash",
-      "opus": "glm-5.2",
-      "sonnet": "glm-5.2"
-    },
-    "reasoningMapping": {
-      "MiniMax-M2.7": "xhigh",
-      "fable": "max",
-      "haiku": "high",
-      "opus": "max",
-      "sonnet": "max"
-    },
-    "reasoningParamStyle": "reasoning",
-    "authHeader": "",
-    "passbackReasoningContent": true,
-    "passbackThinkingBlocks": true,
-    "stripEmptyTextBlocks": true,
-    "normalizeSystemRoleToTopLevel": true,
-    "stripImageGenerationTool": false,
-    "normalizeNonstandardChatRoles": false,
-    "noVision": false,
-    "noVisionModels": [
-      "glm-5.2",
-      "deepseek-v4-flash"
-    ],
-    "visionFallbackModel": "MiniMax-M2.7"
-  },
-  "runapi": {
-    "modelMapping": {},
-    "reasoningMapping": {},
-    "reasoningParamStyle": "",
-    "authHeader": "",
-    "passbackReasoningContent": false,
-    "passbackThinkingBlocks": false,
-    "stripEmptyTextBlocks": false,
-    "normalizeSystemRoleToTopLevel": false,
-    "stripImageGenerationTool": false,
-    "normalizeNonstandardChatRoles": false,
-    "noVision": false,
-    "noVisionModels": [],
-    "visionFallbackModel": ""
-  },
-  "unity2": {
-    "modelMapping": {},
-    "reasoningMapping": {},
-    "reasoningParamStyle": "",
-    "authHeader": "",
-    "passbackReasoningContent": false,
-    "passbackThinkingBlocks": false,
-    "stripEmptyTextBlocks": false,
-    "normalizeSystemRoleToTopLevel": false,
-    "stripImageGenerationTool": false,
-    "normalizeNonstandardChatRoles": false,
-    "noVision": false,
-    "noVisionModels": [],
-    "visionFallbackModel": ""
-  },
   "kimi": {
     "modelMapping": {
       "fable": "k3.1-pro",

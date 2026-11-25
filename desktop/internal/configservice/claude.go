@@ -27,7 +27,7 @@ func (s *Service) getClaudeStatus(port int) (AgentConfigStatus, error) {
 	status.CurrentBaseURL = baseURL
 	status.Provider = detectClaudeProvider(baseURL)
 	status.MatchesCurrentPort = baseURL == target
-	status.Configured = status.MatchesCurrentPort || status.Provider == ProviderDeepSeek || status.Provider == ProviderMiMo || status.Provider == ProviderCompshare || status.Provider == ProviderRunAPI || status.Provider == ProviderXFyun || status.Provider == ProviderSenseNova
+	status.Configured = status.MatchesCurrentPort || status.Provider == ProviderDeepSeek || status.Provider == ProviderMiMo || status.Provider == ProviderXFyun || status.Provider == ProviderSenseNova
 	status.NeedsUpdate = baseURL != "" && isLocalBaseURL(baseURL) && !status.MatchesCurrentPort
 	return status, nil
 }
@@ -194,12 +194,6 @@ func normalizeClaudeProvider(provider string) string {
 		return ProviderDeepSeek
 	case ProviderMiMo:
 		return ProviderMiMo
-	case ProviderCompshare:
-		return ProviderCompshare
-	case ProviderRunAPI:
-		return ProviderRunAPI
-	case ProviderUnity2:
-		return ProviderUnity2
 	case ProviderKimi:
 		return ProviderKimi
 	case ProviderGLM:
@@ -256,26 +250,6 @@ func resolveClaudeProvider(req ApplyAgentConfigRequest, port int, accessKey stri
 		baseURL := strings.TrimSpace(req.BaseURL)
 		if baseURL == "" {
 			baseURL = defaultMiMoBaseURL
-		}
-		return baseURL, apiKey, "", nil
-	case ProviderCompshare:
-		apiKey := strings.TrimSpace(req.APIKey)
-		if apiKey == "" {
-			return "", "", "", fmt.Errorf("Compshare API Key 不能为空")
-		}
-		baseURL := strings.TrimSpace(req.BaseURL)
-		if baseURL == "" {
-			baseURL = compshareClaudeBaseURL
-		}
-		return baseURL, apiKey, "", nil
-	case ProviderRunAPI:
-		apiKey := strings.TrimSpace(req.APIKey)
-		if apiKey == "" {
-			return "", "", "", fmt.Errorf("RunAPI API Key 不能为空")
-		}
-		baseURL := strings.TrimSpace(req.BaseURL)
-		if baseURL == "" {
-			baseURL = runAPIBaseURL
 		}
 		return baseURL, apiKey, "", nil
 	case ProviderKimi:
@@ -392,10 +366,6 @@ func detectClaudeProvider(baseURL string) string {
 		return ProviderDeepSeek
 	case strings.Contains(value, "mimo.xiaomi.com") || strings.Contains(value, "xiaomimimo.com"):
 		return ProviderMiMo
-	case strings.Contains(value, "cp.compshare.cn"):
-		return ProviderCompshare
-	case strings.Contains(value, "runapi.co"):
-		return ProviderRunAPI
 	case strings.Contains(value, "moonshot.cn"):
 		return ProviderKimi
 	case strings.Contains(value, "bigmodel.cn"):

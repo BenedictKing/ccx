@@ -175,8 +175,6 @@ func TestDetectClaudeProvider(t *testing.T) {
 		{"https://api.deepseek.com/anthropic", ProviderDeepSeek},
 		{"https://api.mimo.xiaomi.com/v1", ProviderMiMo},
 		{"https://xiaomimimo.com/v1", ProviderMiMo},
-		{"https://cp.compshare.cn", ProviderCompshare},
-		{"https://runapi.co/v1", ProviderRunAPI},
 		{"https://custom-api.example.com/v1", ProviderCustom},
 	}
 	for _, c := range cases {
@@ -201,10 +199,6 @@ func TestNormalizeClaudeProvider(t *testing.T) {
 		{"DeepSeek", ProviderDeepSeek},
 		{"mimo", ProviderMiMo},
 		{"MIMO", ProviderMiMo},
-		{"compshare", ProviderCompshare},
-		{"Compshare", ProviderCompshare},
-		{"runapi", ProviderRunAPI},
-		{"RunAPI", ProviderRunAPI},
 		{"custom-provider", "custom-provider"},
 	}
 	for _, c := range cases {

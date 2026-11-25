@@ -21,9 +21,6 @@ const claudeProviderLabels: Record<AgentProvider | 'custom', string> = {
   ccx: 'CCX',
   deepseek: 'DeepSeek',
   mimo: 'MiMo',
-  compshare: 'Compshare',
-  runapi: 'RunAPI',
-  unity2: 'Unity2.ai',
   'tencent-lkeap': '腾讯云 TokenHub',
   'kimi-code': 'Kimi Code',
   'volc-ark': '火山方舟',
@@ -55,9 +52,6 @@ function getCodexProviderLabels(): ComputedRef<Record<AgentProvider | 'custom', 
       openai: 'OpenAI',
       deepseek: 'DeepSeek',
       mimo: 'MiMo',
-      compshare: 'Compshare',
-      runapi: 'RunAPI',
-      unity2: 'Unity2.ai',
       'tencent-lkeap': '腾讯云 TokenHub',
       'kimi-code': 'Kimi Code',
       'volc-ark': '火山方舟',
@@ -103,9 +97,6 @@ const claudeProviderKeys = ref<Record<AgentProvider, string>>({
   ccx: '',
   deepseek: '',
   mimo: '',
-  compshare: '',
-  runapi: '',
-  unity2: '',
   'tencent-lkeap': '',
   'kimi-code': '',
   'volc-ark': '',
@@ -150,12 +141,12 @@ const migrateResult = ref<MigrateCodexSessionsResult | null>(null)
 const migrateError = ref('')
 
 const isClaudeProvider = (value?: string): value is AgentProvider => {
-  return value === 'ccx' || value === 'deepseek' || value === 'mimo' || value === 'compshare' || value === 'runapi' || value === 'unity2' || value === 'tencent-lkeap' || value === 'kimi' || value === 'glm' || value === 'sensenova' || value === 'minimax' || value === 'dashscope' || value === 'openrouter' || value === 'modelscope' || value === 'opencode-zen' || value === 'opencode-go' || value === 'xfyun' || value === 'volc-ark' || value === 'qianfan'
+  return value === 'ccx' || value === 'deepseek' || value === 'mimo' || value === 'tencent-lkeap' || value === 'kimi' || value === 'glm' || value === 'sensenova' || value === 'minimax' || value === 'dashscope' || value === 'openrouter' || value === 'modelscope' || value === 'opencode-zen' || value === 'opencode-go' || value === 'xfyun' || value === 'volc-ark' || value === 'qianfan'
 }
 
 // Codex 支持快捷模式/插件模式切换的第三方 provider
 const isCodexThirdPartyWithMode = (provider?: string) => {
-  return provider === 'deepseek' || provider === 'mimo' || provider === 'compshare' || provider === 'runapi' || provider === 'unity2' || provider === 'kimi' || provider === 'glm' || provider === 'minimax' || provider === 'dashscope' || provider === 'openrouter' || provider === 'modelscope' || provider === 'opencode-zen' || provider === 'opencode-go' || provider === 'xfyun' || provider === 'tencent-lkeap' || provider === 'volc-ark' || provider === 'qianfan'
+  return provider === 'deepseek' || provider === 'mimo' || provider === 'kimi' || provider === 'glm' || provider === 'minimax' || provider === 'dashscope' || provider === 'openrouter' || provider === 'modelscope' || provider === 'opencode-zen' || provider === 'opencode-go' || provider === 'xfyun' || provider === 'tencent-lkeap' || provider === 'volc-ark' || provider === 'qianfan'
 }
 
 const claudeProviderLabel = (value?: string) => {
@@ -181,12 +172,6 @@ const claudeTargetBaseUrl = () => {
       return 'https://api.deepseek.com/anthropic'
     case 'mimo':
       return claudeMimoBaseUrl.value || 'https://api.xiaomimimo.com/anthropic'
-    case 'compshare':
-      return 'https://cp.compshare.cn'
-    case 'runapi':
-      return 'https://runapi.co/v1'
-    case 'unity2':
-      return 'https://unity2.ai/v1'
     case 'kimi':
       return 'https://api.moonshot.cn/anthropic'
     case 'glm':
@@ -228,8 +213,6 @@ const codexTargetBaseUrl = () => {
       return 'https://api.deepseek.com/v1'
     case 'mimo':
       return selectedMimoCodexPlan.value || 'https://api.xiaomimimo.com/v1'
-    case 'compshare':
-      return 'https://cp.compshare.cn/v1'
     case 'kimi':
       return 'https://api.moonshot.cn/v1'
     case 'glm':
@@ -238,10 +221,6 @@ const codexTargetBaseUrl = () => {
       return 'https://api.minimax.chat/v1'
     case 'dashscope':
       return 'https://dashscope.aliyuncs.com/compatible-mode/v1'
-    case 'runapi':
-      return 'https://runapi.co/v1'
-    case 'unity2':
-      return 'https://unity2.ai/v1'
     case 'openrouter':
       return 'https://openrouter.ai/api/v1'
     case 'modelscope':
@@ -271,8 +250,6 @@ const openCodeTargetBaseUrl = () => {
       return 'https://api.deepseek.com/v1'
     case 'mimo':
       return selectedMimoOpenCodePlan.value || 'https://api.xiaomimimo.com/v1'
-    case 'compshare':
-      return 'https://cp.compshare.cn/v1'
     case 'kimi':
       return 'https://api.moonshot.cn/v1'
     case 'glm':
@@ -281,10 +258,6 @@ const openCodeTargetBaseUrl = () => {
       return 'https://token.sensenova.cn/v1'
     case 'minimax':
       return 'https://api.minimax.chat/v1'
-    case 'runapi':
-      return 'https://runapi.co/v1'
-    case 'unity2':
-      return 'https://unity2.ai/v1'
     case 'dashscope':
       return 'https://dashscope.aliyuncs.com/compatible-mode/v1'
     case 'xfyun':
@@ -383,7 +356,7 @@ const loadAgentStatuses = async () => {
       selectedMimoCodexPlan.value = resolveMiMoCodexPlan(codex.currentBaseUrl) || 'https://api.xiaomimimo.com/v1'
     }
     // 恢复所有支持 mode 切换的 provider 的 mode 状态
-    if (codex.provider === 'ccx' || codex.provider === 'dashscope' || codex.provider === 'runapi' || codex.provider === 'opencode-zen' || codex.provider === 'opencode-go') {
+    if (codex.provider === 'ccx' || codex.provider === 'dashscope' || codex.provider === 'opencode-zen' || codex.provider === 'opencode-go') {
       codexMode.value = codex.mode === 'plugin' ? 'plugin' : 'quick'
     }
     if (opencode.provider && opencode.provider !== 'ccx' && opencode.provider !== '') {

@@ -55,24 +55,6 @@ export const openaiChatPresets: Record<string, OpenAIChatPreset> = {
     "visionFallbackModel": "mimo-v2.5",
     "rateLimitRpm": 80
   },
-  "compshare": {
-    "modelMapping": {},
-    "reasoningMapping": {},
-    "reasoningParamStyle": "reasoning",
-    "authHeader": "",
-    "passbackReasoningContent": false,
-    "passbackThinkingBlocks": false,
-    "stripEmptyTextBlocks": false,
-    "normalizeSystemRoleToTopLevel": false,
-    "stripImageGenerationTool": false,
-    "normalizeNonstandardChatRoles": false,
-    "noVision": false,
-    "noVisionModels": [
-      "glm-5.2",
-      "deepseek-v4-flash"
-    ],
-    "visionFallbackModel": "MiniMax-M2.7"
-  },
   "kimi": {
     "modelMapping": {},
     "reasoningMapping": {},
@@ -92,36 +74,6 @@ export const openaiChatPresets: Record<string, OpenAIChatPreset> = {
     "modelMapping": {},
     "reasoningMapping": {},
     "reasoningParamStyle": "reasoning_effort",
-    "authHeader": "",
-    "passbackReasoningContent": false,
-    "passbackThinkingBlocks": false,
-    "stripEmptyTextBlocks": false,
-    "normalizeSystemRoleToTopLevel": false,
-    "stripImageGenerationTool": false,
-    "normalizeNonstandardChatRoles": false,
-    "noVision": false,
-    "noVisionModels": [],
-    "visionFallbackModel": ""
-  },
-  "runapi": {
-    "modelMapping": {},
-    "reasoningMapping": {},
-    "reasoningParamStyle": "",
-    "authHeader": "",
-    "passbackReasoningContent": false,
-    "passbackThinkingBlocks": false,
-    "stripEmptyTextBlocks": false,
-    "normalizeSystemRoleToTopLevel": false,
-    "stripImageGenerationTool": false,
-    "normalizeNonstandardChatRoles": false,
-    "noVision": false,
-    "noVisionModels": [],
-    "visionFallbackModel": ""
-  },
-  "unity2": {
-    "modelMapping": {},
-    "reasoningMapping": {},
-    "reasoningParamStyle": "",
     "authHeader": "",
     "passbackReasoningContent": false,
     "passbackThinkingBlocks": false,

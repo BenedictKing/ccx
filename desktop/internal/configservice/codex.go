@@ -388,8 +388,6 @@ func codexResponsesBaseURL(provider string) (string, bool) {
 		return "https://api.deepseek.com/v1", true
 	case ProviderMiMo:
 		return "https://api.xiaomimimo.com/v1", true
-	case ProviderCompshare:
-		return "https://cp.compshare.cn/v1", true
 	case ProviderKimi:
 		return "https://api.moonshot.cn/v1", true
 	case ProviderGLM:
@@ -398,10 +396,6 @@ func codexResponsesBaseURL(provider string) (string, bool) {
 		return "https://api.minimax.chat/v1", true
 	case ProviderDashScope:
 		return "https://dashscope.aliyuncs.com/compatible-mode/v1", true
-	case ProviderRunAPI:
-		return runAPIBaseURL, true
-	case ProviderUnity2:
-		return unity2BaseURL, true
 	case ProviderOpenCodeZen:
 		return "https://opencode.ai/zen/v1", true
 	case ProviderOpenCodeGo:
@@ -492,8 +486,6 @@ func codexThirdPartyQuickBaseURL(baseURL string) (string, bool) {
 		return ProviderDeepSeek, true
 	case strings.Contains(baseURL, "xiaomimimo.com"):
 		return ProviderMiMo, true
-	case strings.Contains(baseURL, "cp.compshare.cn"):
-		return ProviderCompshare, true
 	case strings.Contains(baseURL, "moonshot.cn"):
 		return ProviderKimi, true
 	case strings.Contains(baseURL, "bigmodel.cn"):
@@ -502,8 +494,6 @@ func codexThirdPartyQuickBaseURL(baseURL string) (string, bool) {
 		return ProviderMiniMax, true
 	case strings.Contains(baseURL, "dashscope.aliyuncs.com"):
 		return ProviderDashScope, true
-	case strings.Contains(baseURL, "runapi.co"):
-		return ProviderRunAPI, true
 	case strings.Contains(baseURL, "opencode.ai/zen/go"):
 		return ProviderOpenCodeGo, true
 	case strings.Contains(baseURL, "opencode.ai/zen"):
@@ -646,12 +636,6 @@ func normalizeCodexProvider(provider string) string {
 		return ProviderDeepSeek
 	case ProviderMiMo:
 		return ProviderMiMo
-	case ProviderCompshare:
-		return ProviderCompshare
-	case ProviderRunAPI:
-		return ProviderRunAPI
-	case ProviderUnity2:
-		return ProviderUnity2
 	case ProviderKimi:
 		return ProviderKimi
 	case ProviderGLM:
@@ -680,7 +664,7 @@ func normalizeCodexProvider(provider string) string {
 }
 
 func isCodexThirdPartyProvider(provider string) bool {
-	return provider == ProviderDeepSeek || provider == ProviderMiMo || provider == ProviderCompshare || provider == ProviderRunAPI || provider == ProviderKimi || provider == ProviderGLM || provider == ProviderMiniMax || provider == ProviderDashScope || provider == ProviderOpenCodeZen || provider == ProviderOpenCodeGo || provider == ProviderXFyun || provider == ProviderTencentLkeap || provider == ProviderVolcArk || provider == ProviderQianfan || provider == ProviderModelScope
+	return provider == ProviderDeepSeek || provider == ProviderMiMo || provider == ProviderKimi || provider == ProviderGLM || provider == ProviderMiniMax || provider == ProviderDashScope || provider == ProviderOpenCodeZen || provider == ProviderOpenCodeGo || provider == ProviderXFyun || provider == ProviderTencentLkeap || provider == ProviderVolcArk || provider == ProviderQianfan || provider == ProviderModelScope
 }
 
 func codexBaseURL(port int) string {

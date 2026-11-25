@@ -388,9 +388,9 @@ func TestShouldBlacklistKey_BalanceMessages(t *testing.T) {
 			body:       `{"error":{"message":"Upstream rate limit exceeded, please retry later","type":"rate_limit_error"}}`,
 			want:       BlacklistResult{},
 		},
-		// Compshare 月度额度耗尽：大写字段 + 数字 RetCode，应拉黑
+		// 套餐月度额度耗尽：大写字段 + 数字 RetCode，应拉黑
 		{
-			name:       "429 compshare monthly call limit uppercase RetCode should blacklist",
+			name:       "429 plan monthly call limit uppercase RetCode should blacklist",
 			statusCode: 429,
 			body:       `{"RetCode":226615,"Message":"Monthly call limit exceeded for your plan"}`,
 			want: BlacklistResult{
@@ -400,7 +400,7 @@ func TestShouldBlacklistKey_BalanceMessages(t *testing.T) {
 			},
 		},
 		{
-			name:       "429 compshare monthly call limit lowercase retCode should blacklist",
+			name:       "429 plan monthly call limit lowercase retCode should blacklist",
 			statusCode: 429,
 			body:       `{"retCode":226615,"message":"Monthly call limit exceeded for your plan"}`,
 			want: BlacklistResult{

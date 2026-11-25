@@ -44,30 +44,6 @@
       "visionFallbackModel": "mimo-v2.5",
       "rateLimitRpm": 80
     },
-    "compshare": {
-      "modelMapping": {
-        "fable": "glm-5.2",
-        "haiku": "deepseek-v4-flash",
-        "opus": "glm-5.2",
-        "sonnet": "glm-5.2"
-      },
-      "reasoningMapping": {
-        "MiniMax-M2.7": "xhigh",
-        "fable": "max",
-        "haiku": "high",
-        "opus": "max",
-        "sonnet": "max"
-      },
-      "reasoningParamStyle": "reasoning",
-      "passbackReasoningContent": true,
-      "passbackThinkingBlocks": true,
-      "stripEmptyTextBlocks": true,
-      "normalizeSystemRoleToTopLevel": true,
-      "noVisionModels": ["glm-5.2", "deepseek-v4-flash"],
-      "visionFallbackModel": "MiniMax-M2.7"
-    },
-    "runapi": {},
-    "unity2": {},
     "kimi": {
       "modelMapping": {
         "fable": "k3.1-pro",

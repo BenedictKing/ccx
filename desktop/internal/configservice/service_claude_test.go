@@ -103,52 +103,6 @@ func TestGetStatusClaude_DeepSeekProvider(t *testing.T) {
 	}
 }
 
-func TestGetStatusClaude_CompshareProvider(t *testing.T) {
-	svc := newTestService(t)
-	settingsPath := filepath.Join(svc.homeDir, ".claude", "settings.json")
-	os.MkdirAll(filepath.Dir(settingsPath), 0o755)
-	data := map[string]any{
-		"env": map[string]any{
-			"ANTHROPIC_BASE_URL": "https://cp.compshare.cn",
-		},
-	}
-	writeJSON(settingsPath, data)
-
-	status, err := svc.GetStatus(PlatformClaude, 3688)
-	if err != nil {
-		t.Fatalf("GetStatus failed: %v", err)
-	}
-	if status.Provider != ProviderCompshare {
-		t.Errorf("provider = %q, want %q", status.Provider, ProviderCompshare)
-	}
-	if !status.Configured {
-		t.Error("should be configured for Compshare")
-	}
-}
-
-func TestGetStatusClaude_RunAPIProvider(t *testing.T) {
-	svc := newTestService(t)
-	settingsPath := filepath.Join(svc.homeDir, ".claude", "settings.json")
-	os.MkdirAll(filepath.Dir(settingsPath), 0o755)
-	data := map[string]any{
-		"env": map[string]any{
-			"ANTHROPIC_BASE_URL": "https://runapi.co/v1",
-		},
-	}
-	writeJSON(settingsPath, data)
-
-	status, err := svc.GetStatus(PlatformClaude, 3688)
-	if err != nil {
-		t.Fatalf("GetStatus failed: %v", err)
-	}
-	if status.Provider != ProviderRunAPI {
-		t.Errorf("provider = %q, want %q", status.Provider, ProviderRunAPI)
-	}
-	if !status.Configured {
-		t.Error("should be configured for RunAPI")
-	}
-}
-
 func TestApplyAndRestoreClaudeXFyunProvider(t *testing.T) {
 	svc := newTestService(t)
 	settingsPath := filepath.Join(svc.homeDir, ".claude", "settings.json")
@@ -360,17 +314,17 @@ func TestSaveAndLoadProviderKeys(t *testing.T) {
 		t.Fatalf("SaveProviderKeyAsset failed: %v", err)
 	}
 	err = svc.SaveProviderKeyAsset(ProviderKeyAsset{
-		Provider: ProviderCompshare,
-		APIKey:   "cs-test-key",
-		BaseURL:  "https://cp.compshare.cn",
+		Provider: ProviderMiMo,
+		APIKey:   "mimo-test-key",
+		BaseURL:  "https://api.xiaomimimo.com/anthropic",
 	})
 	if err != nil {
 		t.Fatalf("SaveProviderKeyAsset failed: %v", err)
 	}
 	err = svc.SaveProviderKeyAsset(ProviderKeyAsset{
-		Provider: ProviderRunAPI,
-		APIKey:   "runapi-test-key",
-		BaseURL:  "https://runapi.co/v1",
+		Provider: ProviderSenseNova,
+		APIKey:   "sensenova-test-key",
+		BaseURL:  "https://token.sensenova.cn",
 	})
 	if err != nil {
 		t.Fatalf("SaveProviderKeyAsset failed: %v", err)
@@ -383,23 +337,23 @@ func TestSaveAndLoadProviderKeys(t *testing.T) {
 	if keys[PlatformClaude+":"+ProviderDeepSeek] != "sk-test-key" {
 		t.Errorf("claude key = %q", keys[PlatformClaude+":"+ProviderDeepSeek])
 	}
-	if keys["channel:"+ProviderCompshare] != "cs-test-key" {
-		t.Errorf("compshare channel key = %q", keys["channel:"+ProviderCompshare])
+	if keys["channel:"+ProviderMiMo] != "mimo-test-key" {
+		t.Errorf("mimo channel key = %q", keys["channel:"+ProviderMiMo])
 	}
-	if keys[PlatformClaude+":"+ProviderCompshare] != "cs-test-key" {
-		t.Errorf("compshare claude key = %q", keys[PlatformClaude+":"+ProviderCompshare])
+	if keys[PlatformClaude+":"+ProviderMiMo] != "mimo-test-key" {
+		t.Errorf("mimo claude key = %q", keys[PlatformClaude+":"+ProviderMiMo])
 	}
-	if keys["channel:"+ProviderRunAPI] != "runapi-test-key" {
-		t.Errorf("runapi channel key = %q", keys["channel:"+ProviderRunAPI])
+	if keys["channel:"+ProviderSenseNova] != "sensenova-test-key" {
+		t.Errorf("sensenova channel key = %q", keys["channel:"+ProviderSenseNova])
 	}
-	if keys[PlatformClaude+":"+ProviderRunAPI] != "runapi-test-key" {
-		t.Errorf("runapi claude key = %q", keys[PlatformClaude+":"+ProviderRunAPI])
+	if keys[PlatformClaude+":"+ProviderSenseNova] != "sensenova-test-key" {
+		t.Errorf("sensenova claude key = %q", keys[PlatformClaude+":"+ProviderSenseNova])
 	}
 
 	assets := svc.GetProviderKeyAssets()
 	foundDeepSeek := false
-	foundCompshare := false
-	foundRunAPI := false
+	foundMiMo := false
+	foundSenseNova := false
 	for _, a := range assets {
 		switch a.Provider {
 		case ProviderDeepSeek:
@@ -407,26 +361,26 @@ func TestSaveAndLoadProviderKeys(t *testing.T) {
 			if a.APIKey != "sk-test-key" {
 				t.Errorf("asset APIKey = %q", a.APIKey)
 			}
-		case ProviderCompshare:
-			foundCompshare = true
-			if a.APIKey != "cs-test-key" {
-				t.Errorf("compshare asset APIKey = %q", a.APIKey)
+		case ProviderMiMo:
+			foundMiMo = true
+			if a.APIKey != "mimo-test-key" {
+				t.Errorf("mimo asset APIKey = %q", a.APIKey)
 			}
-		case ProviderRunAPI:
-			foundRunAPI = true
-			if a.APIKey != "runapi-test-key" {
-				t.Errorf("runapi asset APIKey = %q", a.APIKey)
+		case ProviderSenseNova:
+			foundSenseNova = true
+			if a.APIKey != "sensenova-test-key" {
+				t.Errorf("sensenova asset APIKey = %q", a.APIKey)
 			}
 		}
 	}
 	if !foundDeepSeek {
 		t.Error("DeepSeek asset not found")
 	}
-	if !foundCompshare {
-		t.Error("Compshare asset not found")
+	if !foundMiMo {
+		t.Error("MiMo asset not found")
 	}
-	if !foundRunAPI {
-		t.Error("RunAPI asset not found")
+	if !foundSenseNova {
+		t.Error("SenseNova asset not found")
 	}
 }
 

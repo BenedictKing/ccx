@@ -153,7 +153,7 @@ func runCompatDiagnoseWithProbeModel(channel *config.UpstreamConfig, channelKind
 var strictClaudeThinkingKeywords = []string{
 	"deepseek", "glm", "zhipu", "bigmodel",
 	"volc", "volces", "ark.cn-beijing",
-	"compshare", "modelscope",
+	"modelscope",
 	"opencode",
 }
 
@@ -163,7 +163,6 @@ var deepSeekClaudeThinkingCacheKeywords = []string{
 
 var domesticClaudeProviderKeywords = []string{
 	"deepseek", "mimo", "xiaomimimo",
-	"compshare",
 	"kimi", "moonshot",
 	"glm", "zhipu", "bigmodel",
 	"minimax",
@@ -179,8 +178,6 @@ var domesticClaudeProviderKeywords = []string{
 var compatDiagnoseAggregateProviderKeywords = []string{
 	"anthropic.com",
 	"openrouter",
-	"runapi",
-	"unity2",
 	"originrouter",
 }
 

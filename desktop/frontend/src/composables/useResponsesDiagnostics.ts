@@ -150,7 +150,7 @@ export function useResponsesDiagnostics() {
     if (!status) return false
     // 仅当 provider 是 CCX 或支持模式切换的第三方时检查
     const provider = status.provider
-    const hasMode = provider === 'ccx' || provider === 'dashscope' || provider === 'runapi'
+    const hasMode = provider === 'ccx' || provider === 'dashscope'
       || provider === 'opencode-zen' || provider === 'opencode-go' || provider === 'xfyun'
     if (!hasMode) return false
     return currentCodexMode.value !== codexMode.value

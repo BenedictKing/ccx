@@ -10,9 +10,6 @@ import (
 const (
 	ProviderDeepSeek      = "deepseek"
 	ProviderMiMo          = "mimo"
-	ProviderCompshare     = "compshare"
-	ProviderRunAPI        = "runapi"
-	ProviderUnity2        = "unity2"
 	ProviderKimi          = "kimi"
 	ProviderGLM           = "glm"
 	ProviderSenseNova     = "sensenova"
@@ -139,9 +136,6 @@ type ChannelPayload struct {
 var providerConsoleURLs = map[string]string{
 	ProviderDeepSeek:     "https://platform.deepseek.com/usage",
 	ProviderMiMo:         "https://platform.xiaomimimo.com/console/balance",
-	ProviderCompshare:    "https://console.compshare.cn/light-gpu/model-subscription",
-	ProviderRunAPI:       "https://runapi.co/console",
-	ProviderUnity2:       "https://unity2.ai/dashboard",
 	ProviderKimi:         "https://platform.moonshot.cn/console/account",
 	ProviderGLM:          "https://open.bigmodel.cn/coding-plan/personal/overview",
 	ProviderSenseNova:    "https://platform.sensenova.cn/console",
@@ -196,12 +190,6 @@ func dualProtocolPlans(anthropicURL, openaiURL string) []ProviderPlan {
 	}
 }
 
-// dualProtocolPlansSimple 生成标准的双协议 Plans，anthropic 和 openai 使用相同的 baseURL。
-// 适用于 RunAPI、Unity2 等统一入口的服务商。
-func dualProtocolPlansSimple(baseURL string) []ProviderPlan {
-	return dualProtocolPlans(baseURL, baseURL)
-}
-
 func Presets() []ProviderPreset {
 	return []ProviderPreset{
 		newFullCapabilityPreset(
@@ -233,27 +221,6 @@ func Presets() []ProviderPreset {
 			Targets:       defaultTargets(),
 			DefaultTarget: TargetMessages,
 		},
-		newFullCapabilityPreset(
-			ProviderCompshare,
-			"优云智算套餐",
-			"优云智算是 UCloud 旗下 AI 云平台，提供高性价比国内 AI 模型 Agent Plan 套餐，支持包月订阅或按量付费（49 元/月起），同时提供官方海外模型稳定接入，支持 Claude Code、Codex 与 API 集成，具备企业级高并发、7×24 技术支持和自助开票能力；通过推广链接注册可领取 5 元平台试用金。",
-			30,
-			dualProtocolPlans("https://cp.compshare.cn", "https://cp.compshare.cn/v1"),
-		),
-		newFullCapabilityPreset(
-			ProviderRunAPI,
-			"RunAPI",
-			"RunAPI 是高效稳定的API OpenRouter平替平台，一个 API Key 即可访问 OpenAI、Claude、Gemini、DeepSeek、Grok 等 150+ 主流模型，低至 1 折，极其稳定，可以无缝兼容 Claude Code、OpenClaw 等工具。RunAPI 为 CCX用户提供专属福利：注册联系管理员即可领取￥7的免费额度",
-			40,
-			dualProtocolPlansSimple("https://runapi.co/v1"),
-		),
-		newFullCapabilityPreset(
-			ProviderUnity2,
-			"Unity2.ai",
-			"Unity2.ai 是面向个人开发者、团队、企业的高性能 AI 模型 API 中转平台，长期服务国内头部企业，日均承载超 300 亿 token 调用，支持 5000 RPM 级高并发。一个 API Key 即可适配 Claude Code、Codex、OpenAI 模型、IDE 插件和 Agent 工作流等场景。具备企业级稳定供应能力，在高并发、持续调用和团队集中采购场景下依然保持低延迟、高可用。现在注册 Unity2.ai 可领取 $2 余额，加入官方群再送 $10 余额，合计最高可领 $12 免费额度。",
-			45,
-			dualProtocolPlansSimple("https://unity2.ai/v1"),
-		),
 		{
 			ID:                  ProviderKimi,
 			Order:               50,
@@ -866,9 +833,6 @@ func applyTargetDefaults(payload *ChannelPayload, provider string, target string
 		if provider == ProviderOpenCodeGo {
 			payload.AuthHeader = "x-api-key"
 		}
-		if provider == ProviderRunAPI {
-			payload.NormalizeMetadataUserId = boolRef(false)
-		}
 	case TargetChat:
 		payload.ServiceType = "openai"
 		payload.NormalizeNonstandardChatRoles = true
@@ -876,11 +840,6 @@ func applyTargetDefaults(payload *ChannelPayload, provider string, target string
 		payload.ServiceType = "openai"
 		payload.CodexToolCompat = true
 		payload.StripCodexClientTools = true
-		if provider == ProviderRunAPI || provider == ProviderUnity2 {
-			payload.ServiceType = "responses"
-			payload.CodexToolCompat = false
-			payload.StripCodexClientTools = false
-		}
 		if provider == ProviderXFyun && planID == "responses" {
 			payload.ServiceType = "responses"
 		}

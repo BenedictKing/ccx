@@ -75,7 +75,7 @@ func TestTryUpstreamWithAllKeysRejectsOversizedVisionFallback(t *testing.T) {
 	cfg := config.Config{
 		Upstream: []config.UpstreamConfig{
 			{
-				Name:                "desktop-compshare-messages",
+				Name:                "desktop-vision-fallback-messages",
 				BaseURL:             "https://upstream.example.com",
 				APIKeys:             []string{"sk-test"},
 				Status:              "active",

@@ -7,11 +7,8 @@ import { Label } from '@/components/ui/label'
 import { useChannelPresets } from '@/composables/useChannelPresets'
 import { useDesktopActivity } from '@/composables/useDesktopActivity'
 import { useLanguage } from '@/composables/useLanguage'
-import { openProviderPromotion, openProviderConsole, providerConsoleLinks, providerPromotionLinks } from '@/lib/external-link'
+import { openProviderConsole, providerConsoleLinks } from '@/lib/external-link'
 import { maskApiKey } from '@/utils/api-key-mask'
-import compshareIcon from '@/assets/compshare.png'
-import runapiIcon from '@/assets/runapi.svg'
-import unity2Icon from '@/assets/unity2.jpg'
 import type { ProviderPreset, ProviderPlan, ChannelTarget, ProviderKeyAsset } from '@/types'
 
 const { t, tf } = useLanguage()
@@ -32,9 +29,6 @@ const {
 } = useChannelPresets()
 
 const providerIcons: Record<string, string> = {
-  compshare: compshareIcon,
-  runapi: runapiIcon,
-  unity2: unity2Icon,
 }
 
 const selectedProvider = ref('')
@@ -61,9 +55,6 @@ onMounted(() => {
 const presetOrder = [
   'deepseek',
   'mimo',
-  'compshare',
-  'runapi',
-  'unity2',
   'openrouter',
   'kimi',
   'glm',
@@ -345,10 +336,7 @@ const submit = async () => {
               v-if="providerIcons[preset.id]"
               :src="providerIcons[preset.id]"
               :alt="`${preset.label} icon`"
-              :class="[
-                'mt-0.5 shrink-0 bg-secondary object-cover ring-1 ring-border',
-                preset.id === 'runapi' ? 'h-9 w-9 rounded-xl' : 'h-8 w-8 rounded-lg',
-              ]"
+              class="mt-0.5 h-8 w-8 shrink-0 rounded-lg bg-secondary object-cover ring-1 ring-border"
             >
             <div class="min-w-0 flex-1">
               <div class="flex items-center justify-between gap-2">
@@ -378,15 +366,6 @@ const submit = async () => {
           </div>
           <p class="text-sm text-muted-foreground">{{ localizePresetDescription(currentPreset) }}</p>
           <div class="flex items-center gap-4">
-            <button
-              v-if="providerPromotionLinks[currentPreset.id]"
-              type="button"
-              class="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:text-primary/80"
-              @click="openProviderPromotion(currentPreset.id)"
-            >
-              {{ t('channel.promo') }}
-              <ExternalLink class="h-3 w-3" />
-            </button>
             <button
               v-if="providerConsoleLinks[currentPreset.id]"
               type="button"

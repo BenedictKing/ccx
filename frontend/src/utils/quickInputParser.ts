@@ -233,7 +233,6 @@ const detectServiceTypeAndCleanUrl = (
       return { serviceType: 'copilot', cleanedUrl: parsed.origin }
     }
     const knownClaudeUrls = new Set([
-      'https://cp.compshare.cn',
       'https://api.kimi.com/coding',
       'https://ark.cn-beijing.volces.com/api/coding',
       'https://openrouter.ai/api',
@@ -246,7 +245,6 @@ const detectServiceTypeAndCleanUrl = (
       'https://token-plan-cn.xiaomimimo.com/v1',
       'https://token-plan-sgp.xiaomimimo.com/v1',
       'https://token-plan-ams.xiaomimimo.com/v1',
-      'https://cp.compshare.cn/v1',
       'https://api.moonshot.cn/v1',
       'https://api.kimi.com/coding/v1',
       'https://open.bigmodel.cn/api/coding/paas/v4',
@@ -260,8 +258,6 @@ const detectServiceTypeAndCleanUrl = (
       'https://api.lkeap.cloud.tencent.com/plan/v3',
       'https://ark.cn-beijing.volces.com/api/coding/v3',
       'https://qianfan.baidubce.com/v2/coding',
-      'https://runapi.co/api/v1',
-      'https://unity2.ai/v1',
       'https://openrouter.ai/api/v1',
       'https://api-inference.modelscope.cn/v1',
       'https://api.easytransnote.com/coding/v1',

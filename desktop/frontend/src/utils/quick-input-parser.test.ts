@@ -45,7 +45,6 @@ describe('quick input service type detection', () => {
   })
 
   it('detects built-in preset URLs that do not include protocol keywords', () => {
-    expect(parseQuickInput('https://cp.compshare.cn sk-key1234567890').detectedServiceType).toBe('claude')
     expect(parseQuickInput('https://openrouter.ai/api sk-key1234567890').detectedServiceType).toBe('claude')
     expect(parseQuickInput('https://openrouter.ai/api/v1 sk-key1234567890').detectedServiceType).toBe('openai')
     expect(parseQuickInput('https://api.kimi.com/coding/v1 sk-key1234567890').detectedServiceType).toBe('openai')

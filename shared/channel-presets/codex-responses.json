@@ -43,38 +43,6 @@
       "visionFallbackModel": "mimo-v2.5",
       "rateLimitRpm": 80
     },
-    "compshare": {
-      "modelMapping": {
-        "astra": "glm-5.2",
-        "codex-auto-review": "glm-5.2",
-        "luna": "deepseek-v4-flash",
-        "sol": "deepseek-v4-flash",
-        "terra": "deepseek-v4-flash"
-      },
-      "reasoningMapping": {
-        "MiniMax-M2.7": "xhigh",
-        "astra": "max",
-        "codex-auto-review": "max",
-        "luna": "high"
-      },
-      "reasoningParamStyle": "reasoning",
-      "codexToolCompat": false,
-      "stripCodexClientTools": false,
-      "codexNativeToolPassthrough": true,
-      "normalizeNonstandardChatRoles": true,
-      "noVisionModels": ["glm-5.2", "deepseek-v4-flash"],
-      "visionFallbackModel": "MiniMax-M2.7"
-    },
-    "runapi": {
-      "codexToolCompat": false,
-      "stripCodexClientTools": false,
-      "stripImageGenerationTool": true
-    },
-    "unity2": {
-      "codexToolCompat": false,
-      "stripCodexClientTools": false,
-      "stripImageGenerationTool": true
-    },
     "minimax": {
       "modelMapping": {
         "astra": "MiniMax-M3",

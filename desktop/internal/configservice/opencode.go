@@ -90,12 +90,6 @@ func normalizeOpenCodeProvider(provider string) string {
 		return ProviderDeepSeek
 	case ProviderMiMo:
 		return ProviderMiMo
-	case ProviderCompshare:
-		return ProviderCompshare
-	case ProviderRunAPI:
-		return ProviderRunAPI
-	case ProviderUnity2:
-		return ProviderUnity2
 	case ProviderKimi:
 		return ProviderKimi
 	case ProviderGLM:
@@ -125,7 +119,7 @@ func normalizeOpenCodeProvider(provider string) string {
 
 func isOpenCodeDirectProvider(provider string) bool {
 	switch provider {
-	case ProviderDeepSeek, ProviderMiMo, ProviderCompshare, ProviderRunAPI, ProviderUnity2, ProviderKimi, ProviderGLM, ProviderSenseNova, ProviderMiniMax, ProviderDashScope, ProviderXFyun, ProviderOpenCodeZen, ProviderOpenCodeGo, ProviderTencentLkeap, ProviderVolcArk, ProviderQianfan:
+	case ProviderDeepSeek, ProviderMiMo, ProviderKimi, ProviderGLM, ProviderSenseNova, ProviderMiniMax, ProviderDashScope, ProviderXFyun, ProviderOpenCodeZen, ProviderOpenCodeGo, ProviderTencentLkeap, ProviderVolcArk, ProviderQianfan:
 		return true
 	default:
 		return false
@@ -138,10 +132,6 @@ func openCodeDirectBaseURL(provider string) (string, bool) {
 		return "https://api.deepseek.com/v1", true
 	case ProviderMiMo:
 		return "https://api.xiaomimimo.com/v1", true
-	case ProviderCompshare:
-		return "https://cp.compshare.cn/v1", true
-	case ProviderRunAPI:
-		return runAPIBaseURL, true
 	case ProviderKimi:
 		return "https://api.moonshot.cn/v1", true
 	case ProviderGLM:
@@ -175,10 +165,6 @@ func openCodeDirectLabel(provider string) string {
 		return "DeepSeek"
 	case ProviderMiMo:
 		return "MiMo"
-	case ProviderCompshare:
-		return "Compshare"
-	case ProviderRunAPI:
-		return "RunAPI"
 	case ProviderKimi:
 		return "Kimi"
 	case ProviderGLM:

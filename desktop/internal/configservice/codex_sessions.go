@@ -41,7 +41,7 @@ func resolveCodexSessionModelProvider(req MigrateCodexSessionsRequest) (string, 
 			return ProviderCCX, nil
 		}
 		return ProviderOpenAI, nil
-	case ProviderDashScope, ProviderRunAPI, ProviderOpenCodeZen, ProviderOpenCodeGo, ProviderXFyun:
+	case ProviderDashScope, ProviderOpenCodeZen, ProviderOpenCodeGo, ProviderXFyun:
 		if mode == "plugin" {
 			return provider, nil
 		}

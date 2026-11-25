@@ -72,59 +72,6 @@ export const codexResponsesPresets: Record<string, CodexResponsesPreset> = {
     "serviceType": "responses",
     "rateLimitRpm": 80
   },
-  "compshare": {
-    "modelMapping": {
-      "astra": "glm-5.2",
-      "codex-auto-review": "glm-5.2",
-      "luna": "deepseek-v4-flash",
-      "sol": "deepseek-v4-flash",
-      "terra": "deepseek-v4-flash"
-    },
-    "reasoningMapping": {
-      "MiniMax-M2.7": "xhigh",
-      "astra": "max",
-      "codex-auto-review": "max",
-      "luna": "high"
-    },
-    "reasoningParamStyle": "reasoning",
-    "codexNativeToolPassthrough": true,
-    "codexToolCompat": false,
-    "stripCodexClientTools": false,
-    "stripImageGenerationTool": false,
-    "normalizeNonstandardChatRoles": true,
-    "noVision": false,
-    "noVisionModels": [
-      "glm-5.2",
-      "deepseek-v4-flash"
-    ],
-    "visionFallbackModel": "MiniMax-M2.7"
-  },
-  "runapi": {
-    "modelMapping": {},
-    "reasoningMapping": {},
-    "reasoningParamStyle": "",
-    "codexNativeToolPassthrough": false,
-    "codexToolCompat": false,
-    "stripCodexClientTools": false,
-    "stripImageGenerationTool": true,
-    "normalizeNonstandardChatRoles": false,
-    "noVision": false,
-    "noVisionModels": [],
-    "visionFallbackModel": ""
-  },
-  "unity2": {
-    "modelMapping": {},
-    "reasoningMapping": {},
-    "reasoningParamStyle": "",
-    "codexNativeToolPassthrough": false,
-    "codexToolCompat": false,
-    "stripCodexClientTools": false,
-    "stripImageGenerationTool": true,
-    "normalizeNonstandardChatRoles": false,
-    "noVision": false,
-    "noVisionModels": [],
-    "visionFallbackModel": ""
-  },
   "minimax": {
     "modelMapping": {
       "astra": "MiniMax-M3",

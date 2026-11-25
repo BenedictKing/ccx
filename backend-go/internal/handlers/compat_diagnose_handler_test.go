@@ -186,12 +186,12 @@ func TestCompatDiagnoseSystemRoleNormalizeDefaults(t *testing.T) {
 			want:    false,
 		},
 		{
-			name: "runapi aggregate channel",
+			name: "openrouter aggregate channel",
 			channel: &config.UpstreamConfig{
-				Name:        "runapi deepseek",
+				Name:        "openrouter deepseek",
 				ServiceType: "claude",
 			},
-			baseURL: "https://runapi.co/v1",
+			baseURL: "https://openrouter.ai/api/v1",
 			want:    false,
 		},
 	}

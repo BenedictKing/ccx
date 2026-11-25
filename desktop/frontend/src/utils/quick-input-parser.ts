@@ -233,7 +233,6 @@ const detectServiceTypeAndCleanUrl = (
     }
     const urlKey = `${parsed.origin}${path}`.replace(/\/$/, '')
     const knownClaudeUrls = new Set([
-      'https://cp.compshare.cn',
       'https://api.kimi.com/coding',
       'https://ark.cn-beijing.volces.com/api/coding',
       'https://openrouter.ai/api',
@@ -248,7 +247,6 @@ const detectServiceTypeAndCleanUrl = (
       'https://token-plan-cn.xiaomimimo.com/v1',
       'https://token-plan-sgp.xiaomimimo.com/v1',
       'https://token-plan-ams.xiaomimimo.com/v1',
-      'https://cp.compshare.cn/v1',
       'https://api.moonshot.cn/v1',
       'https://api.kimi.com/coding/v1',
       'https://open.bigmodel.cn/api/coding/paas/v4',

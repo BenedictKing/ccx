@@ -147,75 +147,6 @@ func TestBuildPayload(t *testing.T) {
 			wantFallback:       "mimo-v2.5",
 		},
 		{
-			name:                "compshare messages",
-			req:                 CreateChannelRequest{Provider: ProviderCompshare, Target: TargetMessages, APIKey: "cs-test"},
-			wantBaseURL:         "https://cp.compshare.cn",
-			wantService:         "claude",
-			wantVision:          false,
-			wantPassback:        true,
-			wantNormalizeSystem: true,
-			wantModelMap: map[string]string{
-				"fable":  "glm-5.2",
-				"haiku":  "deepseek-v4-flash",
-				"opus":   "glm-5.2",
-				"sonnet": "glm-5.2",
-			},
-			wantNoVisionModels: []string{"glm-5.2", "deepseek-v4-flash"},
-			wantFallback:       "MiniMax-M2.7",
-		},
-		{
-			name:               "compshare chat",
-			req:                CreateChannelRequest{Provider: ProviderCompshare, Target: TargetChat, APIKey: "cs-test"},
-			wantBaseURL:        "https://cp.compshare.cn/v1",
-			wantService:        "openai",
-			wantNormalize:      true,
-			wantVision:         false,
-			wantNoVisionModels: []string{"glm-5.2", "deepseek-v4-flash"},
-			wantFallback:       "MiniMax-M2.7",
-		},
-		{
-			name:           "compshare responses",
-			req:            CreateChannelRequest{Provider: ProviderCompshare, Target: TargetResponses, APIKey: "cs-test"},
-			wantBaseURL:    "https://cp.compshare.cn/v1",
-			wantService:    "openai",
-			wantVision:     false,
-			wantNativeTool: true,
-			wantNormalize:  true,
-			wantModelMap: map[string]string{
-				"sol":   "deepseek-v4-flash",
-				"astra": "glm-5.2",
-				"luna":  "deepseek-v4-flash",
-			},
-			wantNoVisionModels: []string{"glm-5.2", "deepseek-v4-flash"},
-			wantFallback:       "MiniMax-M2.7",
-		},
-		{
-			name:           "runapi messages",
-			req:            CreateChannelRequest{Provider: ProviderRunAPI, Target: TargetMessages, APIKey: "runapi-test"},
-			wantBaseURL:    "https://runapi.co/v1",
-			wantService:    "claude",
-			wantNoModelMap: true,
-			wantNormalize:  false,
-		},
-		{
-			name:           "runapi chat",
-			req:            CreateChannelRequest{Provider: ProviderRunAPI, Target: TargetChat, APIKey: "runapi-test"},
-			wantBaseURL:    "https://runapi.co/v1",
-			wantService:    "openai",
-			wantNormalize:  true,
-			wantNoModelMap: true,
-		},
-		{
-			name:               "runapi responses",
-			req:                CreateChannelRequest{Provider: ProviderRunAPI, Target: TargetResponses, APIKey: "runapi-test"},
-			wantBaseURL:        "https://runapi.co/v1",
-			wantService:        "responses",
-			wantCodex:          false,
-			wantStripCodex:     false,
-			wantNoModelMap:     true,
-			wantNoReasoningMap: true,
-		},
-		{
 			name:          "kimi chat",
 			req:           CreateChannelRequest{Provider: ProviderKimi, Target: TargetChat, APIKey: "sk-test"},
 			wantBaseURL:   "https://api.moonshot.cn/v1",
@@ -854,15 +785,9 @@ func TestBestPlanForTarget(t *testing.T) {
 		{ProviderDeepSeek, TargetMessages, "anthropic"},
 		{ProviderDeepSeek, TargetChat, "openai-chat"},
 		{ProviderDeepSeek, TargetResponses, "openai-chat"},
-		{ProviderCompshare, TargetMessages, "anthropic"},
-		{ProviderCompshare, TargetChat, "openai-chat"},
-		{ProviderCompshare, TargetResponses, "openai-chat"},
 		{ProviderSenseNova, TargetMessages, "anthropic"},
 		{ProviderSenseNova, TargetChat, "openai-chat"},
 		{ProviderSenseNova, TargetResponses, "openai-chat"},
-		{ProviderRunAPI, TargetMessages, "anthropic"},
-		{ProviderRunAPI, TargetChat, "openai-chat"},
-		{ProviderRunAPI, TargetResponses, "openai-chat"},
 		{ProviderOpenCodeZen, TargetMessages, "go-openai-chat"},
 		{ProviderOpenCodeZen, TargetChat, "go-openai-chat"},
 		{ProviderOpenCodeZen, TargetResponses, "go-openai-chat"},
@@ -992,26 +917,6 @@ func TestFilterPlansForTarget_OpenCodeMessagesUsesChatUpstream(t *testing.T) {
 	}
 }
 
-func TestPresetsIncludesCompshareAtThirdPosition(t *testing.T) {
-	presets := Presets()
-	if len(presets) < 3 {
-		t.Fatalf("Presets() length = %d, want at least 3", len(presets))
-	}
-	if presets[2].ID != ProviderCompshare {
-		t.Fatalf("Presets()[2].ID = %q, want %q", presets[2].ID, ProviderCompshare)
-	}
-}
-
-func TestPresetsIncludesRunAPIAfterCompshare(t *testing.T) {
-	presets := Presets()
-	if len(presets) < 4 {
-		t.Fatalf("Presets() length = %d, want at least 4", len(presets))
-	}
-	if presets[3].ID != ProviderRunAPI {
-		t.Fatalf("Presets()[3].ID = %q, want %q", presets[3].ID, ProviderRunAPI)
-	}
-}
-
 func TestBuildPayloadAutoCorrectsPlan(t *testing.T) {
 	// 前端应在 target 变化时自动切换 plan，后端尊重显式 planID
 	// 此测试验证：未指定 planID 时，chat target 自动选择 openai-chat plan
@@ -1033,29 +938,14 @@ func TestBuildPayloadAutoCorrectsPlan(t *testing.T) {
 
 func TestBuildPayloadSetsProviderConsoleWebsite(t *testing.T) {
 	got, err := BuildPayload(CreateChannelRequest{
-		Provider: ProviderCompshare,
+		Provider: ProviderDeepSeek,
 		Target:   TargetResponses,
-		APIKey:   "cs-test",
+		APIKey:   "sk-test",
 	})
 	if err != nil {
 		t.Fatalf("BuildPayload() error = %v", err)
 	}
-	want := "https://console.compshare.cn/light-gpu/model-subscription"
-	if got.Website != want {
-		t.Fatalf("Website = %q, want %q", got.Website, want)
-	}
-}
-
-func TestBuildPayloadSetsRunAPIWebsite(t *testing.T) {
-	got, err := BuildPayload(CreateChannelRequest{
-		Provider: ProviderRunAPI,
-		Target:   TargetResponses,
-		APIKey:   "runapi-test",
-	})
-	if err != nil {
-		t.Fatalf("BuildPayload() error = %v", err)
-	}
-	want := "https://runapi.co/console"
+	want := "https://platform.deepseek.com/usage"
 	if got.Website != want {
 		t.Fatalf("Website = %q, want %q", got.Website, want)
 	}
