@@ -1,0 +1,1269 @@
+hash	日期	提交标题	判定	优先级	改动域	文件数	理由	评审来源
+04815c75	2026-07-08	feat(autopilot): RoutingDecisionTrace + TraceStore + trace handlers (P1.4)	不移植	—	backend	3	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+069dd3b2	2026-07-08	feat(autopilot): EndpointAttemptPolicy 注入 TryUpstreamWithAllKeys + 全部接线	不移植	—	backend	4	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+07702326	2026-07-08	test(autopilot): 修复 RateLimitApplier kill switch 测试闭包捕获值拷贝问题	不移植	—	backend	1	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+0ad82d0c	2026-07-08	feat(autopilot): §3.2.3 订阅级能力共享 + §3.2.4 用量窗口 Phase 1 shadow	不移植	—	backend	6	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+0c22d848	2026-07-08	feat(autopilot): add EndpointAttemptPolicy (§4.6.2 + §4.6.2a)	不移植	—	backend	2	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+169ae074	2026-07-08	feat(autopilot): 接线 buildActivePolicy 到 BuildEndpointPolicy (assist/auto)	不移植	—	backend	2	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+18184f63	2026-07-08	feat(autopilot): 接线健康中心只读 API + 后台聚合 worker	不移植	—	backend	3	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+1f43e812	2026-07-08	feat(autopilot): 自动发现完成后一致结果自动写入 SupportedModels	不移植	—	backend	2	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+29d6ff43	2026-07-08	feat(autopilot): 确定性 TaskClassifier + 路由配置/kill switch + SmartFilter 顺序修正	不移植	—	backend	10	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+35b90f09	2026-07-08	feat(autopilot): 新增评分引擎 scoring.go（§5.3 九项公式 + §5.5 派系偏好 + §5.6 价格偏向）	不移植	—	backend	2	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+430a4b89	2026-07-08	feat(ui): add SubscriptionsView and CockpitView frontend	不移植	—	frontend	11	订阅中心/驾驶舱明确不移植，lean 无 `SubscriptionsView`/`CockpitView	ccx_audit_B1.md
+44b571f8	2026-07-08	feat(frontend): add Health Center view	不移植	—	frontend	12	Health Center 明确列入不移植清单，lean 无该视图与 API 契约	ccx_audit_B1.md
+666d6e7e	2026-07-08	feat(autopilot): add CapabilityFloorReasons and MinQualityTierReasons	不移植	—	backend	2	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+67b4b1bf	2026-07-08	feat(autopilot): L2 轻量探测 worker + 每日预算 + 探测队列	不移植	—	backend	3	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+6cbaf973	2026-07-08	docs: 新增同订阅多Key能力共享/配额负载均衡(§3.2.3)与用量窗口(§3.2.4)设计	不移植	—	docs	1	docs: 文档/合并/计划类，非运行代码	规则分类
+7501738b	2026-07-08	feat(autopilot): ManualRoutingIntent 参与 SmartRouter 路由（§4.6.4 人工意图执行语义）	不移植	—	backend	36	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+772dfdb5	2026-07-08	feat(autopilot): 实现 ProfileStore（内存缓存 + SQLite 异步持久化）	不移植	—	backend	2	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+7b8084ab	2026-07-08	feat(autopilot): 画像核心类型 + FastDecay shadow 评分	不移植	—	backend	6	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+7ba391cb	2026-07-08	test(autopilot): 数据模拟集成测试验证 SmartRouter 评分排序	不移植	—	backend	1	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+7be4fe78	2026-07-08	feat(autopilot): 实现 HealthAnalyzer L1 被动健康诊断	不移植	—	backend	2	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+7e0c42da	2026-07-08	feat(autopilot): 实现时序感知 — TimeBucketMetrics + QualityTrend 检测（§3.10）	不移植	—	backend	4	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+828107aa	2026-07-08	docs: 新增任务域优势矩阵(§5.7)与思考等级差异(§5.8)设计	不移植	—	docs	1	docs: 文档/合并/计划类，非运行代码	规则分类
+8f25b68b	2026-07-08	feat(autopilot): TrustedRoutingAdvisor 五态状态机 + AdvisorHintEffect 路由约束解析	不移植	—	backend	4	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+9804d3d2	2026-07-08	feat(autopilot): 实现 GroupChangeDetector 分组变更检测（设计 §3.9）	不移植	—	backend	2	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+99f64c4a	2026-07-08	feat(config): 新增 ChannelUID 渠道稳定身份标识	不移植	P2	backend	3	ChannelsV3 稳定身份体系，任务点名排除；lean 无 channel_authoritative.go。	ccx_audit_C.md
+9e2e3173	2026-07-08	feat(autopilot): 新增 RateLimitDiscoverer shadow 实现（设计 §4.5）	不移植	—	backend	2	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+a0bd0d99	2026-07-08	feat(autopilot): 集成 Phase 2 剩余5项到 SmartRouter 主路径	不移植	—	backend	6	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+a703538c	2026-07-08	feat(autopilot): 新增 ManualRoutingIntent 人工路由意图（Phase 1 shadow）	不移植	—	backend	4	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+aa136b26	2026-07-08	test: 添加 BreakTieByOriginTier 属性测试验证非平局排序不变量	不移植	—	backend	1	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+aa6b76ef	2026-07-08	feat(ui): 渠道卡片健康 badge + 来源标签系统（§8.2）	不移植	—	frontend	10	统一渠道卡健康 badge/来源标签明确不移植，依赖 `ChannelHealthBadge	ccx_audit_B1.md
+ad9d9092	2026-07-08	feat(autopilot): TrustedRoutingAdvisor shadow 评估 + 决策记录 + API	不移植	—	backend	5	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+b9372180	2026-07-08	feat(autopilot): SmartRouter shadow 注入（设计 §4.6 + P0.4 + P0.5）	不移植	—	backend	8	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+bf206a65	2026-07-08	feat(autopilot): 新增 LocalModelRuntimeProfile 本地运行时画像与探测	不移植	—	backend	3	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+c33fcfd6	2026-07-08	feat(autopilot): SubscriptionProfile + 驾驶舱聚合 API + 三 store 接线	不移植	—	backend	7	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+caa5c28d	2026-07-08	feat(autopilot): FastDecay 批量查询 + 发现 RPM 运行态注入 (Phase 2)	不移植	—	backend	6	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+d13560e9	2026-07-08	feat(autopilot): add TaskDomain/EffortLevel types and domain strength inference	不移植	—	backend	3	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+de2e9d2b	2026-07-08	docs: 新增内置模型清单设计(§4.2.1)	不移植	—	docs	1	docs: 文档/合并/计划类，非运行代码	规则分类
+e06b0c58	2026-07-08	feat(autopilot): SmartRouter assist/auto 模式语义转正	不移植	—	backend	3	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+e0c41e75	2026-07-08	feat(models): 内置模型清单 + /v1/models 补充 max_output_tokens	建议移植	P0	backend	4	/v1/models` 输出修正，lean `ModelEntry` 无该字段且无内置清单回退，纯数据正确性	ccx_audit_D.md
+ecca2acb	2026-07-08	feat(autopilot): LocalCandidateProvider 本地运行时进入 endpoint 候选池	不移植	—	backend	2	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+ef619026	2026-07-08	feat(autopilot): Phase 1 收尾接线 — advisor/usage/subscription wiring	不移植	—	backend	4	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+f3003ba7	2026-07-08	chore(upstream): record codex 0.143.0 check	不移植	—	other	2	chore: 文档/合并/计划类，非运行代码	规则分类
+f60d8220	2026-07-08	feat(autopilot): 实现 Profiler L1 被动画像推导	不移植	—	backend	3	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+f685bc36	2026-07-08	feat(autopilot): 接线限流信号/时序/分组变更到 Manager 与健康中心 API	不移植	—	backend	8	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+f9cd6174	2026-07-08	fix(autopilot): 修复 auto-add/auto-status 端到端流程	不移植	—	backend	3	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+0cae57f0	2026-07-09	docs(autopilot): 新增 new-api 集成与订阅 Provider Adapter 框架	不移植	—	docs	1	docs: 文档/合并/计划类，非运行代码	规则分类
+0f02e988	2026-07-09	feat(autopilot): 模型自动映射闭环 (Phase 3B-2)	不移植	—	backend	12	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+141e32aa	2026-07-09	feat(autopilot): Phase 4 Item 5 批量渠道管理（导入/导出/模板）	不移植	—	backend	3	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+1fee2e49	2026-07-09	feat(autopilot): A/B 测试（低比例统计抽样双发）	不移植	—	backend	13	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+3bb858ae	2026-07-09	feat(autopilot): Phase 4 Item 2 成本报表（按用户/模型/渠道/key）	不移植	—	backend	23	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+3ee5fd77	2026-07-09	docs(autopilot): 更新设计文档 Phase 3B 全部完成状态	不移植	—	docs	1	docs: 文档/合并/计划类，非运行代码	规则分类
+4b8e7418	2026-07-09	Merge branch 'worktree-wf_16615e0e-6c0-6'	不移植	—	-	0	other: 文档/合并/计划类，非运行代码	规则分类
+63de121c	2026-07-09	feat(autopilot): Phase 4 Item 1 用户自定义标签系统	不移植	—	frontend	19	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+664d3fff	2026-07-09	feat(autopilot): StabilityTier 晋降级滞后 (Phase 3B-3)	不移植	—	backend	7	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+744daab6	2026-07-09	Merge branch 'worktree-wf_16615e0e-6c0-7'	不移植	—	-	0	other: 文档/合并/计划类，非运行代码	规则分类
+765b7dea	2026-07-09	Merge branch 'worktree-wf_16615e0e-6c0-4'	不移植	—	-	0	other: 文档/合并/计划类，非运行代码	规则分类
+7ff1e1f9	2026-07-09	feat(autopilot): 补强 P1.5 迁移与回滚契约	不移植	—	backend	13	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+833bb7b3	2026-07-09	feat(autopilot): 补全 L2 探测自愈闭环（Phase 3B-1）	不移植	—	backend	9	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+856372c4	2026-07-09	fix(autopilot): 修复 scoreEndpointForKey EndpointUID 与 handlers 层不一致导致 MappedModel 永久查不到	不移植	—	backend	2	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+8dcaabdc	2026-07-09	fix(autopilot): ABTestConfig.Validate() 补齐负值/越界兜底	不移植	—	backend	2	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+9723cc94	2026-07-09	feat(autopilot): ManualRoutingIntent 试用意图前端	不移植	—	frontend	10	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+b04b489a	2026-07-09	feat(autopilot): 订阅中心 provider adapter（余额自动刷新）	不移植	—	backend	16	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+b2e36f5e	2026-07-09	docs(desktop): 补充后端发现与端口附着约定	不移植	—	desktop	1	docs: 文档/合并/计划类，非运行代码	规则分类
+bee4e48f	2026-07-09	docs(autopilot): 更新设计文档 Phase 3A 完成状态	不移植	—	docs	1	docs: 文档/合并/计划类，非运行代码	规则分类
+bf93b6f8	2026-07-09	feat(autopilot): Phase 3A 画像变更事件推送 + 前端时间线	不移植	—	backend	26	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+c52c4ea3	2026-07-09	feat(autopilot): SLO regression 自动回滚	不移植	—	backend	8	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+d4e1b42d	2026-07-09	feat(autopilot): 本地任务模板系统	不移植	—	backend	8	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+eeb1ee45	2026-07-09	docs(autopilot): 更新设计文档 Phase 4 全部完成状态	不移植	—	docs	1	docs: 文档/合并/计划类，非运行代码	规则分类
+f321d0e7	2026-07-09	feat(autopilot): Phase 4 Item 4 渠道推荐	不移植	—	backend	15	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+099bc489	2026-07-10	feat(presetstore): 预置数据集中管理 + 运行时可更新架构（Phase 1）	不移植	—	backend	20	scope=presetstore：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+0bd0fb88	2026-07-10	feat(subscription): 来源等级由来源类型系统推导，改为只读展示	不移植	—	frontend	4	scope=subscription：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+124788fa	2026-07-10	feat(autopilot): new-api 订阅集成前端	不移植	—	frontend	7	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+17548787	2026-07-10	autopilot 对齐第二波-cockpit概览+订阅+试用意图	不移植	—	desktop	7	Autopilot/cockpit/订阅额度/试用意图，明确排除。	ccx_audit_C.md
+4332fe90	2026-07-10	feat(frontend): 快速添加渠道支持 provider 模板化（选 provider + 输 key）	不移植	—	frontend	7	3.0 远程预置 provider 模板 + `autopilot-api`，明确不移植，lean 无 `QuickAddChannelForm	ccx_audit_B1.md
+440803ea	2026-07-10	feat(autopilot): new-api 订阅集成后端 adapter	不移植	—	backend	7	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+5b508bea	2026-07-10	fix(frontend): 注册 new-api 接入按钮缺失的 mdi-connection 图标	不移植	—	frontend	1	服务 3.0 订阅中心按钮；lean 接入向导已覆盖 new-api，图标注册由 `fa58c398` 统一处理	ccx_audit_B1.md
+9c445028	2026-07-10	docs(todo): 新增 gpt-5.6 适配、codex imagegen 上游文生图待办	不移植	—	other	1	docs: 文档/合并/计划类，非运行代码	规则分类
+9f641ade	2026-07-10	feat(autopilot): provider 模板化添加 per-key baseURL 探测与绑定	不移植	—	backend	12	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+bd0b9749	2026-07-10	feat(presets): 完成远程预置更新运行时	不移植	—	backend	18	scope=presets：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+c046d05c	2026-07-10	fix(responses): 剥离 input item additional_tools	不移植	—	backend	30	路径命中 model-registry：autopilot/benchmark/ChannelsV3 体系	规则分类
+c33e09b8	2026-07-10	autopilot 对齐第一波-管理面板+健康中心+骨架	不移植	—	desktop	17	Autopilot 整包 + 健康中心/驾驶舱，明确排除。	ccx_audit_C.md
+041957fd	2026-07-11	feat(accounts): 建立自动托管账号持久化层级	不移植	—	backend	19	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+05aaef04	2026-07-11	fix(discovery): 发现完成后立即持久化画像	不移植	—	backend	2	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+238c29d4	2026-07-11	fix(autopilot): 修复 MiMo 自动发现失败	不移植	—	backend	12	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+24b8ff9a	2026-07-11	fix(ui): 汇总逻辑渠道的多协议日志	不移植	—	frontend	2	关键词「逻辑渠道」：与精简路线冲突	规则分类
+3bb1d97c	2026-07-11	feat(accounts): 切换凭证差异更新	不移植	—	backend	7	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+5cfccf22	2026-07-11	fix(autopilot): MiMo 自动添加多协议渠道	不移植	—	backend	22	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+7a48d119	2026-07-11	fix(autopilot): schema 迁移幂等自愈 advisor_decisions.reason 列	不移植	—	backend	2	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+8b3521bc	2026-07-11	fix(accounts): 聚合旧版托管协议渠道	不移植	—	backend	2	按 provider+Key 集合恢复跨协议账号关系＝账号聚合，lean 已独立实现 siteaccess 且 2.9 无 AutoManaged 渠道	ccx_audit_D.md
+8e209f34	2026-07-11	fix(ui): 标明自动托管官方渠道身份	不移植	—	frontend	7	官方渠道身份/自动托管标识（`providerDisplay.ts`），3.0 概念，lean 无	ccx_audit_B1.md
+93d81155	2026-07-11	fix(frontend): 快速添加成功后关闭弹窗	不移植	—	frontend	4	依赖 3.0 快速添加自动发现 `autoAdded` 流程，lean 无该流程	ccx_audit_B1.md
+94e63e2e	2026-07-11	feat(accounts): 增加账号级凭证接口	不移植	—	backend	6	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+9e754715	2026-07-11	fix(ui): 进一步精简托管渠道编辑	不移植	—	frontend	4	同上，托管渠道编辑精简	ccx_audit_B1.md
+ade2bae0	2026-07-11	fix(autopilot): 修复 MiMo 自动发现状态	不移植	—	backend	15	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+b1356d95	2026-07-11	fix(ui): 注册官方渠道标识图标	不移植	—	frontend	1	配套上条的 3.0 官方渠道标识图标，lean 无该 UI	ccx_audit_B1.md
+b96aecf2	2026-07-11	fix(routing): 按 endpoint binding 隔离模型调度	不移植	—	backend	4	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+bae42be6	2026-07-11	fix(discovery): 保留绑定模型发现结果	不移植	—	backend	5	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+c171c473	2026-07-11	fix(ui): 收敛自动托管渠道编辑项	不移植	—	frontend	3	同上，自动托管渠道编辑收敛	ccx_audit_B1.md
+c3d5e4e7	2026-07-11	feat(channels): 统一展示多协议渠道	不移植	—	frontend	19	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+cccb9775	2026-07-11	fix(discovery): 按客户端协议持久化画像分类	不移植	—	backend	2	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+cd75f884	2026-07-11	fix(accounts): 复用官方 provider 凭证池	不移植	—	backend	11	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+cff681c7	2026-07-11	fix(ui): 精简自动托管渠道编辑项	不移植	—	frontend	4	自动托管渠道（3.0 概念）专属编辑项精简，lean 无该渠道类型	ccx_audit_B1.md
+d23fbf92	2026-07-11	fix(responses): 识别 content_part 流式事件	建议移植	P0	backend	3	stream_processor.go` 补 content_part.added/delta/done 语义检测 + helpers knownTypes，lean 无该分支，纯协议正确性	ccx_audit_A.md
+ffa88710	2026-07-11	fix(autopilot): 官方渠道改用智能调度	不移植	—	backend	12	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+2d6f5704	2026-07-12	feat(autopilot): 新增 MiniMax Token Plan 用量查询	不移植	—	backend	12	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+2e6ca48e	2026-07-12	feat(autopilot): 火山方舟未绑定 Access Key 时回退内置兜底模型清单	不移植	—	backend	9	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+307e5c3c	2026-07-12	fix(ui): 优化渠道行展示与官方渠道命名/官网编辑	不移植	—	frontend	4	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+6dae122a	2026-07-12	feat(volcengine): 自动识别 Agent 与 Coding Plan	不移植	—	backend	21	scope=volcengine：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+788018ad	2026-07-12	fix(autopilot): 火山兜底模型清单区分 Agent Plan 与 Coding Plan	不移植	—	docs	8	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+88e97f63	2026-07-12	fix(ui): 移除快速添加的上游类型选择	不移植	—	frontend	4	3.0 `QuickAddChannelForm` 精简，lean 无该组件，且与用户显式选协议相悖	ccx_audit_B1.md
+b6de23e7	2026-07-12	fix(ui): 简化渠道添加与官方渠道编辑流程	不移植	—	frontend	15	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+c646a8a5	2026-07-12	fix(ui): 注册 ApiKeyManagementSection 缺失的 mdi 图标	已覆盖	P3	frontend	1	lean `fa58c398` 已补 `shield-key-outline`/`delete-outline` 等；其余为 3.0 MiMo Cookie 区专属	ccx_audit_B1.md
+cda7714b	2026-07-12	style(ui): 调整未知健康状态徽标颜色	不移植	—	frontend	1	ChannelHealthBadge` 配色，健康中心/统一渠道卡范畴	ccx_audit_B1.md
+d1b25677	2026-07-12	feat(mimo): 绑定控制台 Cookie 查询 Token Plan	不移植	—	backend	13	scope=mimo：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+102b9d01	2026-07-13	feat(autopilot): 新增火山方舟套餐用量查询与展示	不移植	—	frontend	11	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+57c2b189	2026-07-13	feat(autopilot): 增加自动模型映射诊断预览	不移植	—	backend	5	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+8d761e82	2026-07-13	fix(ui): 修复 Autopilot 导航重复高亮	不移植	—	frontend	2	Autopilot 整包不移植，lean 无 Autopilot 导航	ccx_audit_B1.md
+908140ca	2026-07-13	fix(autopilot): 精确回填 shadow 实际渠道	不移植	—	backend	10	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+998ee218	2026-07-13	fix(autopilot): 对齐 shadow 与自动路由约束	不移植	—	backend	9	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+addb1192	2026-07-13	fix(autopilot): 接入上下文窗口硬约束	不移植	—	backend	3	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+cd559c8a	2026-07-13	fix(volcengine): 修复 Coding Plan 用量刷新	不移植	—	backend	7	scope=volcengine：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+cf5359eb	2026-07-13	fix(autopilot): 接入模型注册表能力下界	不移植	—	backend	2	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+d63e848e	2026-07-13	fix(autopilot): 统一诊断画像与路由追踪	不移植	—	backend	3	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+d9b63662	2026-07-13	fix(autopilot): 对齐 dry-run 与自动路由决策	不移植	—	backend	4	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+e7e7fd97	2026-07-13	feat(autopilot): 接入真实请求画像	不移植	—	backend	24	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+320bda43	2026-07-14	feat(failover): 新增 (Key,模型) 组合级限制与定时自动恢复	已移植	—	backend	26	lean 已有等价提交 23c39d3f（subject 相似度 1.00）	规则分类
+32f3fcd8	2026-07-14	feat(autopilot): 新增智能路由诊断面板	不移植	—	frontend	7	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+7750f9a4	2026-07-14	fix(config): 完善 Autopilot 配置迁移隔离	不移植	—	backend	6	Autopilot 迁移隔离 + CHANGELOG 纯文档，排除。	ccx_audit_C.md
+808c426f	2026-07-14	feat(autopilot): 引入规范模型能力基准	不移植	—	backend	31	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+9e5baf56	2026-07-14	docs(todo): 记录火山方舟团队版套餐自动探测与用量查询需求	不移植	—	other	1	docs: 文档/合并/计划类，非运行代码	规则分类
+e9f68122	2026-07-14	fix(config): 自动升级旧版 Autopilot 配置	不移植	—	backend	3	Autopilot 配置迁移，非 2.9 旧配置兼容；明确排除。	ccx_audit_C.md
+f2a1a919	2026-07-14	fix(autopilot): 修复辅助路由协议回归	不移植	—	backend	17	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+1093c98f	2026-07-15	feat(channels): 在编辑页展示协议可用模型	不移植	—	frontend	10	ProtocolModelAvailability.vue` 聚合组件，lean 无	ccx_audit_B1.md
+478293e6	2026-07-15	fix(frontend): 按上游协议展示渠道标签	不移植	—	frontend	2	unifiedChannels.ts` 聚合渠道标签，逻辑渠道聚合范畴	ccx_audit_B1.md
+497c5f37	2026-07-15	fix(frontend): 稳定多协议渠道排序	不移植	—	frontend	2	unifiedChannels.ts` 逻辑渠道聚合排序，lean 六协议数组天然有序	ccx_audit_B1.md
+50611c83	2026-07-15	fix(channels): 展示自动探测协议地址	条件移植	P3	frontend	3	buildDiscoveryExpectedRequestUrls` 纯函数可抽取，但四协议同屏是 3.0 大一统且依赖 lean 无的 quickAdd DOM	ccx_audit_B1.md
+5d2ea670	2026-07-15	feat(autopilot): 完善 DeepSeek 官方账号托管	不移植	—	backend	46	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+71b44e46	2026-07-15	fix(channels): 自动识别发现协议类型	不移植	—	frontend	5	后端 `channel_discovery.go` 自动探测并回填 serviceType + `autopilot-api`，与 lean 用户显式选协议冲突	ccx_audit_B1.md
+91714631	2026-07-15	feat(autopilot): 新增手动供应商质量探测	不移植	—	backend	16	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+9637ec79	2026-07-15	style(channels): 避免协议名称换行	不移植	—	frontend	1	配套 50611c83 四协议地址 `.expected-request-row` 栅格，lean 无该 DOM	ccx_audit_B1.md
+af5d87f2	2026-07-15	fix(autopilot): 按真实协议创建自定义渠道	不移植	—	frontend	5	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+b4fabcb6	2026-07-15	feat(channels): 自动探测并聚合多协议渠道	不移植	—	frontend	25	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+b89812af	2026-07-15	style(channels): 优化小屏协议地址布局	不移植	—	frontend	1	同上，四协议地址小屏媒体查询，依附 50611c83	ccx_audit_B1.md
+b8af42d0	2026-07-15	fix(channels): 允许添加弹窗正文滚动	建议移植	P3	frontend	1	通用 UI 缺陷（滚动）；lean `AddChannelModal` 仅 `overflow:hidden`，无 flex/max-height，纯 CSS 低风险	ccx_audit_B1.md
+be6ca396	2026-07-15	fix(channels): 识别 usage 控制台路径	建议移植	P2	frontend	3	baseUrlSemantics.ts` 追加 `/usage`，lean 缺该前缀；纯数组追加，与 `02e0222c` 不冲突	ccx_audit_B1.md
+ef3f54af	2026-07-15	fix(frontend): 注册 DeepSeek 余额图标	不移植	—	frontend	1	余额/配额真相展示配套图标，lean 不做额度真相	ccx_audit_B1.md
+02b74d83	2026-07-16	fix(routing): align scheduler diagnose with request profile	不移植	—	backend	2	scheduler_diagnose_handler` 与 3.0 RequestProfile 绑定，属调度诊断	ccx_audit_A.md
+053afb26	2026-07-16	fix(autopilot): align endpoint metrics identity	不移植	—	backend	8	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+1f72dc60	2026-07-16	perf(routing): prefilter incapable managed channels	不移植	—	backend	7	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+5621303a	2026-07-16	fix(discovery): 补齐 Claude Code 客户端探针特征	已覆盖	—	backend	6	lean `833cfc13` 的 `utils/claude_code_probe.go` 已注入 CC 特征头并识别指纹拒绝	ccx_audit_D.md
+5743084b	2026-07-16	feat(channels): 自动识别智谱官方渠道	不移植	—	frontend	53	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+67dd619b	2026-07-16	fix(discovery): 对齐 Claude Code system 指纹	已覆盖	—	backend	5	同上，另有 `36223fe9` 能力测试探针修复；核心意图已落地，system 块细节差异另行观察	ccx_audit_D.md
+7c2810d9	2026-07-16	feat(autopilot): enforce model routing policy boundaries	不移植	—	backend	4	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+91701144	2026-07-16	perf(routing): prefilter channels without usable keys	不移植	—	backend	2	改 3.0 `scheduler/select.go` 候选预过滤，属 3.0 调度体系性能优化	ccx_audit_A.md
+9f561cd1	2026-07-16	perf(config): clone only selected upstream	条件移植	P3	backend	3	通用性能优化（局部克隆替 GetConfig 全量深拷贝），需适配 lean scheduler/select.go，收益有限。	ccx_audit_C.md
+b9d3def1	2026-07-16	fix(routing): skip disabled managed credentials	已覆盖	—	backend	6	lean `4dd581d6` 的 `IsAPIKeyEnabled` 双路径过滤 + `23c39d3f` RecoverAt 恢复已等价实现	ccx_audit_A.md
+c37b88af	2026-07-16	feat(channels): 补齐桌面渠道自动识别模板	不移植	—	frontend	23	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+d352d725	2026-07-16	fix(autopilot): correct adaptive model resolution	不移植	—	backend	11	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+df7b48e5	2026-07-16	fix(autopilot): honor profile model support decisions	不移植	—	backend	7	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+e4964ca8	2026-07-16	perf(routing): cache request channel snapshots	不移植	—	backend	2	同上，依赖 `scheduler/candidate_filter_provider` 3.0 快照机制	ccx_audit_A.md
+187feb31	2026-07-17	feat(autopilot): 采集端点响应头延迟画像	不移植	—	backend	10	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+37ec9c1d	2026-07-17	feat(capability): 探测 Codex 生图工具权限	不移植	—	backend	27	27 文件 1344 行能力探测大改，且 AGENTS.md 明确 images 不具备 capability-test	ccx_audit_D.md
+42ca6ccf	2026-07-17	fix(autopilot): 对账当前有效画像清单	不移植	—	backend	15	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+49f9d42c	2026-07-17	fix(channels): 简化自动渠道命名	不移植	—	frontend	2	quickAddChannel.ts`，lean 无该文件	ccx_audit_B1.md
+5652c1be	2026-07-17	chore(dev): 添加 Apple Container 隔离验证	不移植	P3	other	4	本机容器隔离脚本，非 PR CI 测试；lean 已有 e4975d62。	ccx_audit_C.md
+696dbecc	2026-07-17	feat(discovery): 完善渠道自动探测与复用	不移植	—	frontend	21	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+94317dfc	2026-07-17	feat(autopilot): 基于 TTFB 自适应响应头超时	不移植	—	backend	13	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+99dce01b	2026-07-17	fix(autopilot): 将终态渠道降至 assist 队尾	不移植	—	backend	3	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+a02f5f92	2026-07-17	fix(dev): 修复容器后端验证的前端嵌入	不移植	P3	other	1	依赖上条容器脚本，随排除。	ccx_audit_C.md
+bb13b293	2026-07-17	fix(responses): 阻止内部元数据泄漏到续轮请求	已移植	—	backend	4	lean 已有等价提交 2dc413bd（subject 相似度 1.00）	规则分类
+c0fcb010	2026-07-17	fix(channels): 快速添加前去重 API Key	不移植	—	frontend	3	quickAddChannel.ts` + `QuickAddChannelForm.vue`，lean 无；Key 管理已由 `920abf6d` 独立实现	ccx_audit_B1.md
+c48015b8	2026-07-17	fix(channels): 展示托管渠道真实模型范围	不移植	—	frontend	13	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+c86c0b6a	2026-07-17	fix(autopilot): 跨重启保留 TTFB 画像	不移植	—	backend	7	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+db29381c	2026-07-17	fix(channels): 合并仪表盘轮询与协议活动	不移植	—	frontend	7	聚合仪表盘/协议活动 + `unifiedChannels.ts`，逻辑渠道聚合与观测体系	ccx_audit_B1.md
+e1c81c38	2026-07-17	feat(autopilot): 增加 auto 上线闸门与自动降级	不移植	—	backend	25	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+e9f0aa79	2026-07-17	fix(frontend): 清理 baseUrl 时剔除 /api-keys 创建页路径	建议移植	P2	frontend	2	baseUrlSemantics.ts` 追加 `/api-keys`、`/apikeys`，lean 缺；纯数组追加无冲突	ccx_audit_B1.md
+ef638b91	2026-07-17	fix(channels): 修正额度禁用状态与用量展示	不移植	—	backend	20	额度禁用状态/用量/配额展示，属配额真相，超 P3 只读边界	ccx_audit_D.md
+0bb4effc	2026-07-18	同步额度禁用状态与 Key 计数修复到桌面端	不移植	P2	desktop	6	主体是订阅额度禁用状态 + 3.0 channelApiKeys 计数工具同步，lean 无该文件且额度状态属排除项。	ccx_audit_C.md
+95ab4c1b	2026-07-18	feat(models): 同步 LiteLLM 能力与 DeepSWE 证据	不移植	—	backend	24	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+a21dddb4	2026-07-18	feat(autopilot): 同步 TTFB 首字节 P95 列到桌面端健康中心	不移植	—	desktop	4	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+a2f5cd6d	2026-07-18	feat(autopilot): 同步 auto 上线闸门与自动降级到桌面端	不移植	—	desktop	6	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+c2653e61	2026-07-18	fix(channels): 同步 baseUrl 清理路径到桌面端	条件移植	P2	desktop	2	纯前端 quick-input-parser 面板路径前缀补齐，lean 有该数组但缺 6 个新前缀；抽前缀+测试。	ccx_audit_C.md
+d98b8420	2026-07-18	fix(logging): record final upstream model	不移植	P2	backend	3	修的是 Autopilot ModelResolver/EndpointAttemptPolicy 自动映射后日志记错模型；lean 无自动映射，显式 RedirectModel 日志已记。	ccx_audit_C.md
+2a2ac137	2026-07-19	fix(ui): preview quick add channel name	不移植	—	frontend	2	依赖 `QuickAddChannelForm`/`buildQuickAddChannelName`，lean 无该快速添加流程	ccx_audit_B1.md
+33d6bd65	2026-07-19	feat(newapi): add safe group multiplier routing	不移植	—	backend	22	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+48e9b185	2026-07-19	同步托管渠道识别模板与徽章到桌面端	不移植	P2	desktop	7	托管渠道（siteaccess/ChannelsV3）识别模板/徽章，lean desktop 无对应 UI。	ccx_audit_C.md
+49cbd713	2026-07-19	同步 Codex 生图工具权限探测到桌面端	不移植	P2	desktop	5	3.0 web→desktop 功能对齐，lean desktop 无对应 admin-api 契约。	ccx_audit_C.md
+8797aedc	2026-07-19	同步渠道自动探测与复用到桌面端	不移植	P2	desktop	8	自动探测/quick-add-channel + 托管渠道复用，lean 计划仅复用已有基础，不整笔搬。	ccx_audit_C.md
+ae0c7c04	2026-07-19	同步简化自动渠道命名到桌面端	不移植	P3	desktop	1	单行同步 3.0 命名简化，绑定托管渠道 useChannelEditDialog，lean 结构已分叉。	ccx_audit_C.md
+161717f3	2026-07-20	docs(site): 致谢区添加 SignPath logo 并精简下载区文案	不移植	—	docs	3	docs: 文档/合并/计划类，非运行代码	规则分类
+28b61499	2026-07-20	fix(ui): 持久化自动托管渠道官网地址	不移植	—	frontend	1	自动托管渠道官网持久化，lean 无该渠道模型	ccx_audit_B1.md
+31efb53f	2026-07-20	fix(ui): 完善托管渠道保存与模型展示	不移植	—	frontend	14	托管渠道保存 + `channelWebsite.ts` + 聚合模型展示，3.0 专属	ccx_audit_B1.md
+34c6c24a	2026-07-20	chore(autopilot): 降低画像落盘成功日志噪声	不移植	—	backend	1	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+4526b226	2026-07-20	docs(readme): 添加 SignPath 代码签名致谢	不移植	—	other	2	docs: 文档/合并/计划类，非运行代码	规则分类
+46e1bcb7	2026-07-20	style(site): 下载按钮改为两行网格布局	不移植	—	docs	1	style: 文档/合并/计划类，非运行代码	规则分类
+4dae8c46	2026-07-20	docs(readme): 更新 Star History 图表	不移植	—	other	2	docs: 文档/合并/计划类，非运行代码	规则分类
+4ea822e2	2026-07-20	ci(signpath): 切换 Windows 签名至正式证书策略	不移植	P3	other	4	签名策略/证书 slug 与环境强绑定，非 PR 测试；2 个 docs 按纯文档排除；CI 测试需求已由 e4975d62 覆盖。	ccx_audit_C.md
+5dcbacdb	2026-07-20	fix(readme): 修复 SignPath logo 死链	不移植	—	other	2	scope=readme：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+611ce03e	2026-07-20	feat(compshare): 绑定优云智算套餐余量查询	不移植	—	frontend	20	scope=compshare：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+655d461a	2026-07-20	feat(compshare): 同步套餐并发限速	不移植	—	backend	3	scope=compshare：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+6abc3930	2026-07-20	docs(site): 文档站首页添加 SignPath 代码签名致谢	不移植	—	docs	2	docs: 文档/合并/计划类，非运行代码	规则分类
+7aa89f22	2026-07-20	fix(volcengine): 修复 Agent Plan Key 端点验证	不移植	—	backend	2	scope=volcengine：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+884aa27a	2026-07-20	docs(readme): 调整 Star History 为 Markdown 图片并更新 token	不移植	—	other	2	docs: 文档/合并/计划类，非运行代码	规则分类
+c789c417	2026-07-20	style(docs): SignPath logo 放大并链接到官网	不移植	—	other	4	style: 文档/合并/计划类，非运行代码	规则分类
+ca3b1aaa	2026-07-20	fix(metrics): 支持渠道组合失败熔断	不移植	P1	backend	3	组合级熔断指标查询（channel_metrics_queries.go 194 行）+ scheduler 测试，依赖 3.0 熔断体系；lean 熔断已由 9377b345/cb7497b7 独立实现。	ccx_audit_C.md
+cc7ce59d	2026-07-20	chore(autopilot): 移除画像推导冗余日志	不移植	—	backend	1	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+e5072bc9	2026-07-20	fix(volcengine): 区分 Agent Plan 探针与协议入口	不移植	—	backend	3	scope=volcengine：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+eea0d8f3	2026-07-20	fix(volcengine): 对齐套餐 Key 验证请求特征	不移植	—	backend	4	scope=volcengine：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+1cb470c6	2026-07-21	feat(kimi): 支持套餐用量查询	不移植	—	frontend	14	scope=kimi：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+22302c10	2026-07-21	fix(metrics): 熔断引入模型多样性门槛	不移植	P1	backend	4	模型级熔断门槛，依赖 lean 不存在的 model_circuit.go/channel_metrics_circuit 体系。	ccx_audit_C.md
+2a8bcfc1	2026-07-21	fix(autopilot): 使用渠道模型倍率排序替代模型	不移植	—	backend	5	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+303a5570	2026-07-21	fix(autopilot): 避免常规任务过度升级模型	不移植	—	backend	6	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+3e91f60b	2026-07-21	fix(autopilot): 按任务难度选择替代模型	不移植	—	frontend	73	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+59c3927f	2026-07-21	fix(autopilot): 优先选择更强的同档模型	不移植	—	backend	5	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+87401f2c	2026-07-21	fix(autopilot): 按能力下限优化替代模型排序	不移植	—	backend	3	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+9f919bde	2026-07-21	fix(autopilot): 修正多模态模型能力路由	不移植	—	backend	25	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+a3b61b9c	2026-07-21	feat(frontend): 套餐类渠道 Key 行余量摘要补齐多时间窗	不移植	—	frontend	4	订阅额度/配额真相，明确不移植	ccx_audit_B1.md
+be325312	2026-07-21	feat(kimi): 支持 Kimi Code 模型与按 Key 发现	不移植	—	backend	30	scope=kimi：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+cda4caba	2026-07-21	feat(benchmark): 自动更新模型能力基准数据	不移植	—	other	8	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+0914fc7c	2026-07-22	docs(changelog): 更新 CHANGELOG 记录新功能和修复	不移植	—	other	1	docs: 文档/合并/计划类，非运行代码	规则分类
+144f7ff6	2026-07-22	feat(sponsors): add Volcengine and BytePlus sponsorship	不移植	—	desktop	8	scope=sponsors：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+1dc1c55c	2026-07-22	refactor(skills): migrate agent skills to .claude/skills via symlink	不移植	—	other	11	scope=skills：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+2674ae91	2026-07-22	fix(cost): 同步模型定价并标记未配置成本	不移植	—	backend	19	路径命中 model-registry：autopilot/benchmark/ChannelsV3 体系	规则分类
+33c2dcb6	2026-07-22	refactor(frontend): redesign protocol model availability diff view	不移植	—	frontend	5	ProtocolModelAvailability` diff 视图重做，聚合组件	ccx_audit_B1.md
+3cb2851b	2026-07-22	fix(frontend): 注册缺失的 mdi-check-all 图标	不移植	—	frontend	1	服务 `ProtocolModelAvailability` 组件，lean 无该 UI	ccx_audit_B1.md
+6109392c	2026-07-22	fix(autopilot): new-api 验证时自动回退 New-API-User header	不移植	—	backend	2	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+64d889a8	2026-07-22	feat(autopilot): new-api 多账号管理后端 API	不移植	—	backend	2	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+7153aeeb	2026-07-22	feat(frontend): 编辑渠道对话框支持托管渠道重新发现模型清单	不移植	—	frontend	6	托管渠道重新发现 + `autopilot-api.ts`，lean 无	ccx_audit_B1.md
+8535b7e2	2026-07-22	fix(autopilot): 记录模型发现来源与时间	不移植	—	backend	19	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+868a84a4	2026-07-22	feat(providers): 新增分层 system header 过滤机制（Phase 1 基础）	不移植	—	backend	2	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+88a6132e	2026-07-22	feat(providers): 过滤 Claude Code 注入的 system header	条件移植	P2	backend	4	定点协议兼容修复，lean 目标文件齐全，抽过滤行为不引入新模块	ccx_audit_D.md
+89f75991	2026-07-22	feat: new-api 多账号管理（渠道编辑页面）	不移植	—	backend	24	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+8bb3d1cc	2026-07-22	fix(benchmark): 修复多来源更新与图表生成	不移植	—	other	12	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+8f7a7884	2026-07-22	fix(frontend): 拉取渠道模型列表时使用 key 级绑定 baseUrl	条件移植	P1	frontend	1	修 401 误报认证失败（模型发现假阴性），lean 有 `useTargetModelFetch`；但 `APIKeyConfig` 无 `baseUrl` 字段，需先补数据基础	ccx_audit_B1.md
+905a4192	2026-07-22	fix(messages): normalize Compshare system roles	条件移植	P2	backend	3	Compshare 上游 system 角色兼容小改动，但 lean 无 `ApplyProviderUpstreamDefaults`，需重写默认值接入点	ccx_audit_A.md
+9292c15b	2026-07-22	fix(frontend): 重新发现轮询识别 failed 状态并展示错误	不移植	—	other	2	目标组件 `ProtocolModelAvailability.vue` 在 lean 不存在（3.0 统一渠道卡），无接入点	ccx_audit_A.md
+9606c8a9	2026-07-22	docs(todo): 追加 Codex rust-v0.145.0 上游协议变更评估	不移植	—	other	2	docs: 文档/合并/计划类，非运行代码	规则分类
+97bb2966	2026-07-22	fix(frontend): LLM 统一渠道视图启用置顶/置底排序	不移植	—	frontend	1	统一渠道视图排序，逻辑渠道聚合范畴	ccx_audit_B1.md
+9e8b8ff9	2026-07-22	feat(frontend): 订阅中心重构为 Provider 卡片式快捷接入面板	不移植	—	frontend	3	订阅中心，明确不移植	ccx_audit_B1.md
+b4b4ed0d	2026-07-22	docs(readme): 为火山引擎注册即领2500万Tokens添加推广链接	不移植	—	other	1	docs: 文档/合并/计划类，非运行代码	规则分类
+ba762489	2026-07-22	feat(healthcheck): 新增渠道保活验证模块	不移植	—	backend	10	关键词「保活」：与精简路线冲突	规则分类
+c40c75fb	2026-07-22	feat(handlers): 分层 system header 过滤接入请求流程（Phase 2）	不移植	—	backend	3	新建 `system_header_cache.go`/`system_probe.go` 3.0 探测体系，属全量兼容性自学习	ccx_audit_A.md
+c70658b2	2026-07-22	chore: update Serena project configuration	不移植	—	other	3	chore: 文档/合并/计划类，非运行代码	规则分类
+c717e710	2026-07-22	docs(changelog): 添加 Claude Code System Header 过滤条目	不移植	—	other	1	docs: 文档/合并/计划类，非运行代码	规则分类
+ca9b7722	2026-07-22	refactor(frontend): simplify Kimi usage display to match official CLI	不移植	—	frontend	4	Kimi 套餐用量展示，配额真相范畴	ccx_audit_B1.md
+ce33b367	2026-07-22	fix(frontend): 提示黑名单密钥恢复状态	已覆盖	P2	frontend	8	lean `23c39d3f`（(Key,模型)组合级限制+自动恢复含前端展示）与 `4dd581d6` 已独立覆盖，3.0 `useDisabledApiKeys` 流程不同	ccx_audit_B1.md
+e5711d9f	2026-07-22	add channel health check configuration and persistence	不移植	—	backend	6	健康中心/健康检查配置持久化，明确排除；lean P3 未整套移植健康检查。	ccx_audit_C.md
+ee506886	2026-07-22	fix(providers): 修复字符串形式 system 未过滤 CC header	条件移植	P2	backend	2	88a6132e` 的字符串 system 漏过滤 follow-up，必须与上者合并移植	ccx_audit_D.md
+f80c45fd	2026-07-22	feat(providers): 新增分层 system header 过滤机制	不移植	—	backend	4	新增分层缓存 + 主动 `system_probe` 探测机制，非核心路径且与 P3 后台探测取舍相悖	ccx_audit_D.md
+03c646bd	2026-07-23	fix(frontend): 补齐订阅中心缺失的 mdi-github 与 mdi-plus-circle 图标注册	不移植	—	frontend	1	订阅中心图标，lean 无；`plus-circle-outline` 已由 lean 注册	ccx_audit_B1.md
+08300891	2026-07-23	fix(autopilot): 自动发现从 apiKeyConfigs 获取密钥，修复管控面模型发现被跳过	不移植	—	backend	2	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+0a5badd4	2026-07-23	feat(converters): Responses 音频 content block 丢弃时输出告警日志	建议移植	P3	backend	1	responses_to_chat.go` 单文件加 `log.Printf` 告警，行为独立、无依赖	ccx_audit_A.md
+0eba41b1	2026-07-23	fix(autopilot): ListArkAgentPlanModel 签名 scope 从 ark_stg 改为 ark	不移植	—	backend	2	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+0ff5a418	2026-07-23	feat(frontend): 订阅中心赞助商使用真实 logo 并下架 Unity2.ai 赞助	不移植	—	frontend	10	订阅中心赞助商 + README/docs/desktop 链接，非 lean 目标	ccx_audit_B1.md
+11f8c380	2026-07-23	fix(config): 套餐 Key 用量刷新后自动恢复 + 凭证同步修复	不移植	—	backend	3	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+1b361781	2026-07-23	docs(autopilot): add trace rollout implementation plan	不移植	—	docs	1	docs: 文档/合并/计划类，非运行代码	规则分类
+1e700be5	2026-07-23	fix(frontend): 修复三处 TypeScript 编译错误	不移植	—	frontend	3	订阅中心组件配套 TS 修复，非通用 CI/类型检查，lean 无该组件	ccx_audit_B1.md
+1fc40307	2026-07-23	fix(config): P2 修复 Kimi/火山套餐恢复边界条件	不移植	—	backend	1	关键词「火山」：与精简路线冲突	规则分类
+22627033	2026-07-23	feat(frontend): 订阅中心三家赞助商展示真实 logo 与徽标	不移植	—	frontend	3	订阅中心赞助商素材，非 lean 目标	ccx_audit_B1.md
+3eaa7b12	2026-07-23	chore: bump version to v3.0.0	不移植	—	other	2	纯 CHANGELOG/VERSION 版本号刷新	ccx_audit_A.md
+4235f498	2026-07-23	fix(handlers): 修复 system header 过滤的 panic、过期误判与误升级	不移植	—	backend	4	完全依赖上一条 3.0 专属文件，前提不存在	ccx_audit_A.md
+5af86109	2026-07-23	refactor(autopilot): 清理 volcenginePlanModelsHost 常量和 endpointFor ark_stg 分支	不移植	—	backend	1	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+6a6b2055	2026-07-23	fix(lint): 清理后端 Go 代码质量问题	不移植	—	backend	193	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+8f2d4422	2026-07-23	docs(changelog): 记录 BaseURL 发现修复与套餐 Key 用量恢复	不移植	—	other	2	docs: 文档/合并/计划类，非运行代码	规则分类
+9dcf8705	2026-07-23	feat(keys): 支持手动暂停/恢复 API 密钥	已覆盖	P1	frontend	13	lean `4dd581d6`（暂停/恢复单个 Key）+ `920abf6d`（Key 管理）已独立实现，含前后端	ccx_audit_B1.md
+9e4371d4	2026-07-23	docs(model-registry): 量化 Kimi HighSpeed 配额消耗为 3 倍	不移植	—	backend	12	docs: 文档/合并/计划类，非运行代码	规则分类
+b833001b	2026-07-23	feat(frontend): 订阅中心改为渠道中心式服务商展示并支持一键添加	不移植	—	frontend	6	订阅中心 + `provider-links.ts`，lean 无	ccx_audit_B1.md
+c6ac5e5a	2026-07-23	fix(volcengine): 修复套餐模型发现签名	不移植	—	backend	2	scope=volcengine：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+caaee503	2026-07-23	test(benchmark): 同步模型能力基准断言	不移植	—	backend	2	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+d910c675	2026-07-23	fix(config): P1 收紧套餐 Key 恢复条件为 AND 语义	不移植	—	backend	2	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+f77a4d19	2026-07-23	feat(frontend): 订阅中心移除手动添加并补齐快捷接入文案	不移植	—	frontend	6	订阅中心交互，明确不移植	ccx_audit_B1.md
+07e9fc11	2026-07-24	feat(autopilot): 实现确定性 Pareto 分层与三倾向候选阶梯	不移植	—	backend	2	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+0a0eb0c7	2026-07-24	docs: 更新计划标记 L3/L4 测试完成	不移植	—	docs	1	docs: 文档/合并/计划类，非运行代码	规则分类
+0b890c5c	2026-07-24	docs: 更新计划标记前端 Trace 详情完成	不移植	—	docs	1	docs: 文档/合并/计划类，非运行代码	规则分类
+0b9cab63	2026-07-24	feat(autopilot): 接入 Trace 关联到请求生命周期基础	不移植	—	backend	3	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+0e49851a	2026-07-24	feat(frontend): Trace 详情对话框与 v2 类型适配	不移植	—	frontend	7	Autopilot Trace 详情/表，Autopilot 整包不移植	ccx_audit_B1.md
+0f0fbe5c	2026-07-24	chore: 停止跟踪 upstream-check 运行时状态文件	不移植	—	other	1	chore: 文档/合并/计划类，非运行代码	规则分类
+115364fc	2026-07-24	feat(benchmark): 补全 DEEPSWE/BENCHLM/DRADAR 三个白名单的 CCX 模型映射	不移植	—	other	2	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+15f990bc	2026-07-24	fix(recovery): 按火山额度重置时间恢复 key	不移植	—	backend	5	关键词「火山」：与精简路线冲突	规则分类
+16e33aff	2026-07-24	feat(benchmark): 为 benchmark-update 添加页面变更检测缓存层	不移植	—	other	6	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+23d3b2d8	2026-07-24	feat(autopilot): 构造 AFP 请求快照与候选级成本证据	不移植	—	backend	4	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+23eb66bd	2026-07-24	feat(autopilot): 接入请求关联 ID 到实际请求链路	不移植	—	backend	2	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+2707745a	2026-07-24	feat(ui): 按 Key 集合归组模型覆盖	不移植	—	frontend	5	ProtocolModelAvailability` 按 Key 归组，聚合渠道模型视图	ccx_audit_B1.md
+314f916a	2026-07-24	feat(autopilot): 有界异步 writer	不移植	—	backend	3	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+321388e5	2026-07-24	docs: 更新 CHANGELOG 记录 Trace v2/灰度发布/分层测试全部变更	不移植	—	other	1	docs: 文档/合并/计划类，非运行代码	规则分类
+348d3dbf	2026-07-24	docs: 更新计划标记 BuildPlan/Scheduler/attempt 接入完成	不移植	—	docs	1	docs: 文档/合并/计划类，非运行代码	规则分类
+3c9b1e70	2026-07-24	docs: 更新计划标记 L5 smoke 和 SSE golden 完成	不移植	—	docs	1	docs: 文档/合并/计划类，非运行代码	规则分类
+43a4322b	2026-07-24	feat(autopilot): ReleaseController 接入请求路径	不移植	—	backend	2	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+45815d68	2026-07-24	docs(config): 火山 provider 模板补充 AFP 路由说明	不移植	—	backend	1	docs: 文档/合并/计划类，非运行代码	规则分类
+49b1a92b	2026-07-24	test(autopilot): 补充 L2 SmartRouter + TraceStore 集成测试	不移植	—	backend	1	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+59dfa000	2026-07-24	docs: 更新火山 AFP 路由计划与 TODO	不移植	—	other	2	docs: 文档/合并/计划类，非运行代码	规则分类
+62eff8d7	2026-07-24	test(autopilot): L5 真实上游 smoke 与 SSE golden 回归测试	不移植	—	backend	3	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+630b2ee0	2026-07-24	feat: 添加渠道预检异步化与后台 discovery 断点续传	不移植	—	backend	18	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+631f66c1	2026-07-24	docs: plan volcengine AFP-aware routing	不移植	—	docs	1	docs: 文档/合并/计划类，非运行代码	规则分类
+634bcc3e	2026-07-24	fix(autopilot): RoutingReleaseSnapshot 补全 RolloutSeed/ControlPercent 字段	不移植	—	backend	2	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+67b0b221	2026-07-24	Merge branch 'worktree-synchronous-questing-pine'	不移植	—	-	0	other: 文档/合并/计划类，非运行代码	规则分类
+6f6e8ac7	2026-07-24	docs: 更新计划标记 L2 集成测试完成	不移植	—	docs	1	docs: 文档/合并/计划类，非运行代码	规则分类
+713d7e08	2026-07-24	fix(autopilot): 优先识别火山 Agent Plan Kimi K3	不移植	—	backend	16	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+732a1e2c	2026-07-24	docs: 更新实施计划标记 in-flight 索引和 release 隔离聚合完成	不移植	—	docs	1	docs: 文档/合并/计划类，非运行代码	规则分类
+7815bc14	2026-07-24	docs: fix AFP routing plan reference	不移植	—	docs	1	docs: 文档/合并/计划类，非运行代码	规则分类
+7ad0ebbd	2026-07-24	Merge remote-tracking branch 'origin/main' into worktree-jiggly-jingling-gem	不移植	—	-	0	other: 文档/合并/计划类，非运行代码	规则分类
+7fa7a554	2026-07-24	feat(config): 实现火山套餐作用域解析与可比较性判断	不移植	—	backend	2	关键词「火山」：与精简路线冲突	规则分类
+81d99e17	2026-07-24	test(autopilot): 补充 L3 SQLite 生命周期和 L4 HTTP 契约测试	不移植	—	backend	3	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+82521965	2026-07-24	feat(autopilot): 实现受控发布与自动降级	不移植	—	backend	4	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+865af552	2026-07-24	feat(autopilot): 定义 Trace v2 DTO 与脱敏边界	不移植	—	backend	4	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+86738a15	2026-07-24	feat(autopilot): endpoint attempt 摘要接入实际请求链路	不移植	—	backend	3	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+88106fd7	2026-07-24	feat(autopilot): 实现 SQLite v6 迁移、持久化与清理	不移植	—	backend	3	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+8c786134	2026-07-24	feat(benchmark): 补全 deepswe kimi-k3 映射，让 kimi-k3 进入成本-能力散点图	不移植	—	other	1	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+91330878	2026-07-24	docs: 更新计划标记 endpoint attempt 链路接入完成	不移植	—	docs	1	docs: 文档/合并/计划类，非运行代码	规则分类
+946be07d	2026-07-24	feat(config): 新增 frontierRoutingEnabled/afpCostRoutingEnabled 正交开关	不移植	—	backend	3	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+95cbf852	2026-07-24	feat(autopilot): in-flight 索引、清理策略与 release 隔离聚合	不移植	—	backend	2	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+9626f81e	2026-07-24	feat(benchmark): 刷新 benchmark 数据，DEEPSWE cohort 扩展至 17 模型	不移植	—	backend	12	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+97a8f29b	2026-07-24	feat(benchmark): 补全 benchlm kimi-3 映射，让 kimi-k3 进入图表	不移植	—	other	1	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+989a5109	2026-07-24	docs: 更新实施计划标记有界异步 writer 完成	不移植	—	docs	1	docs: 文档/合并/计划类，非运行代码	规则分类
+9db78e06	2026-07-24	docs: 完善渠道异步发现方案	不移植	—	docs	1	docs: 文档/合并/计划类，非运行代码	规则分类
+a305289f	2026-07-24	fix(ui): show resume when all channel keys are disabled	不移植	—	frontend	3	聚合渠道全 Key 禁用恢复，依赖 3.0 `channelApiKeys`/`ChannelOrchestration	ccx_audit_B1.md
+a79efc1a	2026-07-24	feat(autopilot): BuildPlan dry-run trace 与 Scheduler/attempt 回填	不移植	—	backend	4	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+aee452ab	2026-07-24	feat(frontend): ChannelLog 展示面跳转到 Autopilot trace 详情	不移植	—	frontend	4	跳转 Autopilot trace，lean 无 Autopilot	ccx_audit_B1.md
+afbca7b2	2026-07-24	docs: plan volcengine key healthcheck recovery	不移植	—	docs	1	docs: 文档/合并/计划类，非运行代码	规则分类
+bb3105f8	2026-07-24	fix(autopilot): 路由过滤原因使用渠道名替代 ch_xxx 内部 ID	不移植	—	backend	2	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+bd90057d	2026-07-24	Merge branch 'worktree-dynamic-fluttering-llama'	不移植	—	-	0	other: 文档/合并/计划类，非运行代码	规则分类
+c11cf6d1	2026-07-24	docs: 更新设计文档与实施计划，修复 lint	不移植	—	docs	3	docs: 文档/合并/计划类，非运行代码	规则分类
+c36487f1	2026-07-24	feat(autopilot): 接入 AFP 候选成本到路由决策与 trace	不移植	—	backend	2	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+c919af1e	2026-07-24	feat(benchmark): 加 grok-4.5 和 muse-spark-1.1 模型	不移植	—	other	1	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+d100942c	2026-07-24	feat(config): 建立火山 Agent Plan AFP 政策目录与纯计算器	不移植	—	backend	2	关键词「火山」：与精简路线冲突	规则分类
+d2b0c843	2026-07-24	fix(icons): 注册 mdiPause 图标到 Vuetify iconMap	已覆盖	P3	frontend	1	lean `vuetify.ts` 已注册 `'pause': mdiPause`（配套 `4dd581d6`），`fa58c398` 统一补注册	ccx_audit_B1.md
+d7c4213c	2026-07-24	feat(autopilot): 只读 Trace API 与驾驶舱详情	不移植	—	backend	2	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+e24fb6ad	2026-07-24	docs(benchmark): 修正 canonicalModelToPattern 对 kimi 分支的注释	不移植	—	other	1	docs: 文档/合并/计划类，非运行代码	规则分类
+e37e009b	2026-07-24	docs: 更新计划标记 Task 3 和 ReleaseController 接入完成	不移植	—	docs	1	docs: 文档/合并/计划类，非运行代码	规则分类
+e57a11f9	2026-07-24	refactor(benchmark): benchlm 改用官方 models.json 取代对比页抓取	不移植	—	other	3	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+e75d3922	2026-07-24	Merge remote-tracking branch 'origin/main' into worktree-jiggly-jingling-gem	不移植	—	-	0	other: 文档/合并/计划类，非运行代码	规则分类
+e77567b7	2026-07-24	docs: 补充火山套餐 Key 保活与恢复 CHANGELOG 并修正 promote 注释	不移植	—	other	2	docs: 文档/合并/计划类，非运行代码	规则分类
+ee9e0d64	2026-07-24	test(healthcheck): 修复 per_key_test 的 flaky 记录断言	不移植	—	backend	1	纯测试修复，且 lean 无 healthcheck 模块	ccx_audit_D.md
+f23ded3e	2026-07-24	fix(healthcheck): respect per-key volcengine plan endpoints	不移植	—	backend	11	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+f4e28e07	2026-07-24	feat(autopilot): trace 候选渠道展示渠道名与 key 掩码	不移植	—	backend	5	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+f6b1086b	2026-07-24	fix(config): 区分 kimi-k3 的 k3-256k 和 k3-1m 变体上下文	不移植	—	backend	13	路径命中 model_registry：autopilot/benchmark/ChannelsV3 体系	规则分类
+f77ccafc	2026-07-24	docs: 更新实施计划标记请求关联 ID 接入完成	不移植	—	docs	1	docs: 文档/合并/计划类，非运行代码	规则分类
+ffdd23d1	2026-07-24	docs: 更新计划标记 ChannelLog 跳转入口完成	不移植	—	docs	1	docs: 文档/合并/计划类，非运行代码	规则分类
+1cfc9f6a	2026-07-25	refactor(frontend): 订阅中心移除分区标题和能力标签	不移植	—	frontend	2	订阅中心，明确不移植	ccx_audit_B1.md
+24ed4eb9	2026-07-25	style(frontend): 渠道日志不再展示调度摘要原始串	不移植	—	frontend	4	调度摘要为 SmartRouter 自动选模产物，lean 无该信息	ccx_audit_B1.md
+2ae44f0e	2026-07-25	fix(benchmark): 修正 litellm 映射补 26 个模型定价 + Kimi 会员条目去重	不移植	—	backend	14	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+2fd85fec	2026-07-25	fix(frontend): 重新发现协议后同步刷新渠道列表	不移植	—	frontend	1	依赖 `ProtocolModelAvailability` 重新发现流程，lean 无	ccx_audit_B1.md
+4b6d2831	2026-07-25	style(autopilot): 组合展示仅用一个空格分隔	不移植	—	frontend	1	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+5b0f3919	2026-07-25	feat(autopilot): 自动启用已发现协议路由	不移植	—	frontend	8	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+61540dfb	2026-07-25	feat(metrics): 采集连接耗时并驱动 SpeedTier	不移植	—	backend	19	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+7aa5831e	2026-07-25	feat(autopilot): 账号列表返回脱敏 access token	不移植	—	frontend	7	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+7b1c218a	2026-07-25	feat(autopilot): 补全多协议自动发现	不移植	—	backend	18	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+7d7ad3d8	2026-07-25	refactor(frontend): 移除渠道菜单的试用意图入口	不移植	—	frontend	7	删除 `ManualIntentForm` 试用意图（任务分类），lean 本无该组件，删除类提交	ccx_audit_B1.md
+807269fa	2026-07-25	refactor(autopilot): 统一自定义协议渠道构造	不移植	—	backend	3	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+80b9e383	2026-07-25	style(volcengine): 统一套餐余量显示格式，补全剩余前缀	不移植	—	frontend	1	scope=volcengine：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+8134869b	2026-07-25	style(frontend): GitHub Copilot 卡移到倒数第二位	不移植	—	frontend	1	订阅中心卡片排序，明确不移植	ccx_audit_B1.md
+836c8621	2026-07-25	fix(frontend): new-api 地址自动剥离控制台路径	已覆盖	P2	desktop	3	地址归一化已由 lean `ec26f48d`（siteaccess `NormalizeSiteURL` + normalize_test.go）覆盖；3.0 订阅表单 UI 不搬。	ccx_audit_C.md
+84a2864d	2026-07-25	feat(autopilot): 接线发现 RPM 应用与账号级 429 scoped cooldown	不移植	—	backend	21	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+876e237d	2026-07-25	fix(channels): sync key and health status	不移植	—	frontend	17	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+8c7474e0	2026-07-25	fix(autopilot): 展示自定义渠道协议发现结果	不移植	—	backend	2	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+8d3a2ac7	2026-07-25	style: gofmt 对齐结构体字段与注释缩进	不移植	—	backend	4	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+93de6739	2026-07-25	fix(benchmark): AA evidence 补 taskCount 修复 TS 类型校验	不移植	—	backend	14	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+98c73023	2026-07-25	fix(cockpit): 修复驾驶舱空白，意图列表 nil slice 序列化成 null	不移植	—	backend	3	scope=cockpit：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+98f4f5bf	2026-07-25	fix(frontend): 简化延迟告警芯片文案	不移植	—	frontend	1	延迟告警芯片文案，聚合观测体系	ccx_audit_B1.md
+a6e1c6b5	2026-07-25	feat(autopilot): compshare 单次减扣接入 SavingsScore	不移植	—	backend	3	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+afe8b9ec	2026-07-25	fix(frontend): 补全 timer-alert-outline 图标注册	不移植	—	frontend	1	服务 `ChannelOrchestration` 延迟告警芯片（聚合观测），lean 无	ccx_audit_B1.md
+bf8e6507	2026-07-25	feat(autopilot): AFP 成本路由默认开启	不移植	—	backend	2	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+c01e38d1	2026-07-25	fix(ui): 注册信息提示轮廓图标	条件移植	P3	frontend	1	通用图标未注册缺陷；lean 有 `information` 无 `information-outline`，需核对模板是否引用再补	ccx_audit_B1.md
+c35cfe3d	2026-07-25	fix(frontend): 渠道列表顺序不再随 key 拉黑变动	不移植	—	frontend	3	channelOrder.ts` 聚合渠道列表排序，lean 六协议数组顺序与拉黑无关	ccx_audit_B1.md
+c71158d8	2026-07-25	fix(providers): system 角色归一化保留 cache_control block 边界	条件移植	P1	backend	3	定点正确性修复，避免缓存控制块边界在归一化时被破坏	ccx_audit_D.md
+d662d034	2026-07-25	refactor(autopilot): 重排模型候选排序并接入 CostPreference	不移植	—	backend	3	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+d6f49351	2026-07-25	style(frontend): 订阅中心赞助商置顶、new-api 置底	不移植	—	frontend	1	订阅中心排序，明确不移植	ccx_audit_B1.md
+e162afc1	2026-07-25	feat(autopilot): AFP 成本接入 SavingsScore，火山折扣参与评分	不移植	—	backend	17	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+e2bde885	2026-07-25	style: 统一所有订阅套餐余量展示格式	不移植	—	frontend	4	订阅套餐余量，配额真相范畴	ccx_audit_B1.md
+e2fa5185	2026-07-25	feat(models): 注册 Claude Opus 5 并支持 4.8 点号别名	不移植	—	backend	17	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+e6689588	2026-07-25	fix(presetstore): 支持多量纲基准原始值	不移植	—	backend	2	scope=presetstore：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+ec0b441a	2026-07-25	feat(benchmark): 接入 Artificial Analysis 数据源并纳入 opus-5	不移植	—	other	9	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+f21a5545	2026-07-25	chore: 重新生成 model registry 产物	不移植	—	backend	12	路径命中 model_registry：autopilot/benchmark/ChannelsV3 体系	规则分类
+f9133b6a	2026-07-25	docs(make): help 补充 ARTIFICIAL_ANALYSIS_API_KEY 用法说明	不移植	—	other	1	docs: 文档/合并/计划类，非运行代码	规则分类
+01ee3e32	2026-07-26	fix(autopilot): default 基准证据不再冒充精确 effort 匹配	不移植	—	backend	4	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+1f4d5e20	2026-07-26	test(fast-discovery): 新增多模型候选回退测试	不移植	—	backend	1	纯测试，随 `431df4fe` 依赖一并排除	ccx_audit_D.md
+2b107034	2026-07-26	feat(autopilot): extract client effort from request body into RequestProfile	不移植	—	backend	4	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+35b6799a	2026-07-26	feat(autopilot): Gemini 渠道补齐 effort 注入路径	不移植	—	backend	4	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+3f59abd8	2026-07-26	docs(autopilot): 补充 model+effort 联合决策现状与计划进度	不移植	—	docs	2	docs: 文档/合并/计划类，非运行代码	规则分类
+3fba827f	2026-07-26	fix(autopilot): ResolvedRouteTarget 定义与 upstream_failover 旧 API 兼容 fallback	不移植	—	backend	2	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+431df4fe	2026-07-26	feat(fast-discovery): 快速探活改为多模型候选策略	不移植	—	backend	1	改写对象 `channel_discovery_fast.go` 为 main 独有，lean 已有 `selectDiscoveryModels` 候选逻辑	ccx_audit_D.md
+5162658c	2026-07-26	feat(failover): 弃用参数自动发现与按渠道-Key-模型记忆剥离	不移植	—	backend	5	deprecated_param_cache` 弃用参数自学习，明确属「全量兼容性自学习」不移植	ccx_audit_A.md
+51640b12	2026-07-26	fix(config): 非官方域名默认剔除 billing header	条件移植	P2	frontend	8	配置契约/脱敏修正（非 `api.anthropic.com` 默认剔除 CCH 计费头），后端默认值推断需适配 2.9 config	ccx_audit_B1.md
+572e7997	2026-07-26	billing header 域名忽略端口+新建渠道默认值跟随 baseUrl	不移植	P2	desktop	11	后端 `requiresAnthropicBillingHeader` 与 desktop `base-url-semantics.ts`/`defaultStripBillingHeader` 在 lean 均不存在（仅 IsStripBillingHeaderEnabled），属 3.0 自动推断体系；端口忽略 4 行可单独吸收。	ccx_audit_C.md
+5805a717	2026-07-26	fix(frontend): 渠道列表第二个渠道错显首个渠道的请求数与缓存率	不移植	—	frontend	3	聚合渠道指标错配 `channelMetricsLookup`，lean 六协议独立列表无此合并对象	ccx_audit_B1.md
+59ff4ab3	2026-07-26	feat(autopilot): 协议探测改为逐模型验证	不移植	—	frontend	7	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+5cdfd25a	2026-07-26	feat(autopilot): auto 模式 SLO 回归保护改为可配置开关	不移植	—	backend	3	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+5fd95338	2026-07-26	fix(config): 清理渠道配置中过时的 grok 精确模型映射	条件移植	P2	backend	11	确为旧配置加载期迁移（清理落盘、保留自定义、幂等），属 2.9 升级路径修复；lean 六协议文件齐全，需抽取 sanitize 函数+迁移挂点+回归，并确认 lean 是否真有该过时映射。	ccx_audit_C.md
+62fe9189	2026-07-26	feat(autopilot): effort normalization and (domain,effort) benchmark matching	不移植	—	backend	3	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+7b028584	2026-07-26	style(autopilot): gofmt request_profile.go	不移植	—	backend	1	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+838ec857	2026-07-26	feat(autopilot): upgrade model resolver for effort-aware routing	不移植	—	backend	6	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+927aad18	2026-07-26	fix(observability): effort 钳位语义修正与 failover 标记重置	不移植	—	backend	4	scope=observability：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+937385f5	2026-07-26	test(benchmark): 基准断言不再硬编码 registry 刷新日期与分值	不移植	—	backend	2	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+979f293e	2026-07-26	refactor(frontend): 模型列表默认两行，仅实际溢出时显示展开	不移植	—	frontend	7	ModelChipList`/`ProtocolModelAvailability`，lean 无	ccx_audit_B1.md
+a7e39b8c	2026-07-26	chore(benchmark): 刷新 model registry 至 20260726	不移植	—	backend	12	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+aeb35aff	2026-07-26	feat(frontend): 额度余量颜色分档抽取为公用工具，细化到5档	不移植	—	frontend	2	quotaColor.ts` 额度/配额真相，明确不移植	ccx_audit_B1.md
+b1759e6f	2026-07-26	feat(autopilot): UsageMeter-Record 日志补充渠道/接口/状态上下文	不移植	—	backend	9	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+b6a5ff8d	2026-07-26	fix(autopilot): 修复 effort 决策管线死代码，实现 effort 变体展开	不移植	—	backend	2	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+c432c801	2026-07-26	feat(autopilot): wire ResolvedRouteTarget for atomic model+effort rewrite	不移植	—	backend	4	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+ca9f19b1	2026-07-26	feat(observability): add effort decision tracking fields to channel logs	不移植	—	backend	5	scope=observability：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+ce50dd44	2026-07-26	feat(kimi): 展示订阅总用量、赠送额度和加油包余额	不移植	—	frontend	8	scope=kimi：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+ceb66e4d	2026-07-26	fix(autopilot): 诊断展示渠道名称和热门模型	不移植	—	frontend	4	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+d15e776e	2026-07-26	feat(autopilot): 手工映射优先级反转开关 + 画像覆盖率诊断	不移植	—	backend	7	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+d7d37527	2026-07-26	refactor(frontend): 额度颜色统一切换到5档阈值	不移植	—	frontend	2	套餐额度颜色阈值，配额真相范畴	ccx_audit_B1.md
+dac55672	2026-07-26	fix(autopilot): Gemini effort 提取取真实档位，targetByUID 写入条件统一	不移植	—	backend	5	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+e59a5fdd	2026-07-26	fix(autopilot): 连接延迟慢速判定加最小样本门槛	不移植	—	backend	4	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+f0e6fc52	2026-07-26	feat(failover): 弃用参数记忆落盘，重启后免重新探测	不移植	—	backend	3	上一条的持久化延伸，依赖同一 3.0 缓存文件	ccx_audit_A.md
+f3d6b7d8	2026-07-26	feat(frontend): 火山密钥折叠摘要按剩余额度着色	不移植	—	frontend	1	关键词「火山」：与精简路线冲突	规则分类
+f3e97d3b	2026-07-26	fix(healthcheck): 保活验证失败写入渠道日志	不移植	—	backend	10	关键词「保活」：与精简路线冲突	规则分类
+fe62e75e	2026-07-26	feat(frontend): 共有/协议专属模型少于10个时直接展开列出	不移植	—	frontend	2	ProtocolModelAvailability` 展开策略，聚合组件	ccx_audit_B1.md
+00ff7454	2026-07-27	feat(autopilot): 手动意图支持锁定思考档位	不移植	—	backend	8	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+01e84218	2026-07-27	feat(compat): 渠道兼容性开关统一自学习，不再要求用户手工勾选	不移植	—	backend	47	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+53edf533	2026-07-27	feat(compat): 历史手工兼容配置升级合并进自学习，此后无需手工干预	不移植	—	backend	8	关键词「自学习」：与精简路线冲突	规则分类
+6af16157	2026-07-27	fix(autopilot): 修复 effort 注入形态误判与三处死代码	不移植	—	backend	6	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+d11eb087	2026-07-27	docs(changelog): 按 git log 补全 v3.0.0 之后的全部变更	不移植	—	other	1	docs: 文档/合并/计划类，非运行代码	规则分类
+2dd1437a	2026-07-28	test(reasoning): 更新 thinking effort 契约断言	已覆盖	P2	backend	2	thinking 契约/回归已由 lean `5944824d`（providers/claude.go、thinkingcache）覆盖；本提交仅随 3.0 行为同步断言。	ccx_audit_C.md
+4b803e93	2026-07-28	fix(frontend): 修复日志复制按钮横向定位	建议移植	P3	frontend	1	通用 UI 缺陷（RTL/逻辑方向定位）；lean `ChannelLogsDialog` 仍为 `right:8px`/固定 52px 旧值，纯 CSS 3 行	ccx_audit_B1.md
+4cfe2123	2026-07-28	chore(model-registry): 刷新 CodexRadar 基准数据	不移植	—	backend	12	路径命中 model_registry：autopilot/benchmark/ChannelsV3 体系	规则分类
+548304c0	2026-07-28	fix(autopilot): restore automatic routing recovery	不移植	—	backend	14	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+7065ca06	2026-07-28	fix(frontend): 补全缺失的 mdi 图标注册	条件移植	P3	frontend	1	12 图标中通用项（download/lightning-bolt）lean 已覆盖，`shield-sync`/`restore-alert` 属 Autopilot；按 lean 模板实际引用核对补注册	ccx_audit_B1.md
+79de26c7	2026-07-28	refactor(frontend): 收敛 Autopilot 为自动运行态	不移植	—	frontend	5	AutopilotModePanel`，Autopilot 整包不移植	ccx_audit_B1.md
+9e0389c5	2026-07-28	chore(model-registry): 刷新 CodexRadar 基准数据	不移植	—	backend	12	路径命中 model_registry：autopilot/benchmark/ChannelsV3 体系	规则分类
+a0976e23	2026-07-28	feat(model-registry): 补齐 Gemini 3 系列上游能力表并修复 litellm 映射	不移植	—	backend	9	路径命中 model_registry：autopilot/benchmark/ChannelsV3 体系	规则分类
+a811d0ff	2026-07-28	fix(frontend): 修复渠道 Key 恢复状态不同步	不移植	—	frontend	7	聚合 `useDisabledApiKeys` + `unifiedChannels`；lean `23c39d3f`/`4dd581d6` 独立实现	ccx_audit_B1.md
+ab319cd6	2026-07-28	fix(frontend): 区分 Kimi 与 Code 用量分量	不移植	—	frontend	3	kimiPlanUsage.ts` 套餐用量，配额真相范畴	ccx_audit_B1.md
+c22adca0	2026-07-28	refactor(autopilot): 移除多模式过渡状态	不移植	—	backend	30	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+d2dd95c7	2026-07-28	refactor(autopilot): 收敛为唯一 auto 运行态	不移植	—	backend	1	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+d6c557ca	2026-07-28	feat(model-registry): Kimi 参数硬约束迁入 model-registry 刷新链路	不移植	—	backend	11	路径命中 model_registry：autopilot/benchmark/ChannelsV3 体系	规则分类
+d971de1e	2026-07-28	feat(compat)!: 兼容性开关整体移除渠道配置，完全收归运行时自学习	不移植	—	backend	78	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+f6acaa1d	2026-07-28	fix(frontend): 修复聚合渠道凭证展示与 Kimi 模型发现	不移植	—	frontend	13	标题即「聚合渠道」+ Kimi 套餐模型发现，明确不移植	ccx_audit_B1.md
+0ec76c65	2026-07-29	refactor(frontend): 统一并精简 Kimi 套餐用量展示	不移植	—	frontend	1	Kimi 套餐用量，配额真相范畴	ccx_audit_B1.md
+15189bc0	2026-07-29	旧配置加载时自动为未配置 priority 的渠道分配优先级	建议移植	P0	backend	3	"明确""用于旧版本升级""的加载期归一化，避免 0 值渠道插到显式 priority 前；lean 有 Priority 字段与 loadConfig 迁移链，抽 normalizeChannelPriorities 挂入即可。"	ccx_audit_C.md
+32591d7b	2026-07-29	perf(scripts): benchmark 数据未变化时跳过 merge，避免无效 diff	不移植	—	other	2	关键词「benchmark」：与精简路线冲突	规则分类
+4309fc00	2026-07-29	fix(frontend): 精简多 Key 模型一致时的重复展示	不移植	—	frontend	2	ProtocolModelAvailability` 去重展示，聚合组件	ccx_audit_B1.md
+4b1ffa2c	2026-07-29	chore(model-registry): 刷新 CodexRadar 基准数据	不移植	—	backend	12	路径命中 model_registry：autopilot/benchmark/ChannelsV3 体系	规则分类
+4f37e902	2026-07-29	fix(compat): 修复 422 兼容性学习分支不可达	不移植	—	backend	2	修复的是 `channelCompatCache.Record` 422 自学习分支，lean 无该体系	ccx_audit_A.md
+5d0988b7	2026-07-29	feat(channel): 失败 Key 支持直接复制与删除	不移植	—	backend	13	统一渠道卡/编辑弹窗 UI；lean 已独立实现 Key 管理（`920abf6a`、`4dd581d6`）	ccx_audit_D.md
+67f032a0	2026-07-29	docs(changelog): 补充上下文上限自学习、兼容性学习修复与 Fuzzy 模式移除条目	不移植	—	other	1	docs: 文档/合并/计划类，非运行代码	规则分类
+7d604d37	2026-07-29	fix(autopilot): 上下文硬约束改用映射后的实际上游模型	不移植	—	backend	4	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+92c96203	2026-07-29	fix(autopilot): 修复 Kimi 重新发现失败与额度排序	不移植	—	frontend	5	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+9cdd1750	2026-07-29	chore(frontend): 移除 Fuzzy 模式前端入口	不移植	—	frontend	12	Fuzzy 自动选模入口，明确不移植自动选模，lean 本无	ccx_audit_B1.md
+a554ccad	2026-07-29	feat(channels): 新增渠道支持选择故障转移位置并修复 priority 0 插队	不移植	—	backend	28	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+ac8d3dda	2026-07-29	refactor(failover)!: 移除 Fuzzy 模式开关，统一为单一 failover 策略	不移植	—	backend	23	23 文件破坏性重构，改 `config_loader.go`/`main.go`/`settings.go`，是 3.0 failover 架构替换	ccx_audit_A.md
+ef458440	2026-07-29	feat(compat): 渠道-Key-模型 上下文上限自学习	不移植	—	backend	10	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+10a155c0	2026-07-30	fix(channels): 恢复渠道时解除密钥暂停	条件移植	P1	backend	8	状态一致性 bug；lean 有 `transitions/resume.go`、`key_suspend.go`，先写失败用例再抽行为	ccx_audit_D.md
+1a2b8cbe	2026-07-30	feat(autopilot): 解析 models 接口的 supported_endpoint_types 作为协议探测排序提示	不移植	—	backend	3	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+30099904	2026-07-30	fix(frontend): 统一 Kimi 套餐用量各行的进度条样式	不移植	—	frontend	1	套餐用量进度条样式，配额真相范畴	ccx_audit_B1.md
+316ec7b0	2026-07-30	fix(frontend): 去掉协议检测中的重复转圈指示	不移植	—	frontend	1	ProtocolModelAvailability` 协议检测 UI，lean 无	ccx_audit_B1.md
+4e440f5c	2026-07-30	refactor(autopilot): 下线价格偏好的自定义档位	不移植	—	backend	14	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+5ee83db2	2026-07-30	perf(channels): 收敛列表 DOM 与刷新开销	不移植	—	frontend	9	聚合列表 DOM/`structuralSharing` 性能，lean 无该列表合并	ccx_audit_B1.md
+91a40cad	2026-07-30	fix(autopilot): 同上游协议渠道共享模型清单并下线零模型协议	不移植	—	backend	5	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+a52c5a30	2026-07-30	fix(channels): 同步聚合渠道多协议密钥暂停状态	不移植	—	frontend	5	聚合渠道跨协议 Key 暂停同步，与 lean 协议独立相悖；`4dd581d6` 已覆盖单 Key	ccx_audit_B1.md
+ca72b990	2026-07-30	fix(channels): 修复统一视图拖拽排序后顺序被还原打乱	不移植	—	backend	20	统一视图拖拽排序＝逻辑渠道聚合/统一渠道卡	ccx_audit_D.md
+e0e08ce1	2026-07-30	perf(channels): 降低活动图刷新开销	不移植	—	frontend	3	聚合活动图性能，lean 无活动图	ccx_audit_B1.md
+fd5f5eb1	2026-07-30	refactor(frontend): 检测状态并入重新发现按钮	不移植	—	frontend	1	ProtocolModelAvailability` 重新发现按钮，lean 无	ccx_audit_B1.md
+fe48dd02	2026-07-30	refactor(frontend): 统一各渠道套餐余量明细展示	不移植	—	frontend	5	UsageQuotaRows`/`HealthChannelDetail` 套餐余量，明确不移植	ccx_audit_B1.md
+13ffd67b	2026-07-31	feat(autopilot): 支持同账号 Messages 跨协议调度	不移植	—	backend	6	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+27404268	2026-07-31	fix(autopilot): 恢复自定义托管渠道多 Base URL 编辑	不移植	—	frontend	6	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+28c4a601	2026-07-31	修复模型级熔断的探针泄漏与键读写不一致	不移植	P1	backend	4	依赖 lean 不存在的 `metrics/model_circuit.go`，属 3.0 模型级熔断体系。	ccx_audit_C.md
+39239ad2	2026-07-31	chore(upstream): 记录 Codex 0.146.0 评估项	不移植	—	other	1	chore: 文档/合并/计划类，非运行代码	规则分类
+4cd1622a	2026-07-31	refactor(proxy): 分离请求协议与执行路由	不移植	—	backend	4	引入 `autopilot.EndpointAttemptPolicy` + `ChannelRouteRef` + 协议联邦 sibling，属 ChannelsV3/SmartRouter	ccx_audit_A.md
+59a3dce7	2026-07-31	feat(providers): DeepSeek Responses 走官方原生入口	不移植	—	backend	3	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+5c2e468a	2026-07-31	fix(tokens): 提升 Responses 请求估算精度	条件移植	P0	backend	5	lean 已有 `utils.EstimateResponsesOutputTokens`，仅 `response.go` 调用点未切；`context_limit_signal` 的 autopilot.RequestProfile 依赖须剥离	ccx_audit_A.md
+63f9a9db	2026-07-31	下线模型级熔断单探针门控，改为到期放行	不移植	P1	backend	2	同为 model_circuit.go 重构，lean 无该模块。	ccx_audit_C.md
+640675d5	2026-07-31	chore(model-registry): 刷新基准数据至 20260730	不移植	—	backend	12	路径命中 model_registry：autopilot/benchmark/ChannelsV3 体系	规则分类
+6c48dd90	2026-07-31	fix(healthcheck): 记录保活探针实际模型	不移植	—	backend	9	关键词「保活」：与精简路线冲突	规则分类
+71b842e3	2026-07-31	test(routing): 覆盖物理路由身份语义	不移植	—	backend	1	纯测试 + `routingref` 3.0 物理路由身份，无生产代码价值	ccx_audit_A.md
+71ba8e8e	2026-07-31	refactor(metrics): 熔断控制统一为三元组 BreakerScope	不移植	P1	backend	14	14 文件架构重构，依赖 model_circuit/channel_metrics_circuit，非 bug 修复。	ccx_audit_C.md
+8da996f1	2026-07-31	refactor(scheduler): 引入物理渠道路由身份	不移植	—	backend	11	调度器 691 行大重构（routingref/session 亲和），lean 未引入	ccx_audit_D.md
+987d1a40	2026-07-31	chore: update model registry with benchmark data (2026-07-31)	不移植	—	backend	12	路径命中 model_registry：autopilot/benchmark/ChannelsV3 体系	规则分类
+a2a935f3	2026-07-31	fix(proxy): 路由全局错误到 Key 熔断桶	不移植	—	backend	2	依赖 `metrics.ModelCircuit()`/`ModelCircuitKeyHash`/`ChannelUID`，lean 无 model_circuit，已用 Key 拉黑/暂停替代	ccx_audit_A.md
+b4e8a7e4	2026-07-31	feat(scheduler): 新增渠道-模型级运行时熔断	不移植	—	backend	11	模型级熔断属调度增强/配额治理，非接入闭环前置条件	ccx_audit_D.md
+bd7e8965	2026-07-31	fix(scheduler): 修复联邦候选 upstreamCache 跨协议同索引冲突	不移植	—	backend	1	依赖 `8da996f1` 的协议联邦候选缓存	ccx_audit_D.md
+c4d89345	2026-07-31	chore(registry): 刷新模型评测样本统计	不移植	—	backend	12	路径命中 model_registry：autopilot/benchmark/ChannelsV3 体系	规则分类
+cfac6ae9	2026-07-31	fix(config): 修复托管渠道凭证恢复后的暂停状态	不移植	P2	backend	13	经 diff 核对属 ManagedAccounts/account_uid 托管账户体系（13 文件含 config_loader 重构），非 2.9 旧配置读取修复。	ccx_audit_C.md
+e14b14d5	2026-07-31	fix(model-registry): 消除价格字段的浮点噪声伪 diff	不移植	—	backend	14	路径命中 model_registry：autopilot/benchmark/ChannelsV3 体系	规则分类
+e3e277e0	2026-07-31	test(registry): 评测测试改为断言稳定契约	不移植	—	backend	3	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+e8896da8	2026-07-31	fix(scheduler): 渠道级模型熔断只统计实际可用的 Key	不移植	—	backend	2	b4e8a7e4` 的 follow-up，依赖的熔断模块未移植	ccx_audit_D.md
+e8ff6737	2026-07-31	fix(channel-editor): 归组展示时不再输出空发现兜底文案	不移植	—	frontend	2	ProtocolModelAvailability` 归组兜底文案，lean 无	ccx_audit_B1.md
+ef6111d3	2026-07-31	fix(frontend): 显示多协议渠道部分可用状态	不移植	—	frontend	10	聚合渠道「部分可用」+ `unifiedChannels`/`ChannelStatusBadge`，逻辑渠道聚合	ccx_audit_B1.md
+0a1a5c30	2026-08-01	feat(autopilot): Frontier 选型默认启用，移除 frontierRoutingEnabled 开关	不移植	—	backend	10	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+537302b7	2026-08-01	fix(channel-editor): 显示四种协议预期请求	条件移植	P3	frontend	2	expectedRequestUrls` 契约修正，lean 有 `BasicInfoSection`；但四协议同屏是 3.0 大一统，需改造成单协议	ccx_audit_B1.md
+81ec221a	2026-08-01	feat(channel-logs): 熔断但无日志时交代成因依据	条件移植	P1	backend	10	错误提示（熔断空态诊断）贴合故障转移闭环；后端 `breaker_evidence.go` 耦合 3.0 metrics/SQLite 熔断态，需适配	ccx_audit_B1.md
+afd94b8e	2026-08-01	feat(autopilot): 模型级选型接入成本-能力 Pareto 前沿	不移植	—	backend	6	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+bc1a6b96	2026-08-01	style(edit-channel): 收窄密钥列表图标与 Key 之间的空白	不移植	—	frontend	1	3.0 `ApiKeyManagementSection` 样式微调，lean 组件结构不同、价值低	ccx_audit_B1.md
+be012b32	2026-08-01	docs(upstream): 完成 Codex 0.146.0 协议变更评估	不移植	—	other	1	docs: 文档/合并/计划类，非运行代码	规则分类
+c14b8aba	2026-08-01	fix(model-registry): 补齐 k3 与 kimi-for-coding 系列参数约束	不移植	—	backend	12	路径命中 model_registry：autopilot/benchmark/ChannelsV3 体系	规则分类
+cbe6ffb3	2026-08-01	docs(upstream): 完成 Codex 0.145.0 协议变更评估	不移植	—	other	1	docs: 文档/合并/计划类，非运行代码	规则分类
+d1156294	2026-08-01	fix(tokens): 音频与附件按媒体类型估算而非 base64 字符数	条件移植	P0	backend	6	audio_tokens.go` 零依赖纯函数可整文件抽入；图片部分 lean `image_tokens.go` 已覆盖需跳过	ccx_audit_A.md
+ebe33699	2026-08-01	fix(model-registry): deepseek-v4-flash 放行 MMDD 日期后缀别名	不移植	—	backend	13	路径命中 model_registry：autopilot/benchmark/ChannelsV3 体系	规则分类
+0633ac16	2026-08-02	fix(autopilot): new-api 自动建 key 补齐 sk- 前缀	不移植	—	backend	2	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+08fd5c7e	2026-08-02	feat(autopilot): new-api provision 同站点并入已有渠道	不移植	—	frontend	8	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+127e56f6	2026-08-02	feat(benchmark): 补 DeepSeek BenchLM 映射	不移植	—	other	2	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+1a3ec2ea	2026-08-02	chore(benchmark): 展开 BenchLM 缓存状态日志	不移植	—	other	2	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+23504026	2026-08-02	chore(benchmark): 增强 BenchLM 缓存日志	不移植	—	other	2	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+33185d39	2026-08-02	fix(benchmark): 调整 BenchLM 304 缓存策略	不移植	—	other	2	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+48488333	2026-08-02	docs(benchmark): 补充 AA 版本与归因说明	不移植	—	other	4	docs: 文档/合并/计划类，非运行代码	规则分类
+4de1f7b6	2026-08-02	fix(ui): 添加渠道故障转移位置改为 API Keys 下方开关，对齐 desktop 样式	不移植	—	frontend	2	同上，lean 已是开关形态；「对齐 desktop」不产生净增益	ccx_audit_B1.md
+6d4324b5	2026-08-02	fix(chat): remove duplicate remainder write in preflightChatStream	建议移植	P0	backend	1	lean `chat/stream.go:119` 仍重复 append remainder 导致 SSE 截断拼接，最小根因修复	ccx_audit_A.md
+7184123e	2026-08-02	chore(model-registry): 刷新基准数据与重新生成派生产物	不移植	—	backend	12	路径命中 model_registry：autopilot/benchmark/ChannelsV3 体系	规则分类
+78eb9a77	2026-08-02	fix(ui): 注册 playlist-plus 图标修复故障转移开关图标不显示	不移植	—	frontend	3	配套 3.0 btn-toggle 图标，lean 用开关无此需求，图标注册已由 `fa58c398` 覆盖	ccx_audit_B1.md
+7aed8562	2026-08-02	fix(ui): 故障转移位置开关文案改为「添加到末尾」	不移植	—	frontend	1	纯 i18n 文案，配套 3.0 开关，lean 沿用 2.9 文案	ccx_audit_B1.md
+954d04d2	2026-08-02	docs(benchmark): 统一数据来源致谢说明	不移植	—	other	2	docs: 文档/合并/计划类，非运行代码	规则分类
+97c7eaa7	2026-08-02	fix(ui): 添加渠道弹窗故障转移位置移至 API Key 区域下方	不移植	—	frontend	1	lean 2.9 已自带 `placement-switch-card` 开关式位置选择，3.0 为 btn-toggle↔开关往返重构	ccx_audit_B1.md
+9f1172df	2026-08-02	chore: restore stream.go file mode to 100644	不移植	—	backend	1	纯文件权限恢复（上一条误置 100755 的善后）	ccx_audit_A.md
+d22b17b2	2026-08-02	test(chat): add regression test for flushRemainder no-duplicate write	条件移植	P3	backend	1	随 `6d4324b5` 一起引入的回归测试，保障不复发	ccx_audit_A.md
+d7551e15	2026-08-02	快速添加服务商下拉按赞助商排序	不移植	P3	frontend	1	赞助商排序与 QuickAddChannelForm.vue 属 3.0 订阅中心体系，lean 无该组件。	ccx_audit_B2.md
+e3018954	2026-08-02	feat(channels): 快速添加服务商下拉新增 new-api 通用接入	已覆盖	P2	frontend	5	lean `1510c1f3` 接入向导 UI + `fd2edc97` 接入闭环已独立实现 new-api 接入且更完整；3.0 依赖 `NewApiQuickAddDialog	ccx_audit_B1.md
+4011e2be	2026-08-03	fix(autopilot): 修正健康聚合与 quality-first 选型	不移植	—	backend	7	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+41ce82e3	2026-08-03	feat(benchmark): 补 DeepSeek CodexRadar 映射	不移植	—	other	2	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+784041eb	2026-08-03	fix(channels): 合并普通同站点渠道	不移植	—	backend	4	同站点渠道合并＝逻辑渠道聚合	ccx_audit_D.md
+8a13b8da	2026-08-03	fix(autopilot): 清理托管映射并细分 premium 排序	不移植	—	backend	10	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+94b474f8	2026-08-03	fix(healthcheck): 调整火山 plan 探针模型	不移植	—	backend	2	关键词「火山」：与精简路线冲突	规则分类
+974a5668	2026-08-03	fix(config): 按 BaseURL 合并历史站点账号	不移植	—	backend	6	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+a0f92303	2026-08-03	refactor(registry): 统一使用运行时 JSON 预置	不移植	—	desktop	14	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+a96af541	2026-08-03	chore(benchmark): 同步最新模型基准数据	不移植	—	backend	9	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+f6977b2d	2026-08-03	fix(autopilot): 清理自动托管渠道显式覆盖	不移植	—	backend	9	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+18b7fb96	2026-08-04	test(handlers+scheduler): 显式声明同账号，避免按 BaseURL 合并	不移植	—	backend	8	纯测试，且绑定 3.0 账号/渠道按 BaseURL 合并语义	ccx_audit_A.md
+2020fc4f	2026-08-04	feat(autopilot): 兼容 new-api raw_auth 认证模式	不移植	—	backend	2	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+2755fd90	2026-08-04	feat(autopilot): 接通有效 USD 成本链路	不移植	—	backend	13	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+2a87db67	2026-08-04	完整接入订阅与倍率管理	不移植	P3	frontend	22	22 文件大改，订阅/配额真相 + 统一渠道倍率体系，明确不移植。	ccx_audit_B2.md
+399f2760	2026-08-04	Merge remote-tracking branch 'origin/main'	不移植	—	-	0	other: 文档/合并/计划类，非运行代码	规则分类
+41b87e76	2026-08-04	feat(autopilot): 同步 new-api 订阅倍率状态	不移植	—	backend	5	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+4a7bd1df	2026-08-04	fix(desktop): 保真 APIKeyConfig payload	条件移植	P1	desktop	5	"Desktop 提交渠道配置不丢服务端/未知字段（""配置不覆盖用户字段""近亲）；lean 已用 `...cfg` 保真大半，但缺类型声明/skeleton key 补齐/null 保真，且 channelApiKeys.ts 在 lean 不存在、3.0 订阅字段需裁剪。"	ccx_audit_C.md
+4da6d77e	2026-08-04	chore(models): 刷新模型基准数据	不移植	—	backend	9	路径命中 model_registry：autopilot/benchmark/ChannelsV3 体系	规则分类
+505e5a36	2026-08-04	保留渠道 key payload 元数据	条件移植	P2	frontend	6	抽 `buildChannelPayload` filter/map 健壮化；lean `APIKeyConfig` 字段集不同、无 `ChannelApiKeyRow`，不可整笔搬。	ccx_audit_B2.md
+5db81723	2026-08-04	feat(frontend): 补齐汇率与倍率状态类型	不移植	—	desktop	2	订阅成本/汇率倍率纯类型，属订阅额度体系。	ccx_audit_C.md
+606c641b	2026-08-04	统一倍率字段类型契约	不移植	P3	frontend	3	是 505e5a36 的反向修正（删显式倍率字段改索引签名），lean 用显式字段且类型不同。	ccx_audit_B2.md
+60d3ebd0	2026-08-04	feat(autopilot): add atomic cost management APIs	不移植	—	backend	11	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+6cf71da9	2026-08-04	feat(autopilot): 建立倍率与订阅原子更新基础	不移植	—	backend	8	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+745c91d8	2026-08-04	按 Key 分组禁用/恢复模型	已覆盖	P3	frontend	26	lean `920abf6a`（Key 管理与分组模型限制）+ `23c39d3f`（(Key,模型) 组合级限制与自动恢复）已按协议独立实现。	ccx_audit_B2.md
+cd26ec5f	2026-08-04	fix(healthcheck): 统一火山探针模型	不移植	—	backend	2	关键词「火山」：与精简路线冲突	规则分类
+d4064035	2026-08-04	refactor(chat): 精简 SSE 尾行清理语义	建议移植	P0	backend	2	flushRemainder→clearRemainder` 重命名并统一 10 处调用，与上一条配套收敛语义	ccx_audit_A.md
+e972d82e	2026-08-04	Merge pull request #285 from thirsty5034/fix/flush-remainder-dup	不移植	—	-	0	other: 文档/合并/计划类，非运行代码	规则分类
+f39fc6fb	2026-08-04	feat(autopilot): 统一倍率资格与多跳汇率	不移植	—	backend	15	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+f77bf947	2026-08-04	feat(desktop): 对齐订阅成本管理能力	不移植	—	desktop	13	订阅成本/汇率/ExchangeRateManager，明确排除。	ccx_audit_C.md
+10ad4017	2026-08-05	feat(channel): 渠道名称按首个 baseURL 自动派生，禁止手改	不移植	—	backend	27	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+02d1d178	2026-08-06	feat(autopilot): 新增 DocumentNeed 路由硬约束，PDF 请求避开不支持 document 的渠道	不移植	—	backend	21	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+30fcc9bc	2026-08-06	test(autopilot): 修复路由与评分回归测试	不移植	—	backend	6	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+5f06748c	2026-08-06	style(subscription): 赞助卡宽度调整为普通卡片两倍	不移植	—	frontend	1	scope=subscription：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+6589a049	2026-08-06	fix(compat): 自动降级被拒绝的 developer role	不移植	—	backend	3	compat_signal.go` 兼容性自学习（自动降级），明确不移植	ccx_audit_A.md
+69bc0535	2026-08-06	feat(autopilot): 迁移历史渠道为通用自动托管	不移植	—	backend	22	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+82b1111a	2026-08-06	feat(subscription): 赞助卡说明文案对齐 README 中英版	不移植	—	frontend	6	scope=subscription：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+8cb1f08d	2026-08-06	chore(models): 刷新模型基准数据	不移植	—	backend	9	路径命中 model_registry：autopilot/benchmark/ChannelsV3 体系	规则分类
+937183f9	2026-08-06	feat(new-api): 在渠道编辑中管理主账号凭证	不移植	—	frontend	12	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+a93541ee	2026-08-06	渠道名称移至编辑弹窗头部展示	不移植	P3	frontend	3	3.0 编辑弹窗头部布局重构，lean 为 2.9 编辑弹窗结构，非缺陷。	ccx_audit_B2.md
+c82b2906	2026-08-06	feat(channel): LogicalChannel 模型与 REST API，同站多协议合一	不移植	—	backend	17	路径命中 logicalchannel：autopilot/benchmark/ChannelsV3 体系	规则分类
+ddf5b657	2026-08-06	feat(autopilot): document 失败学习——400 后记住渠道-Key-模型不支持 document 并路由规避	不移植	—	backend	8	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+90723036	2026-08-07	chore(models): 刷新模型基准数据	不移植	—	backend	9	路径命中 model_registry：autopilot/benchmark/ChannelsV3 体系	规则分类
+062d66a1	2026-08-08	feat(benchmark-chart): 图例 hover 高亮对应模型，弱化其他点与轨迹	不移植	—	other	1	scope=benchmark-chart：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+297209d4	2026-08-08	feat(healthcheck): 火山 Plan 动态 L1 探针 + 稀疏模型级 L2 + 自适应频率	不移植	—	backend	9	关键词「火山」：与精简路线冲突	规则分类
+34ce6039	2026-08-08	chore(models): 刷新 muse-spark-1.1 基准数据并预注册 muse-spark-1.2	不移植	—	backend	9	路径命中 model_registry：autopilot/benchmark/ChannelsV3 体系	规则分类
+5038c219	2026-08-08	fix(benchmark): 允许 provisional lane 占位条目并补全 muse-spark-1.2 映射	不移植	—	other	3	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+54a3b202	2026-08-08	docs(specs): 新增实现设计文档集合	不移植	—	docs	7	docs: 文档/合并/计划类，非运行代码	规则分类
+77bed070	2026-08-08	feat(autopilot): 流式 TTFB 拥塞学习与自适应并发	不移植	—	backend	9	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+91a56068	2026-08-08	feat(new-api): 支持多账号建 key 并入渠道调度	不移植	—	desktop	12	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+97f0bd93	2026-08-08	chore(models): 刷新 muse-spark-1.1/1.2 基准数据	不移植	—	backend	9	路径命中 model_registry：autopilot/benchmark/ChannelsV3 体系	规则分类
+b6c4e08e	2026-08-08	chore(models): 刷新多模型基准数据至 2026-08-08	不移植	—	backend	9	路径命中 model_registry：autopilot/benchmark/ChannelsV3 体系	规则分类
+bf3fe429	2026-08-08	chore(models): 刷新模型基准数据	不移植	—	backend	9	路径命中 model_registry：autopilot/benchmark/ChannelsV3 体系	规则分类
+f529970d	2026-08-08	fix(logical-channel): 同账号物理渠道收敛为单一逻辑卡	不移植	—	backend	4	scope=logical-channel：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+00e10ce8	2026-08-09	docs(specs): 补充跨模块集成设计文档	不移植	—	docs	1	docs: 文档/合并/计划类，非运行代码	规则分类
+10b99f1c	2026-08-09	feat(eventbus): 配置/preset 细粒度事件（Phase B.2）	不移植	—	backend	6	scope=eventbus：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+11879926	2026-08-09	test(config): 修复 Luna 基准证据顺序脆弱断言	不移植	—	backend	1	路径命中 model_registry：autopilot/benchmark/ChannelsV3 体系	规则分类
+1891c7d2	2026-08-09	feat(eventbus): 前端事件总线 + 状态事件 WS 统一（Phase B.3）	不移植	—	frontend	7	scope=eventbus：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+22028397	2026-08-09	feat(autopilot): SmartRouter 感知 LogicalChannel（Phase A.1）	不移植	—	backend	4	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+267f82d6	2026-08-09	feat(eventbus): 跨模块事件总线基础 + 熔断/Key 状态事件（Phase B.1）	不移植	—	backend	13	scope=eventbus：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+26cd5709	2026-08-09	docs(specs): 补完 LogicalChannel 设计文档	不移植	—	docs	2	docs: 文档/合并/计划类，非运行代码	规则分类
+3e31e060	2026-08-09	docs(specs): 同步 8 项修复状态到设计文档	不移植	—	docs	5	docs: 文档/合并/计划类，非运行代码	规则分类
+50873dcc	2026-08-09	fix(frontend): P6/P7 SubscriptionsView 确认/提示统一	不移植	—	frontend	5	路径命中 docs/specs/：autopilot/benchmark/ChannelsV3 体系	规则分类
+585ad6d8	2026-08-09	docs(specs): 回写 Phase A（SmartRouter 感知 LogicalChannel）完成状态	不移植	—	docs	3	docs: 文档/合并/计划类，非运行代码	规则分类
+611dd074	2026-08-09	docs(specs): 新增 Web UI 页面层设计文档	不移植	—	docs	2	docs: 文档/合并/计划类，非运行代码	规则分类
+6e982c71	2026-08-09	docs(specs): 补完所有设计文档待补充项	不移植	—	docs	7	docs: 文档/合并/计划类，非运行代码	规则分类
+72dc03e3	2026-08-09	docs(specs): 删除 benchmark-chart.md 并清理引用	不移植	—	docs	4	docs: 文档/合并/计划类，非运行代码	规则分类
+7ed94e4e	2026-08-09	feat(autopilot): dry-run LogicalChannel 维度候选聚合（Phase A.3）	不移植	—	backend	3	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+8813b90a	2026-08-09	style: go fmt 自动格式化	不移植	—	backend	3	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+9051451c	2026-08-09	移除空转路由守卫，鉴权语义归位 App.vue	建议移植	P2	frontend	1	lean `router/index.ts:32-41` 存在字面相同的空转守卫（两分支均 `next()`），直接删除零风险。	ccx_audit_B2.md
+a7c347e2	2026-08-09	feat(ui): 实现 P9 统一空态组件 EmptyState	不移植	—	frontend	8	路径命中 docs/specs/：autopilot/benchmark/ChannelsV3 体系	规则分类
+bc05a486	2026-08-09	docs(spec): 新增 CCX 架构级改造排期计划	不移植	—	docs	1	docs: 文档/合并/计划类，非运行代码	规则分类
+c3b9d161	2026-08-09	fix(autopilot): 修复禁用key渠道迁移遗漏与账号级联删除卡死	不移植	—	backend	8	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+cc443802	2026-08-09	docs(specs): 核销 P5/P8 并整理待排期区	不移植	—	docs	2	docs: 文档/合并/计划类，非运行代码	规则分类
+d876784d	2026-08-09	fix(verify): 8项修复对抗性验证与回归修复	不移植	—	frontend	15	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+d9b74983	2026-08-09	docs(specs): 同步跨模块事件总线 Phase B 落地状态	不移植	—	docs	2	docs: 文档/合并/计划类，非运行代码	规则分类
+db380702	2026-08-09	feat(autopilot): LogicalChannel 兄弟渠道画像 fallback 评分（Phase A.2）	不移植	—	backend	4	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+e5074f99	2026-08-09	fix(ui): P3 导航 icon 重复修复	不移植	—	frontend	3	路径命中 docs/specs/：autopilot/benchmark/ChannelsV3 体系	规则分类
+009894db	2026-08-10	feat(autopilot): new-api 周期性自动余额刷新	不移植	—	backend	2	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+00d5d4bc	2026-08-10	feat(model-registry): registry 与图表图例按版本号降序确定性排序	不移植	—	backend	12	路径命中 model_registry：autopilot/benchmark/ChannelsV3 体系	规则分类
+02045ec5	2026-08-10	docs(specs): 补 frontier 实测 cost 全有或全无门控语义	不移植	—	docs	1	docs: 文档/合并/计划类，非运行代码	规则分类
+088a9d17	2026-08-10	docs(specs): 整合已完成项为当前设计，清理 changelog 堆积	不移植	—	docs	5	docs: 文档/合并/计划类，非运行代码	规则分类
+0fa1993c	2026-08-10	fix(chart): 模型图例渲染改用版本降序排序	不移植	—	other	1	scope=chart：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+18f71d05	2026-08-10	feat(capability): 能力探测 schema 版本化与 drift 检测	不移植	—	backend	7	能力测试体系的版本化/drift 增强，非探针假阴性修复	ccx_audit_D.md
+1ab1ed7d	2026-08-10	收窄 ensureAutoManagedKind 迁移条件修复联邦回归	不移植	P2	backend	5	AutoManaged 托管渠道迁移 + scheduler 联邦，属 Autopilot/ChannelsV3 托管体系，lean 无该机制。	ccx_audit_C.md
+22d4a11c	2026-08-10	feat(eventbus): 火山 manifest drift 事件	不移植	—	backend	3	scope=eventbus：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+27dc64d2	2026-08-10	feat(healthcheck): 稀疏 L2 预算动态调整	不移植	—	backend	2	healthcheck 后台 L2 探测预算，违反 P3「后台不强制 L2」	ccx_audit_D.md
+2bce1f2e	2026-08-10	feat(eventbus): capability_drift 事件化与前端 drift 告警	不移植	—	frontend	8	scope=eventbus：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+34e0b872	2026-08-10	feat(config): Phase3a 无损权威 ChannelV3 与六数组双向投影	不移植	—	backend	3	路径命中 docs/specs/：autopilot/benchmark/ChannelsV3 体系	规则分类
+47f4cd1b	2026-08-10	feat(config): 引入 ChannelView 读模型与跨账号共享 EndpointCapability	不移植	—	backend	5	路径命中 docs/specs/：autopilot/benchmark/ChannelsV3 体系	规则分类
+602c954e	2026-08-10	feat(healthcheck): 稀疏 L2 成本语义拆分 + AFP 余额联动	不移植	—	-	0	关键词「AFP」：与精简路线冲突	规则分类
+647a8d6f	2026-08-10	docs(specs): 同步 autopilot effort 8 档轴与性价比路由	不移植	—	docs	1	docs: 文档/合并/计划类，非运行代码	规则分类
+6867553a	2026-08-10	lint --fix 属性顺序与空行修正	不移植	P3	frontend	3	纯格式/lint 产物刷新。	ccx_audit_B2.md
+6e4f71c1	2026-08-10	feat(autopilot): effort 规范轴拆分 xhigh/max/ultra 为 8 档	不移植	—	backend	13	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+7b6f1311	2026-08-10	docs(specs): 核销 capability schema/drift 事件化/稀疏L2 成本拆分待排期项	不移植	—	docs	3	docs: 文档/合并/计划类，非运行代码	规则分类
+7bb82db8	2026-08-10	fix(volcengine): 火山 L1 探针透传 proxy/customHeaders/insecureSkipVerify	不移植	—	backend	4	scope=volcengine：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+7d669361	2026-08-10	fix(model-registry): costUsd 改为 2 位小数(0.01 美元)	不移植	—	backend	10	路径命中 model_registry：autopilot/benchmark/ChannelsV3 体系	规则分类
+88b6f201	2026-08-10	chore(model-registry): 刷新上游 benchmark 真实数据	不移植	—	backend	9	路径命中 model_registry：autopilot/benchmark/ChannelsV3 体系	规则分类
+9333987b	2026-08-10	feat(config): Phase2a 持久化非权威 Channels 镜像 (Channel Data Model v2)	不移植	—	backend	6	路径命中 docs/specs/：autopilot/benchmark/ChannelsV3 体系	规则分类
+93f10310	2026-08-10	fix(chart): benchmark 图表补 ultra 等完整 effort 档位序	不移植	—	other	2	scope=chart：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+97cadc90	2026-08-10	feat(capability): 抽取 shared/capability-probe-schema.json 单一真相源	不移植	—	-	0	spec/生成产物抽取 + 前后端重构，属纯工具链刷新	ccx_audit_D.md
+99a121eb	2026-08-10	fix(model-registry): benchmark 浮点指标统一舍入消除尾数 diff	不移植	—	backend	10	路径命中 model_registry：autopilot/benchmark/ChannelsV3 体系	规则分类
+9d289203	2026-08-10	fix(model-registry): costUsd 舍入到 4 位小数消除亚美分抖动	不移植	—	backend	10	路径命中 model_registry：autopilot/benchmark/ChannelsV3 体系	规则分类
+9df080da	2026-08-10	fix(model-registry): sources 列表确定性排序	不移植	—	backend	10	路径命中 model_registry：autopilot/benchmark/ChannelsV3 体系	规则分类
+a438d12b	2026-08-10	feat(logical-channel): 实现 LogicalChannel 派生标签	不移植	—	backend	5	scope=logical-channel：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+aacf1828	2026-08-10	chore(model-registry): 刷新基准数据至 2026-08-09	不移植	—	backend	9	路径命中 model_registry：autopilot/benchmark/ChannelsV3 体系	规则分类
+b47fc0f3	2026-08-10	抽取 capability-probe-schema.json 单一真相源	条件移植	P3	frontend	6	"lean `useCapabilityTestManager.ts:35-40` 仍硬编码探测模型清单，可抽""单一 schema""做法，但须按 lean 模型清单重建且含后端 embed。"	ccx_audit_B2.md
+b652403c	2026-08-10	feat(config): Phase3b 权威落盘 ChannelsV3 + #8 拉黑跨协议级联	不移植	—	backend	5	路径命中 channelsv3：autopilot/benchmark/ChannelsV3 体系	规则分类
+c368fedc	2026-08-10	feat(autopilot): 基准证据相对新鲜度闸门	不移植	—	backend	2	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+c3a14490	2026-08-10	docs(specs): 同步第二波及第一波实现状态，核销待排期项	不移植	—	docs	5	docs: 文档/合并/计划类，非运行代码	规则分类
+cc17a9d5	2026-08-10	feat(autopilot): 接入 codexradar 实测 cost 的性价比 effort 选择	不移植	—	backend	9	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+d05231e9	2026-08-10	feat(api): Phase2b 新增只读 /api/channels 暴露渠道 v2 粒度	不移植	—	backend	5	路径命中 docs/specs/：autopilot/benchmark/ChannelsV3 体系	规则分类
+e4125cbd	2026-08-10	chore(model-registry): 刷新上游 benchmark 数据与预设校验和	不移植	—	backend	9	路径命中 model_registry：autopilot/benchmark/ChannelsV3 体系	规则分类
+e716af56	2026-08-10	style(metrics): 对齐 circuit eventbus 测试结构体缩进	不移植	—	backend	1	gofmt/style 纯格式。	ccx_audit_C.md
+edbef056	2026-08-10	docs(changelog): 记录渠道数据模型 v2 与 #8 拉黑级联	不移植	—	other	1	docs: 文档/合并/计划类，非运行代码	规则分类
+f1f9bc1d	2026-08-10	feat(healthcheck): 稀疏 L2 成本语义拆分 + AFP 余额联动	不移植	—	backend	5	关键词「AFP」：与精简路线冲突	规则分类
+f3099db2	2026-08-10	chore(model-registry): codexradar 证据注入实测 costUsd	不移植	—	backend	9	路径命中 model_registry：autopilot/benchmark/ChannelsV3 体系	规则分类
+fbe62c48	2026-08-10	feat(config): EndpointCapability 查询封装与跨账号探测去重台账	不移植	—	backend	3	路径命中 docs/specs/：autopilot/benchmark/ChannelsV3 体系	规则分类
+03822930	2026-08-11	Phase3c 波1 配套：对账忽略 Key 字段+回归	不移植	—	backend	2	同上，Phase3c 体系。	ccx_audit_C.md
+07809b00	2026-08-11	fix(autopilot): 按动态 Frontier 兑现质量收益上限	不移植	—	backend	7	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+0d5211ba	2026-08-11	feat(healthcheck): CapabilityProbeLedger 接入 L2	不移植	—	backend	4	后台周期性真实探测编排（L2），P3 明确「健康检查模块未整套移植」	ccx_audit_D.md
+15e43d3e	2026-08-11	Phase3c 加载翻转误报回退	不移植	—	backend	2	同上，channel_authoritative.go（lean 无）。	ccx_audit_C.md
+1ad98c01	2026-08-11	feat(autopilot/healthcheck/metrics): CapabilityProbeLedger 接入、channel_status_changed 事件发布、订阅 link/unlink 前端	不移植	—	backend	21	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+2c7fd797	2026-08-11	fix(new-api): 修复 handlers_newapi.go 闭包结构,3db01e0e 编译失败	不移植	—	backend	1	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+2e3f271d	2026-08-11	"Revert ""feat(config): Phase3c 波1 运行时权威反转——ChannelsV3 为唯一权威"""	不移植	—	backend	3	other: 文档/合并/计划类，非运行代码	规则分类
+2ee9187e	2026-08-11	Phase 3c 阶段1 加载翻转+重建不变量(特征开关)	不移植	—	backend	3	ChannelsV3 Phase3 运行时权威反转，任务点名排除。	ccx_audit_C.md
+3db01e0e	2026-08-11	feat(new-api): provision 全局锁改 per-UID 锁,AccountUID 收敛到同逻辑卡	不移植	—	backend	3	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+3ecbcab4	2026-08-11	docs(specs): Phase 3c 实施交接文档——波1重做/波2波3评估/陷阱/验证清单	不移植	—	docs	1	docs: 文档/合并/计划类，非运行代码	规则分类
+421ae7ac	2026-08-11	落盘前同步渠道 Key 到 ManagedAccounts.Credentials	不移植	—	backend	1	ManagedAccounts/ChannelsV3 凭证同步，排除。	ccx_audit_C.md
+4998bbb5	2026-08-11	fix(upstreamprobe): 火山套餐探针流式优先，消除推理模型非流式等待误判超时	不移植	—	backend	2	关键词「火山」：与精简路线冲突	规则分类
+4b9e2c07	2026-08-11	docs(env): 登记 CCX_CHANNEL_AUTHORITATIVE_STRICT 到 .env.example 与 environment.md	不移植	—	backend	2	docs: 文档/合并/计划类，非运行代码	规则分类
+500a289e	2026-08-11	docs(spec): channel-data-model-v2 同步波 3 落地（读保留写停 + 回滚约束）	不移植	—	docs	1	docs: 文档/合并/计划类，非运行代码	规则分类
+5dc971ee	2026-08-11	feat(channel): add remarks and normalize channel names	不移植	—	backend	32	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+60bb9921	2026-08-11	chore(serena): 迁移语言服务器配置字段	不移植	—	other	3	chore: 文档/合并/计划类，非运行代码	规则分类
+7543bed8	2026-08-11	feat(autopilot): 追踪实际模型与思考等级	不移植	—	backend	10	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+826a5b4b	2026-08-11	feat(config): 火山 Agent/Coding Plan responses 渠道切原生 Responses API	不移植	—	backend	15	关键词「火山」：与精简路线冲突	规则分类
+8350cb60	2026-08-11	docs(specs): channel-data-model-v2 同步 Phase 3c 落地状态	不移植	—	docs	1	docs: 文档/合并/计划类，非运行代码	规则分类
+87f12614	2026-08-11	docs(spec): 设计公开 Key 优先消耗策略	不移植	—	docs	2	docs: 文档/合并/计划类，非运行代码	规则分类
+89c7b3d1	2026-08-11	fix(config): 加载期迁移落盘当次跳过 ChannelsV3 翻转——修复迁移被旧 V3 快照覆盖撤销	不移植	—	backend	2	路径命中 channelsv3：autopilot/benchmark/ChannelsV3 体系	规则分类
+b101275f	2026-08-11	feat(model-registry): 注册 K3-256K=Kimi K3 256K 半价变体	不移植	—	backend	12	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+bafbc159	2026-08-11	feat(config): Phase 3c 波 3 六数组停落盘，持久化只留 ChannelsV3	不移植	—	backend	10	路径命中 channelsv3：autopilot/benchmark/ChannelsV3 体系	规则分类
+bc913810	2026-08-11	fix(autopilot): 新增 Key 后恢复渠道熔断	不移植	—	backend	7	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+bcdad1af	2026-08-11	移除 CCX_CHANNEL_AUTHORITATIVE_LOAD 死代码	不移植	—	backend	2	Phase3c 死代码清理，排除。	ccx_audit_C.md
+c74f952d	2026-08-11	feat(config): Phase3c 波1 运行时权威反转重做——ChannelsV3 为唯一权威	不移植	—	backend	3	路径命中 channelsv3：autopilot/benchmark/ChannelsV3 体系	规则分类
+c8d834e1	2026-08-11	fix(channel): 前端渠道名派生补齐多label域名端口后缀	条件移植	P2	desktop	4	纯前端小修；lean `channel-dialog-state.ts:176` 多 label 分支确漏 `appendPort`（函数已存在），抽 1 行+测试，web 端按 lean 现状取舍。	ccx_audit_C.md
+dd171ed0	2026-08-11	公开/临时 Key 优先消耗 Phase 1 Web UI	不移植	P3	frontend	6	公开/临时 Key 消耗策略属订阅额度体系，lean 无 Phase 1 概念。	ccx_audit_B2.md
+ee362ceb	2026-08-11	feat(config): Phase3c 波1 运行时权威反转——ChannelsV3 为唯一权威	不移植	—	backend	3	路径命中 channelsv3：autopilot/benchmark/ChannelsV3 体系	规则分类
+010fc406	2026-08-12	feat(desktop): add public key consumption policy	不移植	—	desktop	7	依赖上条的 ChannelsV3 消费策略 UI。	ccx_audit_C.md
+1283c967	2026-08-12	Merge branch 'worktree-public-key-routing'	不移植	—	-	0	other: 文档/合并/计划类，非运行代码	规则分类
+341ec389	2026-08-12	feat(config): persist public key consumption policy	不移植	—	backend	6	公钥消费策略（channel_authoritative/key_group_multiplier），ChannelsV3 + 订阅额度，排除。	ccx_audit_C.md
+5a8f73ac	2026-08-12	fix(benchmark): 数据源失败时继续更新	不移植	—	other	2	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+62c0d35e	2026-08-12	feat(autopilot): support public key routing semantics	不移植	—	backend	6	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+76cfb1cd	2026-08-12	补齐公开 Key 元数据透传覆盖	不移植	P3	frontend	5	依附 3.0 公开 Key 策略的测试。	ccx_audit_B2.md
+976ec5fa	2026-08-12	chore(benchmark): 输出各来源映射模型	不移植	—	other	5	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+a0ab3fef	2026-08-12	fix(benchmark): 适配 Dradar 多基准接口	不移植	—	other	2	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+b2d36af8	2026-08-12	统一 Key 策略图标提示样式	不移植	P3	frontend	1	依附 3.0 Key 消耗策略 UI。	ccx_audit_B2.md
+d7dc279f	2026-08-12	Merge branch 'worktree-staged-growing-perlis'	不移植	—	-	0	other: 文档/合并/计划类，非运行代码	规则分类
+ec585d70	2026-08-12	chore(model-registry): 刷新模型基准数据	不移植	—	backend	9	路径命中 model_registry：autopilot/benchmark/ChannelsV3 体系	规则分类
+172b9356	2026-08-13	fix(benchmark): 支持环境变量代理	不移植	—	other	3	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+17ee4a40	2026-08-13	feat(scheduler): 让 /v1/responses 默认路径参与协议联邦	不移植	—	backend	7	协议联邦 / `autopilot_config.go`，属自动选路体系	ccx_audit_D.md
+278f0c59	2026-08-13	补回 Kimi 凭证绑定回归测试	不移植	P3	frontend	1	同上。	ccx_audit_B2.md
+36dcf26e	2026-08-13	fix(config): 渠道自动命名只剥离 www，保留 api 前缀	不移植	P2	backend	9	经 diff 核对，测试绑定 ChannelsV3/ChannelView/MigrateStaleChannelViewNames 镜像命名迁移；lean 无 utils/channel_name.go、channel_view.go，不做自动改名。	ccx_audit_C.md
+39c38cca	2026-08-13	docs(skills): 更新 model-update skill 为通用模型注册流程	不移植	—	other	1	docs: 文档/合并/计划类，非运行代码	规则分类
+42ad5ed4	2026-08-13	fix(config): 渠道自动命名保留顶级域名	不移植	P2	backend	9	同上，ChannelsV3 命名迁移（旧名写 Remark、ChannelsV3 同步），非 2.9 旧配置兼容。	ccx_audit_C.md
+619f4ad5	2026-08-13	fix(model-registry): support DeepSeek V4 Pro 0813	不移植	—	backend	12	路径命中 model_registry：autopilot/benchmark/ChannelsV3 体系	规则分类
+78f3ee9f	2026-08-13	清理渠道镜像旧派生名称并写入 Remark	不移植	—	backend	8	channel_view.go / ChannelsV3 镜像与 Remark 迁移，排除。	ccx_audit_C.md
+814179bc	2026-08-13	test(models): 修复上下文窗口测试复刻注册表 pattern 字面量	不移植	—	backend	1	纯测试修复（改断言字面量）	ccx_audit_D.md
+8c176ced	2026-08-13	fix(autopilot): 保留 Kimi 托管凭证快照	不移植	—	backend	1	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+9f69af87	2026-08-13	fix(autopilot): include key-bound endpoint routes	不移植	—	backend	2	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+a5d5f8a9	2026-08-13	chore(presets): 同步 model-registry 到 2026-08-13	不移植	—	backend	9	scope=presets：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+cdb334f3	2026-08-13	补 Kimi key 行绑定回归断言	不移植	P3	frontend	2	依附 3.0 Kimi 凭证绑定，lean `920abf6a` 已有自身 Key 测试。	ccx_audit_B2.md
+df737f0e	2026-08-13	稳定健康检查身份并同步权威渠道名	不移植	—	backend	7	健康检查身份 + 权威渠道名，健康中心/ChannelsV3，排除。	ccx_audit_C.md
+e5959144	2026-08-13	feat(benchmark): 补 DeepSeek V4 Pro 映射并支持日期后缀	不移植	—	other	3	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+e5b4653e	2026-08-13	fix(benchmark): 提高 AA 数据拉取韧性	不移植	—	other	2	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+e8f8483f	2026-08-13	test(autopilot): 补 Kimi 令牌 reload 回归测试	不移植	—	backend	1	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+ff8065d5	2026-08-13	merge(worktree): 合并 glimmering-greeting-pixel	不移植	—	-	0	merge: 文档/合并/计划类，非运行代码	规则分类
+075764a2	2026-08-14	docs(benchmark): 加宽 benchmark 页面图表显示区域	不移植	—	docs	1	docs: 文档/合并/计划类，非运行代码	规则分类
+08ca388f	2026-08-14	feat(model-registry): 注册 Grok 4.6 并更新 benchmark 数据	不移植	—	docs	11	路径命中 benchmark/：autopilot/benchmark/ChannelsV3 体系	规则分类
+1fbb5b05	2026-08-14	docs(route-prefix): 明确默认路由与前缀路由语义	不移植	—	docs	4	docs: 文档/合并/计划类，非运行代码	规则分类
+3391e527	2026-08-14	feat(model-registry): 注册 Grok 4.6	不移植	—	backend	11	路径命中 model_registry：autopilot/benchmark/ChannelsV3 体系	规则分类
+477a0bec	2026-08-14	docs(benchmark): 新增文档站 benchmark 页面	不移植	—	docs	10	docs: 文档/合并/计划类，非运行代码	规则分类
+57fe4f4e	2026-08-14	feat(model-registry): 注册 GLM-5.3、Gemini 3.7 Flash 与 Qwen3.8 Max	不移植	—	other	16	路径命中 model_registry：autopilot/benchmark/ChannelsV3 体系	规则分类
+7a246a89	2026-08-14	fix(benchmark): 统一可视化数据数值精度	不移植	—	docs	3	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+7d82e1ee	2026-08-14	fix(benchmark): 过滤 Artificial Analysis 零值复合指数	不移植	—	docs	3	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+94821f94	2026-08-14	docs(benchmark): 页面显示最后更新时间	不移植	—	docs	4	docs: 文档/合并/计划类，非运行代码	规则分类
+98b9b346	2026-08-14	docs(benchmark): 移除图表上方多余提示	不移植	—	docs	2	docs: 文档/合并/计划类，非运行代码	规则分类
+bd84ef1e	2026-08-14	自动渠道名区分多级 BaseURL 路径	条件移植	P1	frontend	8	抽 `channelNamePathParts` 语义到 lean Web/Desktop 两个 `extractChannelNamePrefix`，不抽后端 `channel_name.go` 与 `quickAddChannel`（lean 均不存在）。	ccx_audit_B2.md
+c601a3c8	2026-08-14	fix(autopilot): 统一 new-api 分组接入流程	不移植	—	backend	8	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+c7bdaeee	2026-08-14	docs(specs): 对齐渠道命名与 new-api 分组流程	不移植	—	docs	3	docs: 文档/合并/计划类，非运行代码	规则分类
+e16f7995	2026-08-14	fix(model-registry): 补齐 GLM-5.3 定价	不移植	—	backend	9	路径命中 model_registry：autopilot/benchmark/ChannelsV3 体系	规则分类
+efb8e0a9	2026-08-14	docs(benchmark): 更新 Artificial Analysis Intelligence Index 至 v4.1.1	不移植	—	other	5	docs: 文档/合并/计划类，非运行代码	规则分类
+112adf89	2026-08-15	feat(model-registry): 更新火山方舟双 Plan 模型	不移植	—	backend	19	路径命中 docs/superpowers/：autopilot/benchmark/ChannelsV3 体系	规则分类
+431af437	2026-08-15	docs(specs): 同步 public-key-routing 文档与已实现代码	不移植	—	docs	1	docs: 文档/合并/计划类，非运行代码	规则分类
+4509aeda	2026-08-15	feat(autopilot): 实现 public-key-routing 运行时语义	不移植	—	backend	7	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+47415362	2026-08-15	refactor(autopilot): SortGroup 替换为连续效用分	不移植	—	backend	2	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+47d6c205	2026-08-15	成本报表展示成本构成	不移植	P3	frontend	5	复杂报表，明确不移植；lean 无 CostReportView.vue。	ccx_audit_B2.md
+497270d9	2026-08-15	docs(specs): 同步 README 中 public-key-routing 状态为已完成	不移植	—	docs	1	docs: 文档/合并/计划类，非运行代码	规则分类
+497ddbe8	2026-08-15	style(channels): 统一结构体字段对齐	不移植	—	backend	1	纯 gofmt/字段对齐	ccx_audit_D.md
+549805b4	2026-08-15	成本报表区分零成本与成本证据缺失	不移植	—	backend	3	复杂报表 + 订阅倍率/成本证据分类，排除；lean 月报导出 f768848a 已覆盖导出需求。	ccx_audit_C.md
+692d3235	2026-08-15	feat(autopilot): public-key-routing shadow 基线对比	不移植	—	backend	3	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+9ab16e27	2026-08-15	refactor(config): 六套 Add*/Update*Upstream 收敛通用方法	不移植	P3	backend	7	大规模架构重构（7 文件 -1969/+524），非 bug 修复，blast radius 大，lean 六协议实现已分叉。	ccx_audit_C.md
+ac7bf4bc	2026-08-15	优先切换到统一 /api/channels API	不移植	P3	frontend	2	ChannelsV3 统一渠道 API，与 lean 六协议独立编辑相反，明确不移植。	ccx_audit_B2.md
+b8317acd	2026-08-15	style(metrics): 格式化 CostReportRow 字段对齐	不移植	—	backend	1	gofmt/style 纯格式。	ccx_audit_C.md
+c4e87563	2026-08-15	docs(specs): 更新 public-key-routing 状态为已实现	不移植	—	docs	1	docs: 文档/合并/计划类，非运行代码	规则分类
+e1367662	2026-08-15	分组模型编辑打开时加载目标模型	已覆盖	P3	frontend	2	lean `920abf6a` 已按自身结构实现分组模型限制，目标模型加载由 `ensureTargetModelsLoaded`/`fetchTargetModels` 承担。	ccx_audit_B2.md
+eb12a583	2026-08-15	持久化记录 Key ConsumptionPolicy	不移植	—	backend	7	ConsumptionPolicy/ChannelsV3 消费策略 + SQLite schema，排除。	ccx_audit_C.md
+f3471a37	2026-08-15	feat(channels): 新增 /api/channels 统一写端点	不移植	—	backend	9	ChannelsV3 统一写端点，lean 无 `handlers/channels/` 目录	ccx_audit_D.md
+044fa21b	2026-08-16	fix(model-registry): 补齐 kimi-k3/grok-4.5/muse-spark 价格与能力条目	不移植	—	backend	18	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+16dc0fda	2026-08-16	feat(autopilot): scheduler 过滤明细接入路由 trace	不移植	—	backend	13	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+179c9580	2026-08-16	refactor(autopilot): 主程序不再输出 BenchmarkSelectionReport，修复 CLI 报告正则污染	不移植	—	backend	4	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+2fb72449	2026-08-16	feat(cli): benchmark-report 改为渠道无关的场景选型报告	不移植	—	backend	2	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+3433ad63	2026-08-16	feat(model-registry): 注册 grok-4.6/mimo-v2.5/seedream/gpt-image-2/nano-banana-2 等新模型	不移植	—	backend	9	路径命中 model_registry：autopilot/benchmark/ChannelsV3 体系	规则分类
+377ac4ef	2026-08-16	merge(worktree): 合并 generic-moseying-deer AtomGit 渠道支持	不移植	—	-	0	merge: 文档/合并/计划类，非运行代码	规则分类
+4145be7f	2026-08-16	chore(make): benchmark-update 自动构建 benchmark-report CLI	不移植	—	other	2	关键词「benchmark」：与精简路线冲突	规则分类
+455dc044	2026-08-16	fix(autopilot): 修复 SmartRouter 模型选择偏见与稳定性评分偏差	不移植	—	backend	10	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+4e1a95d3	2026-08-16	feat(benchmark-sources): 新增未映射新模型检测告警，扩展模型映射	不移植	—	other	9	scope=benchmark-sources：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+5bfddbc8	2026-08-16	feat(dashboard): 展示 ConsumptionPolicy 请求分布	不移植	—	backend	11	scope=dashboard：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+5e1b4bd9	2026-08-16	feat(autopilot): frontier 质量分 support effort-aware benchmark	不移植	—	backend	1	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+70249bbf	2026-08-16	仅自定义手填地址托管渠道可编辑 baseUrls	不移植	P3	frontend	2	托管渠道/统一渠道体系，lean 无。	ccx_audit_B2.md
+705dfa91	2026-08-16	fix(registry): 修正 Kimi K3 默认上下文为 1M	不移植	—	docs	16	路径命中 benchmark/：autopilot/benchmark/ChannelsV3 体系	规则分类
+7adf46a2	2026-08-16	清理手动渠道遗留代码	不移植	P3	frontend	3	3.0 统一渠道清理死代码，lean 无对应遗留。	ccx_audit_B2.md
+85f362ba	2026-08-16	渠道 Key 列表支持拖拽排序与置顶/置底	不移植	P3	frontend	2	功能增强，依赖 3.0 `ChannelApiKeyRow` 行模型；lean ChannelCard 已有置顶/置底、Key 管理为 `920abf6a` 另一套。	ccx_audit_B2.md
+9163637c	2026-08-16	fix(model-registry): k3 家族改用官方直连价，muse-spark 补 provider=meta	不移植	—	backend	11	路径命中 model_registry：autopilot/benchmark/ChannelsV3 体系	规则分类
+a1eb2743	2026-08-16	fix(handlers): 修复自动映射渠道上 Key 级模型黑名单不生效	不移植	—	backend	3	复查块明确为 autopilot 自动映射目标模型而设，lean 无 autopilot 且已用显式映射	ccx_audit_A.md
+a4bf60be	2026-08-16	feat(cli): 新增 benchmark-report 独立 CLI，updater 自动输出模型选择报告	不移植	—	other	4	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+aa5d4ce0	2026-08-16	docs(agents): 进程保护约定去掉写死端口	不移植	—	other	1	docs: 文档/合并/计划类，非运行代码	规则分类
+aad242c7	2026-08-16	修复基线测试失败	不移植	P3	frontend	2	依附 3.0 基线测试修复。	ccx_audit_B2.md
+baf1078f	2026-08-16	docs(superpowers): 清理已完成的历史 plan/spec 文档	不移植	—	docs	7	docs: 文档/合并/计划类，非运行代码	规则分类
+e658d650	2026-08-16	chore(data): refresh model registry and benchmark data	不移植	—	docs	11	路径命中 benchmark/：autopilot/benchmark/ChannelsV3 体系	规则分类
+f1495893	2026-08-16	feat(model-registry): 注册 AtomGit GLM-5.2 200K 变体	不移植	—	backend	11	路径命中 model_registry：autopilot/benchmark/ChannelsV3 体系	规则分类
+f5a9a268	2026-08-16	feat(channel): 添加 AtomGit 渠道支持	不移植	P3	desktop	21	新增第三方渠道预设，21 文件主体为 generated presets（生成产物刷新），非核心路径。	ccx_audit_C.md
+f63d1903	2026-08-16	docs(agents): 更新运行进程端口约定 3688 -> 3399	不移植	—	other	1	docs: 文档/合并/计划类，非运行代码	规则分类
+01632f38	2026-08-17	fix(provider): tokenrhythm 显示名改为「基元律动」	不移植	—	backend	1	同上，且为纯显示名文案调整	ccx_audit_D.md
+09c4996d	2026-08-17	精简编辑渠道对话框为白名单字段，修复代理/请求头保存 bug	已覆盖	P3	frontend	19	"白名单精简(-2604 行)与计费字段属 3.0 重构；其""保存取表单值""bug 在 lean `useEditChannelModal.ts:460/1227` 天然正确，从未出现。"	ccx_audit_B2.md
+0bb2e675	2026-08-17	chore(presets): 同步模型注册表每日验证数据	不移植	—	docs	11	scope=presets：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+0e0b8e0e	2026-08-17	chore(presets): 同步模型注册表与基准数据	不移植	—	docs	11	scope=presets：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+0f7579cb	2026-08-17	fix(benchmark): 解析 AA effort slug 变体	不移植	—	other	2	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+181e1b6f	2026-08-17	修复渠道卡片 hover 抖动与 tokenrhythm 品牌名显示	建议移植	P1	frontend	3	lean `ChannelCard.vue:592` 仍有 `transform: translateY(-4px) scale(1.01)`（抖动根因），抽 CSS 修复；品牌名 lean 无 tokenrhythm，不抽。	ccx_audit_B2.md
+19fbbeda	2026-08-17	fix(pricing): deepseek 注册表更新为分时定价空闲基准价	不移植	—	backend	10	路径命中 model_registry：autopilot/benchmark/ChannelsV3 体系	规则分类
+205fe29d	2026-08-17	feat(compat): 新增 unsupported_beta_header trait 自学习剥离	不移植	—	backend	8	关键词「自学习」：与精简路线冲突	规则分类
+3d58615a	2026-08-17	feat(autopilot): benchmark 选型报告新增 Top 5 候选表格展示	不移植	—	backend	2	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+49f28b3e	2026-08-17	feat(channel): 渠道计费改充值币种/金额四字段模型，复用 ResolveEffectiveCostUSD	不移植	—	backend	9	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+4ab0b99e	2026-08-17	feat(channel): 新增渠道级充值倍率与汇率字段，接入成本计算	不移植	—	backend	8	成本计算/汇率＝配额真相与成本调度	ccx_audit_D.md
+5e976904	2026-08-17	渠道计费改四字段，恢复代理输入框，彻底清理死代码	不移植	P3	frontend	13	"3.0 编辑弹窗计费重构；lean 从未删除代理输入框，无需""恢复""。"	ccx_audit_B2.md
+68679ca7	2026-08-17	fix(autopilot): compshare 倍率表同步最新库存，日期快照参与同价决胜	不移植	—	backend	5	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+735b8703	2026-08-17	refactor(subscription): 订阅中心快速添加走 store，与渠道列表对齐	不移植	—	frontend	2	scope=subscription：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+78ed757f	2026-08-17	feat(autopilot): 路由候选按 (渠道, 模型) 展开 + 同名承接补显示模型名	不移植	—	backend	8	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+a3429e8f	2026-08-17	fix(autopilot): 修正 benchmark 报告 Top 5 排名与场景口径	不移植	—	backend	3	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+a96098da	2026-08-17	refactor(subscription): 移除充值倍率字段，统一为币种/金额模型	不移植	—	backend	11	scope=subscription：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+b5f7bc99	2026-08-17	feat(model): 注册 Gemini 3.5 Flash-Lite	不移植	—	backend	10	路径命中 model_registry：autopilot/benchmark/ChannelsV3 体系	规则分类
+d275a57d	2026-08-17	chore(data): 刷新 CodexRadar benchmark 成本数据	不移植	—	docs	2	chore: 文档/合并/计划类，非运行代码	规则分类
+e15fa750	2026-08-17	feat(provider): 新增 tokenrhythm.studio 中转站模板	不移植	—	backend	3	lean 无 `provider_templates.go` 及前端 provider-links 体系，依赖缺失	ccx_audit_D.md
+e465aa35	2026-08-17	docs(provider): 基元律动 description 改写为官方定位	不移植	—	backend	1	docs: 文档/合并/计划类，非运行代码	规则分类
+fc7cc04f	2026-08-17	快速添加下拉不按 tab 过滤	不移植	P3	frontend	1	lean 无 QuickAddChannelForm.vue，且依赖订阅中心 provider 路由体系。	ccx_audit_B2.md
+17390b84	2026-08-18	chore(model): remove retired mimo-v2-flash	不移植	—	docs	15	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+1dcd66a6	2026-08-18	fix(handlers): 渠道快速发现并发写 streamingSupported 移入临界区	不移植	—	backend	1	目标文件 `channel_discovery_fast.go` 在 lean 不存在，无对应并发发现实现	ccx_audit_A.md
+231cbf5d	2026-08-18	feat(autopilot): QualityTier 按 benchmark 分数分布动态评定	不移植	—	backend	14	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+39027645	2026-08-18	perf(autopilot): 质量档边界按注册表世代缓存	不移植	—	backend	3	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+4b292c56	2026-08-18	fix(config): watcher 跳过自身保存触发的重载	建议移植	P1	backend	3	配置热重载稳定性：selfWriteSum 摘要比对跳过自写 reload，避免迁移归一化在热重载窗口改写运行时状态；lean 有 startWatcher/saveConfigLocked 但无跳过机制，依赖少。	ccx_audit_C.md
+59b6aa02	2026-08-18	fix(autopilot): Kimi 额度快照改用 GetSubscriptionStats 为主数据源	不移植	—	backend	2	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+6ad38421	2026-08-18	chore(data): 刷新 CodexRadar 基准数据	不移植	—	docs	11	路径命中 benchmark/：autopilot/benchmark/ChannelsV3 体系	规则分类
+817a91bc	2026-08-18	test(handlers): capability 测试等待后台 job 终态防止 goroutine 泄漏	不移植	—	backend	1	纯测试改进，依赖 3.0 capability job 终态语义	ccx_audit_A.md
+87267d6f	2026-08-18	fix(autopilot): 增强 Kimi 控制台令牌解析兼容性	不移植	—	frontend	5	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+89b6033c	2026-08-18	fix(config): 站点归并不再实体合并手动渠道	不移植	—	backend	2	站点归并/逻辑渠道聚合（任务明确排除），ChannelsV3 config_accounts。	ccx_audit_C.md
+e4133c12	2026-08-18	test(config): watcher 去抖测试回调计数原子化	不移植	P3	backend	1	测试内部并发计数修正，非产品回归；lean config_loader_test.go 结构已分叉。	ccx_audit_C.md
+e50be306	2026-08-18	fix(autopilot): asyncWriter 指标计数改为原子操作	不移植	—	backend	1	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+13c70e1c	2026-08-19	fix(autopilot): frontier 选型修复同族溢价失控、并列池过宽与巨簇	不移植	—	backend	4	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+3261bb5a	2026-08-19	feat(volcengine): 同步方舟 Agent/Coding Plan 内置模型上下架	不移植	—	backend	22	scope=volcengine：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+534ee04e	2026-08-19	feat(volcengine): 同步 Agent Plan AFP 抵扣目录至 2026-08 文档	不移植	—	backend	3	scope=volcengine：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+b143ff20	2026-08-19	docs(specs): 对齐 08-11~08-19 功能提交与当前代码实现	不移植	—	docs	11	docs: 文档/合并/计划类，非运行代码	规则分类
+b49ec83c	2026-08-19	feat(discovery): 渠道模型拉取适配上游客户端指纹风控	不移植	—	backend	25	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+cd6f93d7	2026-08-19	fix(autopilot): key 验证兼容 new-api 占位模型 503	不移植	—	backend	2	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+eee81e0b	2026-08-19	打开编辑渠道恢复展示每个 Key 的模型数	建议移植	P2	frontend	1	"lean `useEditChannelModal.ts:925-930` 仍是""有 modelMapping 才预加载""旧条件，改为按 apiKeys/disabledKeys 预加载即可。"	ccx_audit_B2.md
+16b09139	2026-08-20	渠道代理输入框图标改用已注册的 mdi-vpn	不移植	P3	frontend	2	lean AddChannelModal.vue 无 `mdi-proxy`/`prepend-inner-icon` 用法，`fa58c398` 已补齐未映射图标，无此缺陷。	ccx_audit_B2.md
+859c9545	2026-08-20	chore(data): 刷新模型注册表与基准数据至 2026-08-19	不移植	—	docs	11	路径命中 benchmark/：autopilot/benchmark/ChannelsV3 体系	规则分类
+6cda4596	2026-08-21	preserve escaped base URL paths	建议移植	P1	frontend	2	lean `baseUrlSemantics.ts:22-40` 仍是修复前 `hasHash` 剥路径逻辑，与 `02e0222c` 精确路径(`#`)语义冲突，直接补 `endsWith('#')` 早返回。	ccx_audit_B2.md
+1468fa08	2026-08-23	fix(autopilot): 修复 quality_first 证据失效与 tier 动态分位漂移	不移植	—	backend	16	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+29168e2c	2026-08-23	Merge pull request #289 from avatar0813/agent/issue-276-preserve-hash-path	不移植	—	-	0	other: 文档/合并/计划类，非运行代码	规则分类
+2cc2f733	2026-08-23	chore(data): 补 mythos-5 官方定价与新映射基准数据	不移植	—	docs	11	路径命中 benchmark/：autopilot/benchmark/ChannelsV3 体系	规则分类
+2e71de36	2026-08-23	chore(data): 刷新模型注册表与基准数据至 2026-08-23	不移植	—	docs	11	路径命中 benchmark/：autopilot/benchmark/ChannelsV3 体系	规则分类
+84085312	2026-08-23	fix(benchmark): 五源补全新模型检测并修复 dradar/litellm 静默丢分映射	不移植	—	other	7	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+d300b2bb	2026-08-23	补充带 # 的完整路径 URL 不与域名根去重的断言	建议移植	P2	frontend	1	6cda4596 的配套回归断言，落到 lean 现有 base URL 测试。	ccx_audit_B2.md
+e64720a9	2026-08-23	feat(benchmark): 新增 registry 反向对照并修复已注册模型映射缺口	不移植	—	other	8	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+08e72efa	2026-08-24	feat(benchmark): update-benchmark-data 支持从根目录 .env 读取 API key	不移植	—	other	2	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+132ea68c	2026-08-24	chore(data): 落地 qwen3.8-max AA 证据与 qwen3.7/max 新映射基准数据	不移植	—	docs	11	路径命中 benchmark/：autopilot/benchmark/ChannelsV3 体系	规则分类
+6459404b	2026-08-24	fix(autopilot): 质量档评定统一到常规 effort 口径，单一高思考档证据封顶	不移植	—	backend	14	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+7f5bcaf4	2026-08-24	fix: all non-blacklisted upstream errors now trigger failover in preflight	建议移植	P1	backend	3	删除 `isRetryableResponsesError` 白名单统一转 `ErrEmptyStreamResponse`，lean 仍保留旧分支，3 文件小改动	ccx_audit_A.md
+a02fa50f	2026-08-24	chore(data): 刷新模型注册表与基准数据至 2026-08-24	不移植	—	docs	11	路径命中 benchmark/：autopilot/benchmark/ChannelsV3 体系	规则分类
+b0e89a4d	2026-08-24	feat(responses): 归一化 OpenRouter 非标准 reasoning 形态为 OpenAI 规范	条件移植	P0	backend	8	新增 `responses_reasoning_normalize.go` 纯函数（仅 json/strings），协议正确性，接入点需按 lean 重写	ccx_audit_A.md
+b480629e	2026-08-24	fix(responses): compact 透传接入 reasoning 归一化并补全 knownTypes	条件移植	P0	backend	4	依赖 `b0e89a4d`，把归一化接入 compact 透传路径并补全事件白名单	ccx_audit_A.md
+dbb6df08	2026-08-24	fix(benchmark): benchlm overallScore 缺失时回退 verified 分并补全映射	不移植	—	other	14	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+e49746c4	2026-08-24	fix(responses): preflight循环接入reasoning归一化并补全语义内容检测	条件移植	P0	backend	4	依赖 `b0e89a4d`，接入 preflight 循环并补 `reasoning_text.*` 语义检测，避免误判空流	ccx_audit_A.md
+ec40bfd0	2026-08-24	fix(benchmark): 补全 qwen3.8-max 的 AA 映射与 preview 别名	不移植	—	other	2	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+ec9803f2	2026-08-24	chore(data): 落地全 effort 档基准证据	不移植	—	docs	11	路径命中 benchmark/：autopilot/benchmark/ChannelsV3 体系	规则分类
+f35a26e9	2026-08-24	chore(benchmark): 带 AA key 全量重跑更新 registry/preset/chart 产物	不移植	—	docs	11	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+12e52cf9	2026-08-25	恢复渠道备注编辑字段	已覆盖	P3	frontend	2	"lean `BasicInfoSection.vue:93` 一直保留 `form.description` 备注字段，3.0 的""恢复""针对自身删除。"	ccx_audit_B2.md
+158d9c12	2026-08-25	fix(backend): 火山套餐渠道模型列表改走管控面套餐清单	不移植	—	backend	7	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+1af4ffd3	2026-08-25	编辑弹窗头部蓝底白字并移除托管徽章	不移植	P3	frontend	2	同上，托管徽章属统一渠道体系。	ccx_audit_B2.md
+23baf19c	2026-08-25	feat(benchmark): 图表改用常规 effort 等效分并渲染自动质量档色带	不移植	—	other	4	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+4856547c	2026-08-25	chore(data): refresh model registry and benchmark artifacts	不移植	—	docs	11	路径命中 benchmark/：autopilot/benchmark/ChannelsV3 体系	规则分类
+57f78a9b	2026-08-25	编辑渠道对话框美观度整备	不移植	P3	frontend	8	3.0 编辑弹窗大整备（8 files, -330 行），非缺陷。	ccx_audit_B2.md
+876eaf7e	2026-08-25	feat(proxy): 渠道代理支持直连优先，new-api 绑定流程支持代理配置	不移植	—	backend	48	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+967b232a	2026-08-25	chore(data): 刷新基准可视化与模型注册数据	不移植	—	docs	11	路径命中 benchmark/：autopilot/benchmark/ChannelsV3 体系	规则分类
+9b187f8b	2026-08-25	编辑渠道对话框收窄至贴合内容宽度	不移植	P3	frontend	2	纯美观微调。	ccx_audit_B2.md
+acfd13d2	2026-08-25	编辑弹窗头部渠道名称改为普通文本显示	不移植	P3	frontend	2	3.0 编辑弹窗头部整备序列，非缺陷。	ccx_audit_B2.md
+c78c3382	2026-08-25	收紧编辑渠道对话框分区留白	不移植	P3	frontend	2	纯美观微调。	ccx_audit_B2.md
+dd57a6d7	2026-08-25	fix(routing): 按渠道实测输出上限钳制 max_tokens	不移植	—	backend	8	依赖 `channel_compat_cache.OutputLimitState` 实测学习与 `output_limit_signal.go`；lean 已有 `body_clamp.go` 按模型注册表钳制	ccx_audit_A.md
+ed1b55fd	2026-08-25	编辑弹窗头部统一改为渠道身份块	不移植	P3	frontend	5	统一渠道身份块（含 ChannelOrchestration），属统一渠道卡范畴。	ccx_audit_B2.md
+f8d3047f	2026-08-25	chore(data): refresh model registry and benchmark artifacts	不移植	—	docs	11	路径命中 benchmark/：autopilot/benchmark/ChannelsV3 体系	规则分类
+2749b5d7	2026-08-26	fix(benchmark): 效力换算改为组内实测校准，主图 Y 轴回归原始 pass@1	不移植	—	other	3	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+3af549af	2026-08-26	fix(benchmark): 补 deepswe glm-5.3-flash 连字符 slug 映射	不移植	—	other	2	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+3bf52183	2026-08-26	chore(data): 基准测试数据日更 2026-08-26	不移植	—	docs	11	路径命中 benchmark/：autopilot/benchmark/ChannelsV3 体系	规则分类
+41e19ff0	2026-08-26	docs(specs): 对齐 08-19~08-26 功能提交与当前代码实现	不移植	—	docs	7	docs: 文档/合并/计划类，非运行代码	规则分类
+44972751	2026-08-26	feat(autopilot): 任务场景预设与请求级偏好覆盖	不移植	—	backend	11	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+49767944	2026-08-26	chore(data): 注册 GLM-5.3-Flash 原生多模态模型	不移植	—	backend	9	路径命中 model_registry：autopilot/benchmark/ChannelsV3 体系	规则分类
+4f39b965	2026-08-26	fix(benchmark): 补全 deepseek 日期快照 benchmark 映射并防 pattern 漂移	不移植	—	backend	10	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+5a87ad26	2026-08-26	chore(data): 修正 CodexRadar costUsd 精度（2026-08-26）	不移植	—	docs	11	路径命中 benchmark/：autopilot/benchmark/ChannelsV3 体系	规则分类
+5b84db57	2026-08-26	fix(autopilot): 单一非常规档证据统一封顶，修 low-only 折算虚高	不移植	—	backend	3	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+5bb4a4b0	2026-08-26	feat(autopilot): 质量档准入引入 effort 级实测豁免	不移植	—	backend	3	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+8ed00c7f	2026-08-26	chore(data): 按组内校准口径重算基准等效分与质量档	不移植	—	docs	11	路径命中 benchmark/：autopilot/benchmark/ChannelsV3 体系	规则分类
+8faadfee	2026-08-26	test(config): 补 GLM-5.3-Flash 注册表解析用例	不移植	—	backend	1	路径命中 model_registry：autopilot/benchmark/ChannelsV3 体系	规则分类
+9095600e	2026-08-26	feat(autopilot): 常规口径校准引入同源 effort 曲线插值	不移植	—	backend	3	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+c667c9ab	2026-08-26	fix(autopilot): dry-run 诊断接入场景预设与请求级偏好头	不移植	—	backend	1	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+ca276c9d	2026-08-26	智能路由全局策略面板增加场景模式选择器	不移植	P3	frontend	5	SmartRouter/自动选模，明确不移植；lean 无 AutopilotModePanel.vue。	ccx_audit_B2.md
+d89aa507	2026-08-26	修复渠道列表行下边界悬停剧烈抖动	已覆盖	P3	frontend	1	lean `b608ff9d` 已移除 channel-orchestration.css 的 hover/active transform 位移，仅余 6px→7px shadow 数值差异。	ccx_audit_B2.md
+d915887a	2026-08-26	chore(data): deepswe 放榜 glm-5.3-flash 分数落库（2026-08-26）	不移植	—	docs	11	路径命中 benchmark/：autopilot/benchmark/ChannelsV3 体系	规则分类
+da12daeb	2026-08-26	fix(autopilot): 统一推理能力判定口径，消除候选表与实际路由相反	不移植	—	backend	3	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+e448bc59	2026-08-26	feat(messages): inline system 角色自动归一化，免手动开关	不移植	—	backend	7	新建 `converter_upstream_cache.go` 落盘指纹自学习；lean 用显式 `NormalizeSystemRoleToTopLevel` 开关，符合用户显式原则	ccx_audit_A.md
+fd891017	2026-08-26	docs(autopilot): 设计文档补场景预设与 effort 级质量准入	不移植	—	docs	1	docs: 文档/合并/计划类，非运行代码	规则分类
+00823bed	2026-08-27	添加账号表单布局与主账号设置对齐	不移植	P3	frontend	1	同上，纯布局。	ccx_audit_B2.md
+0134bd54	2026-08-27	chore(i18n): 清理 locales 历史遗留的重复键	不移植	—	frontend	3	chore: 文档/合并/计划类，非运行代码	规则分类
+110687b7	2026-08-27	fix(newapi): 渠道代理通道收敛为唯一代理设置	不移植	—	frontend	8	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+26c3c25d	2026-08-27	直连优先开关升级为卡片式设置行	不移植	P3	frontend	2	3.0 编辑弹窗样式整备，非缺陷。	ccx_audit_B2.md
+2d3b7035	2026-08-27	fix(accounts): 托管账号编辑器保存打通备注链路 + 编排行备注 tooltip	不移植	—	backend	5	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+2f4eed27	2026-08-27	fix(config): 单卡备注保存同步到逻辑渠道与兄弟物理卡	不移植	—	backend	2	关键词「逻辑渠道」：与精简路线冲突	规则分类
+42b9e283	2026-08-27	feat(newapi): 主账号展示站点用户名 + 刷新按钮 tooltip 对齐全局样式	不移植	—	frontend	9	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+58251ad8	2026-08-27	添加账号不再支持自定义名称	不移植	P3	frontend	4	托管账号面板，lean 无。	ccx_audit_B2.md
+5d4016ba	2026-08-27	渠道备注非空时悬停渠道名称以 tooltip 展示	条件移植	P3	frontend	1	lean `ChannelCard.vue:25` 结构相同且已有 `ccx-tooltip` 全局样式，可直接套；非缺陷，需确认 `Channel.remark` 字段。	ccx_audit_B2.md
+62d2d46d	2026-08-27	feat(newapi): 子账号列表支持展开详情与独立更新凭证	不移植	—	frontend	9	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+787db651	2026-08-27	渠道订阅关联丢失后面板瘫痪的兜底与止血	不移植	P3	frontend	7	托管账号/订阅关联体系，lean 无。	ccx_audit_B2.md
+87da075d	2026-08-27	fix(config): 名称迁移不再把物理渠道残留备注回填逻辑渠道	不移植	—	backend	2	关键词「逻辑渠道」：与精简路线冲突	规则分类
+aee6821a	2026-08-27	添加账号显示名称留空自动采用站点用户名	不移植	P3	frontend	4	托管账号面板，lean 接入走 siteaccess 向导。	ccx_audit_B2.md
+b6698b5e	2026-08-27	空账号列表文案区分主账号语义	不移植	P3	frontend	3	3.0 newapi 托管账号面板，lean 无 NewApiAccountPanel.vue。	ccx_audit_B2.md
+bbf1e6bd	2026-08-27	注册 lan-connect 图标并对齐像素主题直角风格	不移植	P3	frontend	2	lean 未使用 lan-connect 图标，注册无意义；直角风格属 3.0 主题整备。	ccx_audit_B2.md
+e81231db	2026-08-27	fix(newapi): 掩码 key 经揭示端点换回明文 + 编辑器模型校验补渠道探针语义	不移植	—	backend	5	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+f84a3daf	2026-08-27	test(i18n): 同步渠道名称头部展示断言到托管 provider 现实现	不移植	—	frontend	1	scope=i18n：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+13ec18de	2026-08-28	docs(specs): 修正 ada54344 账号平权后的行号漂移并补全描述	不移植	—	docs	1	docs: 文档/合并/计划类，非运行代码	规则分类
+33fc7b8f	2026-08-28	fix(benchmark): 补 kimi-k2-6 的 AA 映射,kimi-k2.6 基准画像纳入注册库	不移植	—	docs	12	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+36387ca6	2026-08-28	fix(autopilot): 新增 key 验证区分鉴权失败与非鉴权失败，后者降级为警告放行	不移植	—	frontend	11	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+40d8b990	2026-08-28	主账号默认并入账号列表首行展示	不移植	P3	frontend	5	托管账号面板，lean 无。	ccx_audit_B2.md
+4ace720e	2026-08-28	docs(autopilot): 补记 5.19 提交引用	不移植	—	docs	1	docs: 文档/合并/计划类，非运行代码	规则分类
+4ec26d02	2026-08-28	fix(ui): 对话框快捷键改为全局栈式分发，仅作用于最上层对话框	不移植	—	frontend	13	路径命中 docs/specs/：autopilot/benchmark/ChannelsV3 体系	规则分类
+688c1f8c	2026-08-28	docs(specs): 全面补全两份 UI 文档的 ASCII 线框图	不移植	—	docs	2	docs: 文档/合并/计划类，非运行代码	规则分类
+70430efe	2026-08-28	feat(autopilot): 模型清单一致性改造——自动保鲜+整组发现+清单净化	不移植	—	backend	38	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+838ef7da	2026-08-28	key 暂停/恢复按钮改为纯图标	不移植	P3	frontend	1	3.0 Key 行样式；lean `4dd581d6` 已实现暂停/恢复（自有 UI）。	ccx_audit_B2.md
+83b665ea	2026-08-28	docs(specs): §7.2/§7.3 示意图补账号平权与同步自愈语义	不移植	—	docs	1	docs: 文档/合并/计划类，非运行代码	规则分类
+97f62611	2026-08-28	docs(specs): 对话框通用约定补充多级对话框快捷键规则（新层自带默认快捷键且仅作用于最上层）	不移植	—	docs	1	docs: 文档/合并/计划类，非运行代码	规则分类
+a43b8a10	2026-08-28	docs(specs): 同步 787db651/40d8b990/62d2d46d 到 new-api 相关 spec	不移植	—	docs	2	docs: 文档/合并/计划类，非运行代码	规则分类
+a8b02445	2026-08-28	fix(newapi): 同步自愈找回误删的自动接入 key + 注入 key 并入调度池	不移植	—	backend	3	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+ada54344	2026-08-28	feat(newapi): 账号平权——主账号可删除，换凭证统一为删除+重新添加	不移植	—	frontend	12	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+b9b37a27	2026-08-28	fix(i18n): 订阅计划表操作列头缺键渲染原始 key + 驾驶舱待办表列头硬编码英文	不移植	—	frontend	6	scope=i18n：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+bb736eef	2026-08-28	倍率编辑入口对未设置倍率的 key 可见	不移植	P3	frontend	1	3.0 倍率弹窗 UI，lean 倍率为行内输入（`d365818d`）无此入口。	ccx_audit_B2.md
+bce2883a	2026-08-28	注册 scale-balance 图标	不移植	P3	frontend	1	lean 未使用 scale-balance 图标，`fa58c398` 已统一处理未映射图标。	ccx_audit_B2.md
+d058ecfe	2026-08-28	倍率编辑入口按钮样式强化并补齐文案	不移植	P3	frontend	4	3.0 倍率 UI 样式 + i18n，lean 无对应入口。	ccx_audit_B2.md
+e205d9c6	2026-08-28	fix(autopilot): 倍率编辑支持托管账号手工 key（credentialUid 兜底定位）	不移植	—	docs	7	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+e2883de2	2026-08-28	fix(autopilot): 模型清单定期刷新——端点画像过期(7天)自动重新发现	不移植	—	backend	3	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+04283939	2026-08-29	refactor(autopilot): 原生兄弟协议存在时收敛跨协议画像双口径	不移植	—	backend	8	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+07526875	2026-08-29	fix(benchmark): 能力-成本散点按 live 源优先去重回填行	不移植	—	other	2	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+241de1f5	2026-08-29	修复 Key 倍率小数提交与快捷键提示	已覆盖	P3	frontend	2	lean `ApiKeyManagementSection.vue:669/686` 已用 `Number()` 归一化并校验有限非负，倍率以 number 落 apiKeyConfigs；快捷键/patchKeyMultiplier 属 3.0 独有。	ccx_audit_B2.md
+940b6aea	2026-08-29	feat(model-registry): 注册 grok-4.20 并按十进制营销版本号排序	不移植	—	backend	14	路径命中 model_registry：autopilot/benchmark/ChannelsV3 体系	规则分类
+adebb5eb	2026-08-29	fix(benchmark): 补齐 CodexRadar 新模型映射	不移植	—	other	2	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+bac61fcf	2026-08-29	chore(benchmark): 刷新基准数据并落盘 grok-4.20 画像	不移植	—	docs	11	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+c3f0ce47	2026-08-29	test(benchmark): 排序不变量收窄到 grok-4.20 之外的存量 canonical	不移植	—	other	1	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+c6e069f8	2026-08-29	fix(benchmark): 补齐 BenchLM GLM Flash 映射	不移植	—	other	2	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+e0276f9c	2026-08-29	test(autopilot): 随 2026-08-29 基准漂移更新 mimo-v2.5-pro 质量档期望	不移植	—	backend	2	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+fb24a721	2026-08-29	feat(autopilot): 工具调用能力实测三层改造——能力测试探针+运行期负信号+路由硬约束收紧	不移植	—	backend	20	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+1b9495f6	2026-08-30	docs(todo): 追加 Claude Code v2.1.251 上游协议变更评估	不移植	—	other	1	docs: 文档/合并/计划类，非运行代码	规则分类
+1c63bbb2	2026-08-30	fix(providers): 非 Claude 协议转换剔除 CC 注入的 tokens-left system 块	条件移植	P2	backend	2	与 `88a6132e` 同族的定点兼容修复，抽行为到现有转换路径	ccx_audit_D.md
+1ed0e753	2026-08-30	chore(benchmark): 落盘 hy4-preview 画像并刷新基准数据（2026-08-30）	不移植	—	docs	11	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+3596deff	2026-08-30	fix(subscription): new-api 用户 ID 改为必填	不移植	—	frontend	11	scope=subscription：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+37454856	2026-08-30	docs(specs): 补同步 08-26 后漂移	不移植	—	docs	6	docs: 文档/合并/计划类，非运行代码	规则分类
+3e721de1	2026-08-30	feat(capability): 按渠道认可模型列表探测并落地显式模型重定向	不移植	—	backend	32	自动落地模型映射，与「跨模型替换只允许用户显式映射」冲突	ccx_audit_D.md
+699221f1	2026-08-30	chore(benchmark): 刷新 2026-08-30 基准数据并同步 presets 镜像	不移植	—	docs	11	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+8dfcaa69	2026-08-30	feat(model-registry): 注册腾讯混元 Hy4 Preview	不移植	—	backend	10	路径命中 model_registry：autopilot/benchmark/ChannelsV3 体系	规则分类
+9b879bdd	2026-08-30	fix(benchmark): 补 hy4-preview 的 benchlm/dradar slug 映射	不移植	—	other	2	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+af8d5443	2026-08-30	style(autopilot): go fmt 修正两个存量测试文件的缩进漂移	不移植	—	backend	2	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+c55f9b4e	2026-08-30	fix(providers): 工具调用缺失 ID 时合成 toolu_ 兜底	条件移植	P1	backend	4	工具调用正确性修复；lean `openai.go` 仅读 `tool_use_id`，无缺失时合成兜底	ccx_audit_D.md
+d2f34543	2026-08-30	fix(autopilot): new-api 非 2xx 错误不再泄露原始 HTML 页面	不移植	—	backend	3	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+df9e026b	2026-08-30	统一视图下拉黑 key 的删除/恢复覆盖全部协议路由	不移植	P3	frontend	2	"明确""统一视图""= ChannelsV3 逻辑渠道聚合，lean 协议独立天然无此问题。"	ccx_audit_B2.md
+e0ea701e	2026-08-30	feat(volcengine): 团队版套餐探测与用量查询——多套餐桶模型	不移植	—	backend	7	scope=volcengine：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+e22f5789	2026-08-30	docs(todo): 团队版套餐前端展示标记完成（ed472970）	不移植	—	other	1	docs: 文档/合并/计划类，非运行代码	规则分类
+ed472970	2026-08-30	feat(ui): 火山套餐桶展示——渠道编辑器认证区回显团队版席位与多套餐快照	不移植	—	frontend	5	关键词「火山」：与精简路线冲突	规则分类
+0675127c	2026-08-31	chore(benchmark): 重新生成注册表与图表数据(2026-08-31 抓取)	不移植	—	docs	11	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+094c16e4	2026-08-31	chore(benchmark): 刷新注册表与基准数据(2026-08-31 二次抓取)	不移植	—	docs	11	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+1de4a510	2026-08-31	Merge branch 'zcode/sess-24cc05ff'	不移植	—	-	0	other: 文档/合并/计划类，非运行代码	规则分类
+2bc03334	2026-08-31	Merge branch 'zcode/sess-24cc05ff'	不移植	—	-	0	other: 文档/合并/计划类，非运行代码	规则分类
+47116852	2026-08-31	chore(benchmark): 刷新 2026-08-31 基准数据并同步 presets 镜像	不移植	—	docs	11	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+6b9ac83f	2026-08-31	Merge branch 'zcode/sess-4a6b686a'	不移植	—	-	0	other: 文档/合并/计划类，非运行代码	规则分类
+78e83d9d	2026-08-31	fix(benchmark): 小样本直测档位不参与等效分与档位评定	不移植	—	backend	11	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+826d76e5	2026-08-31	fix(test): 画像质量档期望与动态档位边界解耦	不移植	—	backend	1	关键词「质量档」：与精简路线冲突	规则分类
+8a85cc36	2026-08-31	fix(responses): 转换路径 usage 出口对齐官方 OpenAI 口径，修复缓存占比过半时客户端算出负数（#274）	已移植	—	backend	6	lean 已有等价提交 4cc04b13（subject 相似度 1.00）	规则分类
+98c314e8	2026-08-31	feat(autopilot): 端点级自动映射未命中原因落观测 + 回显头前置修复	不移植	—	backend	7	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+9f91e9af	2026-08-31	Merge branch 'zcode/sess-ab714774'	不移植	—	-	0	other: 文档/合并/计划类，非运行代码	规则分类
+a7e140e5	2026-08-31	feat(autopilot): 安全分类请求能力自学习 + 出站尝试摘要日志	不移植	—	backend	20	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+d340fe6b	2026-08-31	chore(release): 折叠 [Unreleased] 至 [v3.0.0]，发布日期定为 2026-08-31	不移植	—	other	1	chore: 文档/合并/计划类，非运行代码	规则分类
+df710852	2026-08-31	fix(benchmark): 补 qwen3.8-max 的 AA 快照变体映射	不移植	—	other	1	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+00bd6a63	2026-09-01	feat(autopilot): 路由预演升级 — 请求体直喂 + SmartRouter/scheduler 两层对齐	不移植	—	frontend	11	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+04a9d3d8	2026-09-01	docs(autopilot): 补录 5.21-5.23 — 上游解析失败豁免、total_tokens 去重、attemptBody 遮蔽	不移植	—	docs	1	docs: 文档/合并/计划类，非运行代码	规则分类
+1cd0da2e	2026-09-01	credential-masker 不再截断大请求体，前缀指纹收紧	不移植	P1	backend	2	修 3.0 独有 guardrails/credential_masker.go（lean 无该包），缺陷前提不成立；lean UTF-8 截断由 8e8f574f/c419731d、头脱敏由 MaskSensitiveHeaders 覆盖。	ccx_audit_C.md
+352d203e	2026-09-01	merge: 配额真相调度 + 路由预演升级	不移植	—	-	0	merge: 文档/合并/计划类，非运行代码	规则分类
+396a3345	2026-09-01	fix(failover): 上游请求体 JSON 解析失败的 400 豁免 schema 不重试判定	已移植	—	backend	2	lean 已有等价提交 5d3b78fb（subject 相似度 1.00）	规则分类
+537b78cb	2026-09-01	fix(messages): total_tokens 去重移到 system 角色归一化之后	不移植	—	backend	2	lean 无 `DeduplicateTotalTokensSystemBlocks` 系列函数，被移位的前提不存在	ccx_audit_A.md
+5656e6b4	2026-09-01	feat(benchmark): 质量档改为模型×effort 逐档口径	不移植	—	other	4	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+5ac3af85	2026-09-01	Merge branch 'zcode/sess-5d4d36ea'	不移植	—	-	0	other: 文档/合并/计划类，非运行代码	规则分类
+5d883b90	2026-09-01	merge: 请求侧工具输出 RTK 压缩（compression worktree）	不移植	—	-	0	merge: 文档/合并/计划类，非运行代码	规则分类
+64ee214f	2026-09-01	chore(benchmark): 刷新注册表与基准数据(2026-09-01 抓取)	不移植	—	docs	11	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+7cc2dda1	2026-09-01	merge:   guardrails credential-masker 最小集	不移植	—	-	0	merge: 文档/合并/计划类，非运行代码	规则分类
+88f34266	2026-09-01	docs(specs): 新增对标 OmniRoute 增强规划（配额调度/请求压缩/guardrails/路由预演）	不移植	—	docs	2	docs: 文档/合并/计划类，非运行代码	规则分类
+962caefe	2026-09-01	feat(benchmark): 图表 Y 轴随可见数据自适应展开	不移植	—	docs	2	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+a080d045	2026-09-01	fix(failover): 消除 attemptBody 变量遮蔽，auto_resolve 模型改写不再被覆盖	不移植	—	backend	2	修复对象 `atomicModelEffortRewrite`/auto_resolve 自动选模改写，lean 无该代码路径	ccx_audit_A.md
+a12fc320	2026-09-01	fix(preprocess): 上下文上限学习识别火山图文文案 + system 去重 total_tokens 块	不移植	—	backend	5	关键词「火山」：与精简路线冲突	规则分类
+c435806b	2026-09-01	feat(guardrails): 新增 credential-masker 最小集，兑现日志脱敏红线	不移植	—	backend	12	路径命中 docs/specs/：autopilot/benchmark/ChannelsV3 体系	规则分类
+ca30cf54	2026-09-01	chore(benchmark): 重生成图表产物 — 质量档逐档口径数据	不移植	—	docs	2	chore: 文档/合并/计划类，非运行代码	规则分类
+cef33bbf	2026-09-01	docs(spec): 记录基准图表质量档逐档口径变更（5.20）	不移植	—	docs	1	docs: 文档/合并/计划类，非运行代码	规则分类
+d7171bc5	2026-09-01	fix(autopilot): 精确模型被运行期负信号否决时展开替代模型行，binding 全灭 fail-open	不移植	—	backend	7	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+da014d99	2026-09-01	refactor(guardrails): key 掩码收敛为统一日志脱敏入口 MaskForLog，转发路径不再改写请求/响应	不移植	—	backend	8	路径命中 docs/specs/：autopilot/benchmark/ChannelsV3 体系	规则分类
+e8e95e61	2026-09-01	feat(autopilot): 路由决策详情添加一键复制，便于粘贴给 AI 分析	不移植	—	frontend	7	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+f26a816c	2026-09-01	feat(quota): 配额真相分级与按余量调度	不移植	—	backend	19	scope=quota：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+fefa5898	2026-09-01	feat(compression): 新增请求侧工具输出 RTK 压缩（tool_result 历史）	不移植	—	backend	21	路径命中 docs/specs/：autopilot/benchmark/ChannelsV3 体系	规则分类
+033d9e11	2026-09-02	fix(quota): 配额真相接入生产链路 + 压缩遥测落库 + failover 解析豁免收紧	不移植	—	backend	16	scope=quota：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+2a1c065e	2026-09-02	fix(ratelimit): 限流重置头多族鲁棒解析与 1 小时截断	条件移植	P1	backend	3	防伪造 Retry-After/超长 reset 冻结渠道，属稳定性/安全；lean 有 hints.go + ApplyUpstreamHints + cooldownUntil，抽解析/截断函数+测试，去掉 3.0 NotifySignal 依赖。	ccx_audit_C.md
+31348f15	2026-09-02	fix(benchmark): 补全 benchlm 映射表 19 个已注册模型	不移植	—	docs	13	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+3afb8bf1	2026-09-02	chore(model-registry): 更新模型注册表与基准测试预设数据	不移植	—	docs	11	路径命中 benchmark/：autopilot/benchmark/ChannelsV3 体系	规则分类
+3e350c45	2026-09-02	feat(model-registry): claude-fable-5-1 拆分为独立 canonical model	不移植	—	backend	24	路径命中 benchmark/：autopilot/benchmark/ChannelsV3 体系	规则分类
+79edab31	2026-09-02	feat(model-registry): 支持 claude-fable-5-1 模型版本解析与基准映射	不移植	—	backend	13	路径命中 model_registry：autopilot/benchmark/ChannelsV3 体系	规则分类
+96e7a915	2026-09-02	feat(model-registry): 注册独立模型 claude-mythos-5-1	不移植	—	backend	21	路径命中 benchmark/：autopilot/benchmark/ChannelsV3 体系	规则分类
+b1c312c2	2026-09-02	fix(benchmark): 当前范围表格按 pass@1 降序排列	不移植	—	docs	2	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+baab8ae4	2026-09-02	feat(scheduler): 匿名请求内容指纹亲和回退 + per-key 滑窗自动权重	不移植	—	backend	16	per-key 自动权重/内容指纹选路，属 SmartRouter 类	ccx_audit_D.md
+bf563bc2	2026-09-02	Merge branch 'zcode/sess-8b29cf96'	不移植	—	-	0	other: 文档/合并/计划类，非运行代码	规则分类
+e92a4896	2026-09-02	docs(skill): model-update 默认按独立模型注册，新增别名拆分清单	不移植	—	other	1	docs: 文档/合并/计划类，非运行代码	规则分类
+ed9d1cd1	2026-09-02	fix(benchmark): 补全 Artificial Analysis 映射表 22 个已注册模型	不移植	—	docs	14	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+070c2849	2026-09-03	fix(frontend): 添加渠道后延迟刷新避免逻辑渠道合并竞态	不移植	—	frontend	1	关键词「逻辑渠道」：与精简路线冲突	规则分类
+1a7aff52	2026-09-03	feat(providers): 新增阶跃星辰 Step Plan 官方套餐模板	不移植	—	backend	5	官方套餐模板/预置，lean 无模板体系	ccx_audit_D.md
+25182fa2	2026-09-03	fix(logical-channel): 增量添加并入既有逻辑卡，根除同站点/同账号分裂	不移植	—	backend	3	scope=logical-channel：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+428f8809	2026-09-03	fix(compression): 多 text 块与超预算保守跳过	不移植	P1	backend	1	修 3.0 独有 `compression/engine.go`（lean 无压缩引擎模块），无对应实现。	ccx_audit_C.md
+8dcee2e7	2026-09-03	feat(models): 注册 gemini-3.8-flash 与 muse-spark-1.3	不移植	—	docs	17	路径命中 benchmark/：autopilot/benchmark/ChannelsV3 体系	规则分类
+9bf08f62	2026-09-03	fix(autopilot): premium 档边界改用名次四分位锚定，消除榜首离群值敏感	不移植	—	backend	1	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+b603713a	2026-09-03	fix(metrics): 自动权重连续失败仅作用于当前滑窗	不移植	—	backend	1	修 `metrics/key_autoweight.go`（lean 无该模块），属自动权重/自动调度体系。	ccx_audit_C.md
+d2c9fc0f	2026-09-03	凭据脱敏覆盖完整 payload，移除扫描窗口截断	不移植	P1	backend	2	同 54，3.0 guardrails 模块修复；lean 无该模块，脱敏由现有路径承担。	ccx_audit_C.md
+fe964e4f	2026-09-03	fix(quota): reset 头支持 duration 格式解析	不移植	—	backend	1	scope=quota：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+03b3a551	2026-09-04	Merge branch 'zcode/sess-bd8a3b20'	不移植	—	-	0	other: 文档/合并/计划类，非运行代码	规则分类
+06882a58	2026-09-04	feat(ui,docs): trace 候选表五元组列 + 旧格式兼容 + autopilot spec §5.8.1	不移植	—	frontend	4	路径命中 docs/specs/：autopilot/benchmark/ChannelsV3 体系	规则分类
+1aa39bbb	2026-09-04	test(autopilot): 修复基准分布漂移导致的 4 个基线失败测试	不移植	—	backend	4	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+27972f5d	2026-09-04	feat(models): 注册 OpenAI GPT-6 Astra 前沿推理模型	不移植	—	backend	16	路径命中 model_registry：autopilot/benchmark/ChannelsV3 体系	规则分类
+391c6277	2026-09-04	feat(autopilot): 候选粒度升级五元组——key×effort 维展开与 per-key 评分	不移植	—	backend	2	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+3c6bb642	2026-09-04	Merge branch 'zcode/sess-e9ace7f0'	不移植	—	-	0	other: 文档/合并/计划类，非运行代码	规则分类
+3da00056	2026-09-04	feat(autopilot): trace schema v3——候选五元组结构化字段 + 落盘截断	不移植	—	backend	3	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+4865ee9c	2026-09-04	docs(clients): 新增 Claude Desktop 第三方推理接入指南	不移植	—	docs	7	docs: 文档/合并/计划类，非运行代码	规则分类
+52f14058	2026-09-04	fix(autopilot): stepfun step_plan 渠道 key 验证改走模型列表接口	不移植	—	backend	2	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+626c8801	2026-09-04	fix(autopilot): 模型画像随清单 reconcile + 火山缺套餐价候选 savings 中性化	不移植	—	backend	5	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+6d07f9b0	2026-09-04	Merge branch 'zcode/sess-c9f99d50'	不移植	—	-	0	other: 文档/合并/计划类，非运行代码	规则分类
+6e9de63b	2026-09-04	feat(autopilot): 质量档校准 v2——固定版本化阈值与证据等级统一口径	不移植	—	backend	13	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+8130543e	2026-09-04	fix(autopilot): 安全分类形状预筛兼容 JSON 转义形态，修复学习永不触发	不移植	—	backend	2	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+8831a0e6	2026-09-04	Merge branch 'zcode/sess-d80f5765'	不移植	—	-	0	other: 文档/合并/计划类，非运行代码	规则分类
+a7f0ecbc	2026-09-04	style(autopilot): gofmt 对齐 handlers_route_preview（遗留格式漂移）	不移植	—	backend	2	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+aa933559	2026-09-04	style(scheduler): gofmt 对齐 channel_scheduler	不移植	—	backend	1	纯 gofmt 格式漂移修复	ccx_audit_D.md
+aea4484b	2026-09-04	chore(registry): 同步基准评测数据与预设注册表	不移植	—	docs	11	路径命中 benchmark/：autopilot/benchmark/ChannelsV3 体系	规则分类
+c6ca6a30	2026-09-04	Merge branch 'zcode/sess-b67b0323'	不移植	—	-	0	other: 文档/合并/计划类，非运行代码	规则分类
+c81659bd	2026-09-04	feat(autopilot): 五元组候选执行锁定——pin key 首选位 + effort 档首选填充	不移植	—	backend	6	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+d2cc3aa1	2026-09-04	chore(models): 同步 codexradar 基准 per-effort 数据	不移植	—	docs	11	路径命中 benchmark/：autopilot/benchmark/ChannelsV3 体系	规则分类
+d941fb3a	2026-09-04	test(autopilot): 五元组候选专项测试 + 修复手工 key pin 反查静默失效	不移植	—	backend	5	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+dc64fc91	2026-09-04	test(responses): 补齐 OpenRouter reasoning 归一化与 preflight failover 行为锁定	条件移植	P3	backend	2	随 `b0e89a4d`/`7f5bcaf4` 组引入的行为锁定测试	ccx_audit_A.md
+e229d49c	2026-09-04	fix(models): Qwen3.8-Max-0902 快照别名归并 qwen3.8-max 能力与基准	不移植	—	backend	13	路径命中 model_registry：autopilot/benchmark/ChannelsV3 体系	规则分类
+e914415a	2026-09-04	chore(models): 同步模型注册表与基准测试评分数据	不移植	—	docs	11	路径命中 benchmark/：autopilot/benchmark/ChannelsV3 体系	规则分类
+ec08cd6a	2026-09-04	fix(autopilot): 安全分类能力学习接线非流式路径，修复学习对 CC 分类器请求永不触发	不移植	—	backend	6	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+ee5e5d32	2026-09-04	feat(autopilot): 软死判据引入 S 型时间衰减，陈旧失败不再无限期维持判死	不移植	—	backend	7	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+fbf00a90	2026-09-04	merge: PR #290 OpenRouter Responses reasoning 归一化（评估合并）	不移植	—	-	0	merge: 文档/合并/计划类，非运行代码	规则分类
+1c5d284b	2026-09-05	feat(benchmark): codexradar 证据按官方任务覆盖率门槛剔除	不移植	—	docs	13	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+1f9526c1	2026-09-05	feat(scheduler): 溢出重定向升级为完全跨协议注入	不移植	—	backend	12	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+2f5d694d	2026-09-05	fix(i18n): 补齐印尼语包缺失的 11 个路由预演 key	不移植	—	frontend	1	scope=i18n：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+33010c57	2026-09-05	docs(specs): 实现缺口修复计划——溢出执行链/配额内核/Route Preview/配额接线/兼容缓存运维	不移植	—	docs	2	docs: 文档/合并/计划类，非运行代码	规则分类
+413f2e52	2026-09-05	chore(registry): gpt-5.6 内置 agent 画像窗口与测试断言同步 1.05M	不移植	—	backend	2	路径命中 model_registry：autopilot/benchmark/ChannelsV3 体系	规则分类
+50cd6007	2026-09-05	fix(handlers): 上下文容量选路错误透传为 400 而非 503	不移植	—	backend	4	scheduler/select.go` + 新增 `context_capacity_error.go`，属「上下文跨模型逃生阀」明确不移植	ccx_audit_A.md
+540a06f5	2026-09-05	fix(scheduler): 溢出执行链四修复——改写顺序/物理候选去重/熔断绑定执行模型/过期实证重学习	不移植	—	backend	6	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+5d63084a	2026-09-05	fix(models): gpt-6-astra 对齐官方文档口径	不移植	—	backend	11	路径命中 model_registry：autopilot/benchmark/ChannelsV3 体系	规则分类
+5e8f25ae	2026-09-05	feat(autopilot): 增加 effort 质量档 shadow 观测	不移植	—	frontend	13	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+6651419b	2026-09-05	feat(quota): configured 级生产接线与前端真相字段	不移植	—	frontend	11	scope=quota：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+6958cab5	2026-09-05	feat(autopilot): 增加质量证据置信度 shadow 折扣	不移植	—	frontend	11	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+6a71d242	2026-09-05	fix(autopilot): 修复 effort 画像能力断链	不移植	—	backend	6	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+79831b02	2026-09-05	feat(scheduler): 上下文溢出逃生阀——同模型试探与全池跨模型重定向	不移植	—	backend	15	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+8df7e90b	2026-09-05	style(config): gofmt 注释与 map 字面量对齐	不移植	—	backend	2	纯格式。	ccx_audit_C.md
+8e9014ad	2026-09-05	fix(quota): 同来源刷新语义与 Manager 并发边界收紧	不移植	—	backend	4	scope=quota：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+c1dab1d9	2026-09-05	feat(providers): 新增 Bitdeer AI 官方托管推理模板	不移植	—	backend	5	同 `e15fa750`，模板体系依赖缺失	ccx_audit_D.md
+d04b3bca	2026-09-05	docs(specs): autopilot 5.25 上下文窗口自适应学习与溢出逃生阀	不移植	—	other	2	docs: 文档/合并/计划类，非运行代码	规则分类
+d0b7dc0b	2026-09-05	feat(models): 注册 deepseek-v4-flash-vision、glm-5-turbo 与 seedream-5.0-lite	不移植	—	docs	15	路径命中 benchmark/：autopilot/benchmark/ChannelsV3 体系	规则分类
+d53f15a4	2026-09-05	feat(autopilot): 质量档校准 v3——新增「不推荐」(avoid) 档	不移植	—	backend	10	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+da204c43	2026-09-05	feat(autopilot): 渠道×协议×模型上下文窗口自适应学习（三源合成）	不移植	—	backend	14	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+db445c13	2026-09-05	feat(autopilot): Route Preview 契约对齐——画像同源/无 trace/错误契约	不移植	—	backend	6	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+dbb4be1b	2026-09-05	feat(config): 模型能力注册表支持 contextWindowTiers 分段字段	不移植	—	backend	5	路径命中 model_registry：autopilot/benchmark/ChannelsV3 体系	规则分类
+df5104b6	2026-09-05	feat(handlers): compat-cache 上下文窗口分区运维闭环	不移植	—	backend	5	channel_compat_context_window.go` + `compat_cache_handler.go` 3.0 运维闭环，复杂运维/报表类	ccx_audit_A.md
+e7aeed16	2026-09-05	chore(benchmark): 重新生成可视化数据	不移植	—	docs	1	chore: 文档/合并/计划类，非运行代码	规则分类
+eb48da87	2026-09-05	chore(registry): GPT-5.6 上下文窗口更新至 1.05M 并内置分段阶梯	不移植	—	backend	9	路径命中 model_registry：autopilot/benchmark/ChannelsV3 体系	规则分类
+eb7772a8	2026-09-05	fix(discovery): 快速发现候选补位保留 API 原始顺序并过滤非 chat 模型	条件移植	P2	backend	4	渠道发现候选小修，可抽到 lean 现有 `selectDiscoveryModels`，不引入 fast 模块	ccx_audit_D.md
+edd0306a	2026-09-05	chore(benchmark): 同步校准 v3 图表产物与上游微漂移数据	不移植	—	docs	11	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+efcab58d	2026-09-05	chore(registry): 同步基准评测数据与预设注册表	不移植	—	docs	11	路径命中 benchmark/：autopilot/benchmark/ChannelsV3 体系	规则分类
+f148abd8	2026-09-05	docs: 实现缺口修复计划收官——状态与提交号回填 + CHANGELOG 条目	不移植	—	other	2	docs: 文档/合并/计划类，非运行代码	规则分类
+42411b3a	2026-09-06	渠道编辑新增最高分组倍率上限	已覆盖	P3	frontend	10	lean `d365818d` 已实现 per-key 分组倍率与 `maxGroupMultiplier`（api-types.ts:164、ApiKeyManagementSection.vue:20）。	ccx_audit_B2.md
+45ce57e2	2026-09-06	feat(autopilot): effort 质量档转正——模型×effort 档位进入实际排序	不移植	—	backend	8	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+4e45999e	2026-09-06	fix(autopilot): 前沿选型五处修复——域分锚点/区间/目标簇/溢价帽/收益帽	不移植	—	backend	8	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+4e7b9402	2026-09-06	docs(spec): 分组倍率上限渠道级统一的三份 spec 同步	不移植	—	docs	3	docs: 文档/合并/计划类，非运行代码	规则分类
+67f35e50	2026-09-06	fix(config): 修倍率设置保存后丢失的两条链路	不移植	—	backend	6	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+6bccc4b7	2026-09-06	feat(config): 分组倍率上限统一为渠道级 MaxGroupMultiplier	不移植	—	backend	18	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+75cb6171	2026-09-06	fix(autopilot): 用量画像域维度握手接通 + 前沿死代码清理	不移植	—	backend	6	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+7f48737d	2026-09-06	docs(spec): Key 倍率设置行内展开的线框与描述同步	不移植	—	docs	1	docs: 文档/合并/计划类，非运行代码	规则分类
+945b261e	2026-09-06	chore(registry): glm-5.3-flash 补 litellm 双源核价，随工作区基准微漂移同步产物	不移植	—	backend	9	路径命中 model_registry：autopilot/benchmark/ChannelsV3 体系	规则分类
+b3498050	2026-09-06	fix(autopilot): 让 effort 连续质量分参与实际路由	不移植	—	backend	5	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+b388bc76	2026-09-06	chore(benchmark): 合并工作区滞留的基准微漂移刷新产物	不移植	—	docs	11	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+e08a61a4	2026-09-06	补 mdi-shield-half-full 的 iconMap 两步注册	不移植	P3	frontend	1	"lean 未使用该图标；`fa58c398` 已内建""两步注册""规范（vuetify.ts:69-71）。"	ccx_audit_B2.md
+f0188b67	2026-09-06	feat(autopilot): 编码域选型锚定 benchmark 图表同源校准体系	不移植	—	backend	4	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+fdd7e18e	2026-09-06	Key 倍率设置改 key 行内展开式 + 回写快照	已覆盖	P3	frontend	2	lean `d365818d`/`920abf6a` 的 ApiKeyManagementSection.vue 已是行内倍率输入 + 草稿暂存。	ccx_audit_B2.md
+02777401	2026-09-07	补齐 4 处遗漏全局 tooltip 样式的 v-tooltip	不移植	P3	frontend	3	3 个目标文件 lean 全不存在；lean 已有 `.ccx-tooltip` 且组件普遍已标注。	ccx_audit_B2.md
+35b0639c	2026-09-07	fix: 对齐环境与流式超时文档默认值，清理废弃的 Key 级倍率请求字段	不移植	—	backend	7	纯 .env/README/docs/VERSION 文档与废弃字段清理	ccx_audit_A.md
+5629552d	2026-09-07	chore(registry): 同步基准评测微漂移与预设注册表	不移植	—	docs	11	路径命中 benchmark/：autopilot/benchmark/ChannelsV3 体系	规则分类
+58d41386	2026-09-07	分组模型排除从独立对话框改行内展开	已覆盖	P3	frontend	5	lean `920abf6a` 已按自身结构实现分组模型限制（行内/表单），无需 3.0 对话框改造。	ccx_audit_B2.md
+917ef71d	2026-09-07	refactor(frontend): Key 倍率与分组模型排除改为随渠道主保存一并提交	不移植	—	frontend	12	路径命中 docs/specs/：autopilot/benchmark/ChannelsV3 体系	规则分类
+a64a5856	2026-09-07	fix(autopilot): 新增 Key 验证 403 时用模型列表复核鉴权，避免误杀有效 key	不移植	—	backend	2	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+c81732df	2026-09-07	托管账号渠道编辑丢失渠道级分组倍率上限	不移植	P3	frontend	3	托管账号/统一渠道单卡保存体系，lean 无此体系，保存天然携带。	ccx_audit_B2.md
+d463e3ea	2026-09-07	docs(spec): Key 倍率/分组模型排除行内化同步线框与描述	不移植	—	docs	2	docs: 文档/合并/计划类，非运行代码	规则分类
+d54c0421	2026-09-07	Key 倍率行内编辑去按钮化——变更即保存	不移植	P3	frontend	5	3.0 倍率交互重构；lean 倍率走草稿 + 主保存，语义不同。	ccx_audit_B2.md
+eb9d8d88	2026-09-07	fix(frontend): 托管账号渠道级字段统一 diff 补发 + 静默丢弃 debug 兜底	不移植	—	frontend	3	关键词「静默」：与精简路线冲突	规则分类
+f2075aa8	2026-09-07	fix(probe): 自产探针 token 上限统一抬到 16 下限	不移植	—	backend	5	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+ff452d90	2026-09-07	refactor(frontend): Key 倍率与分组模型排除合并为行内统一详情面板	不移植	—	frontend	6	路径命中 docs/specs/：autopilot/benchmark/ChannelsV3 体系	规则分类
+48bb7a93	2026-09-08	feat(racing): 竞速阈值注册表与三层配置层	不移植	—	backend	8	scope=racing：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+4f3cc634	2026-09-08	docs(specs): 竞速模式机制线框与策略表同步	不移植	—	docs	3	docs: 文档/合并/计划类，非运行代码	规则分类
+52c673ec	2026-09-08	fix(frontend): 竞速开关并入智能路由整卡保存流	不移植	—	frontend	9	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+59335dcf	2026-09-08	fix(racing): 影子候选 Selected 语义反转与三处连带缺陷	不移植	—	backend	3	scope=racing：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+6853d278	2026-09-08	feat(frontend): 竞速模式开关与渠道日志竞速徽章	不移植	—	frontend	10	关键词「竞速」：与精简路线冲突	规则分类
+6b0d5ceb	2026-09-08	fix(models): 补齐 deepseek-v4-flash-vision-exp 注册缺口	不移植	—	backend	14	路径命中 model_registry：autopilot/benchmark/ChannelsV3 体系	规则分类
+6c8fd082	2026-09-08	style(racing): 补齐 racing_test 未过 gofmt 的对齐修正	不移植	—	backend	1	scope=racing：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+773892af	2026-09-08	补齐缺失图标注册与占位图标替换	不移植	P3	frontend	2	含 racing 图标（flag-checkered）等 3.0 专属功能，lean 未使用这些图标。	ccx_audit_B2.md
+7b8f39aa	2026-09-08	fix(gateway): 非流式响应写回不再透传上游 Content-Type	建议移植	P1	backend	5	网关正确性：lean `ForwardResponseHeaders` 仍透传 content-type，转换路径会带错类型；抽 skip 项 + 新增 ForwardContentType 供纯透传路径 + headers_test.go，不依赖 3.0 体系。	ccx_audit_C.md
+8277a532	2026-09-08	feat(scheduling): 渠道×模型×任务类组合的延迟负反馈自动学习	不移植	—	backend	18	scope=scheduling：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+84eae00e	2026-09-08	feat(racing): 竞速编排器与提交闸门接线	不移植	—	backend	19	scope=racing：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+8cdf735e	2026-09-08	Key 倍率消耗策略与分组倍率顶部对齐	不移植	P3	frontend	1	3.0 倍率/消耗策略 UI 样式，lean 无消耗策略面板。	ccx_audit_B2.md
+8e9bd035	2026-09-08	按组排除模型删除备注字段	不移植	P3	frontend	10	后端 config + 前端 3.0 分组模型备注字段，lean `920abf6a` 的策略不含该字段。	ccx_audit_B2.md
+9e569048	2026-09-08	fix(racing): 影子候选多样性纪律与 effort 跟随（生产观测修正）	不移植	—	backend	3	scope=racing：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+a114728e	2026-09-08	fix(racing): 影子分支 nil Writer 崩溃与模型排序空列表越界（双 panic 修复）	不移植	—	backend	3	scope=racing：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+a2fa4077	2026-09-08	fix(racing): 竞速触发慢证据不再误记到 APIKeys[0]	不移植	—	backend	1	scope=racing：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+b611091a	2026-09-08	refactor(racing): 分支独立 Writer，真实客户端 writer 只被 claim 赢家触碰	不移植	—	backend	8	scope=racing：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+cb24805b	2026-09-08	chore(registry): 同步基准评测微漂移与预设注册表	不移植	—	docs	11	路径命中 benchmark/：autopilot/benchmark/ChannelsV3 体系	规则分类
+cde085a3	2026-09-08	chore(registry): 同步基准评测微漂移与预设注册表	不移植	—	docs	11	路径命中 benchmark/：autopilot/benchmark/ChannelsV3 体系	规则分类
+d31ede33	2026-09-08	perf(compat): latency 证据防抖落盘，去掉请求热路径同步写盘	不移植	—	backend	3	channel_compat_latency.go` 3.0 延迟证据体系（服务于自动选模），lean 无	ccx_audit_A.md
+f24f4aee	2026-09-08	Key 倍率双 caption 对齐与分组模型区改名	不移植	P3	frontend	4	3.0 倍率 UI 文案/样式，lean 无对应结构。	ccx_audit_B2.md
+248deb01	2026-09-09	fix(racing): 影子获胜后编排器止血误杀赢家，客户端流被切断	不移植	—	backend	2	scope=racing：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+3275a213	2026-09-09	fix(failover): 识别 new-api 系中文限流文案为账号级 429	已覆盖	—	backend	2	inventory P4 明确记录移植；对应 lean `995f8561`，`failover.go:499` 已含「速率限制」	ccx_audit_A.md
+5daeaa76	2026-09-09	时间窗口统计新增真实用户请求数	不移植	P2	backend	8	依赖 `upstream.ChannelUID`、RequestCostContext、ConsumptionPolicy、竞速影子请求、SQLite v9 correlation_id 列（schema 变更），属 ChannelsV3/复杂报表体系，与 lean legacy SQLite 升级回归冲突风险高。	ccx_audit_C.md
+628654a4	2026-09-09	docs(specs): 同步 P0 限流识别与 P2 日志折叠/双口径展示	不移植	—	docs	4	docs: 文档/合并/计划类，非运行代码	规则分类
+65d23117	2026-09-09	docs(specs): autopilot §5.14 补 beta token 集合语义与增量合并（e9d0f186）	不移植	—	docs	1	docs: 文档/合并/计划类，非运行代码	规则分类
+6ae4a597	2026-09-09	docs(specs): racing 补编排器止血纪律（只取消非赢家分支）	不移植	—	docs	1	docs: 文档/合并/计划类，非运行代码	规则分类
+e9d0f186	2026-09-09	fix(compat): beta token 拒绝学习改集合语义，修复后续 token 学不进	不移植	—	backend	5	channel_compat_cache` beta header 集合学习，属全量兼容性自学习	ccx_audit_A.md
+eb5b8633	2026-09-09	fix(racing): 限流热渠道不派影子，堵住 429 风暴放大器	不移植	—	backend	4	scope=racing：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+eff5fa7e	2026-09-09	渠道日志按用户请求折叠展示	不移植	P3	frontend	6	复杂报表/观测增强，明确不移植。	ccx_audit_B2.md
+06e05986	2026-09-10	new-api 添加渠道收敛为单步验证并接入	已覆盖	P3	frontend	5	P5 已按 lean 目标重做（`1510c1f3` 接入向导 + `ec26f48d` 归一化/预览），仅复用语义不搬代码。	ccx_audit_B2.md
+09aa3c67	2026-09-10	Merge branch 'worktree-generic-greeting-bird'	不移植	—	-	0	other: 文档/合并/计划类，非运行代码	规则分类
+106eaa46	2026-09-10	fix(channels): v2 更新端点补齐编辑保存字段映射	不移植	—	backend	2	3.0 `/api/channels` 统一端点自身回归，lean 无该端点（旧六类端点不受影响）	ccx_audit_D.md
+28036419	2026-09-10	newapi 账号面板去主账号概念，账号平权列表	不移植	P3	frontend	5	托管账号面板，lean 无。	ccx_audit_B2.md
+2c3182cb	2026-09-10	渠道日志过滤切换不堆叠 + key 行整行点击展开	不移植	P3	frontend	5	3.0 渠道日志/账号面板 UI，lean 无对应结构。	ccx_audit_B2.md
+2c95fc07	2026-09-10	feat(models): 注册 GPT Image 2.5 三档与 Wan 3.0 视频双模型	不移植	—	docs	13	路径命中 benchmark/：autopilot/benchmark/ChannelsV3 体系	规则分类
+3ae91944	2026-09-10	备注复活根因：名字迁移旧名写回空备注，机制退役	不移植	—	backend	4	ChannelsV3 名字迁移/Remark 机制（channel_view.go），排除。	ccx_audit_C.md
+7f9e0833	2026-09-10	订阅凭证未设置提示仅在账号列表为空时出现	不移植	P3	frontend	5	托管账号/订阅面板，lean 无。	ccx_audit_B2.md
+88a20164	2026-09-10	new-api 接入表单内嵌到添加渠道对话框	不移植	P3	frontend	3	订阅/newapi 接入体系，lean 走 SiteOnboardingWizard。	ccx_audit_B2.md
+a2cf06e4	2026-09-10	fix(newapi): 同步对账清理远端已删 token，key 名缩为 ccx-{分组名}	不移植	—	backend	8	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+aad1371e	2026-09-10	fix(logs): 竞速败出/客户端取消日志不再落到失败状态，与取消/竞速败出终态分离	不移植	—	desktop	7	关键词「竞速」：与精简路线冲突	规则分类
+b103475d	2026-09-10	渠道日志过滤切换按钮字号钉住 11px	不移植	P3	frontend	1	3.0 渠道日志 UI 样式微调。	ccx_audit_B2.md
+de882969	2026-09-10	chore(registry): 同步基准评测微漂移与预设注册表	不移植	—	docs	11	路径命中 benchmark/：autopilot/benchmark/ChannelsV3 体系	规则分类
+f70bba74	2026-09-10	feat(models): 注册 DeepSeek V4.1 Flash 独立模型（deepseek-flash 别名）	不移植	—	backend	40	路径命中 benchmark/：autopilot/benchmark/ChannelsV3 体系	规则分类
+170a0325	2026-09-11	feat(providers): 客户端上下文预算提醒剔除统一机制（CC+Codex）	条件移植	P2	backend	8	剔除客户端注入预算提醒块的定点修复，抽行为不整包引入 224 行新模块	ccx_audit_D.md
+232fdbaf	2026-09-11	docs: 补全 Codex token budget 适配 CHANGELOG 条目	不移植	—	other	2	docs: 文档/合并/计划类，非运行代码	规则分类
+4ef1e3d1	2026-09-11	feat(chart): 基准图横轴支持对数/线性切换，对数默认	不移植	—	other	3	scope=chart：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+84c89a31	2026-09-11	feat(routing): 跨模型替代改为按协议全量放行；协议联邦常开	不移植	—	backend	11	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+c19fc715	2026-09-11	feat: 竞速模式默认开启；new-api 统一账号语义并补齐账号操作状态同步	不移植	—	frontend	8	关键词「竞速」：与精简路线冲突	规则分类
+e7d3314b	2026-09-11	chore(registry): 同步模型注册表与基准数据	不移植	—	docs	11	路径命中 benchmark/：autopilot/benchmark/ChannelsV3 体系	规则分类
+ec37c6e9	2026-09-11	feat(handlers): 新增 /v1/alpha 记忆层透传端点（session 粘性+独立指标）	不移植	—	backend	4	新增 3.0 记忆层端点 + `scheduler/delegates.go`，不在 lean 六协议/接入闭环目标内	ccx_audit_A.md
+ec6ef1bd	2026-09-11	Codex encrypted_function_args 全链路透传与计数	条件移植	P1	backend	11	Codex namespace 工具密文参数透传 + token 计数口径，属协议转换正确性/usage 统计；lean 有 passthrough/types/token_counter 且无该字段；抽代码部分，跳过 AGENTS.md/TODO.md 文档与 alpha 端点描述。	ccx_audit_C.md
+0c7cf168	2026-09-12	fix(failover): 分组缺失的 no available channel 识别为确定性 key×model 失败	已移植	—	backend	2	lean 已有等价提交 589f7001（subject 相似度 1.00）	规则分类
+3f6631a8	2026-09-12	fix(autopilot): ResolveModel 主路径补工具黑白名单过滤	不移植	—	backend	1	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+43f08bec	2026-09-12	fix(racing): 伪标记清单补 DeepSeek tool_return 变体	不移植	—	backend	2	scope=racing：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+43fc0967	2026-09-12	fix(racing): responses/chat/gemini 流式路径补齐竞速提交闸门	不移植	—	backend	4	scope=racing：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+54d3d281	2026-09-12	new-api 地址输入自动识别站点根并提示	已覆盖	P3	frontend	1	同上，lean `ec26f48d` NormalizeSiteURL + `1510c1f3` 向导已吸收地址识别。	ccx_audit_B2.md
+63dbace6	2026-09-12	feat(autopilot): 协议端点不支持学习闭环与模型映射工具黑名单	不移植	—	backend	8	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+64e366de	2026-09-12	fix(autopilot): 工具能力学习改锚稳定路由身份（逻辑渠道×协议）	不移植	—	backend	14	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+6ace65e6	2026-09-12	chore(registry): 同步模型注册表与基准数据	不移植	—	docs	11	路径命中 benchmark/：autopilot/benchmark/ChannelsV3 体系	规则分类
+78645aa7	2026-09-12	fix(failover): 白名单终审放弃 override 后 nil target 解引用致整进程 panic	不移植	—	backend	2	触发点为 autopilot override/`target.Model` 白名单终审，lean `upstream_failover.go` 无 autopilot 代码	ccx_audit_A.md
+8a1b66a5	2026-09-12	fix(autopilot): override 应用点补白名单终审	不移植	—	backend	1	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+8edde0de	2026-09-12	fix(autopilot): 白名单失败撤销——排他渠道故障时的动态自愈	不移植	—	backend	2	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+90ddfabc	2026-09-12	new-api 识别提示在 details 容器内右贴	不移植	P3	frontend	1	同上。	ccx_audit_B2.md
+966ec952	2026-09-12	fix(racing): 影子候选整渠道排除主渠道，消除同渠道重复消耗	不移植	—	backend	3	scope=racing：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+9fe9caa1	2026-09-12	test(autopilot): ProtocolModelsForChannel 聚合按 KeyHash 稳定排序	不移植	—	backend	1	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+ad1761c3	2026-09-12	feat(autopilot): 工具调用正向白名单（运行期 auto 证据驱动）	不移植	—	backend	8	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+b98a57ae	2026-09-12	new-api 地址识别提示移入 details 插槽	不移植	P3	frontend	1	依附 3.0 NewApiSubscriptionForm.vue（lean 无），提示位置微调。	ccx_audit_B2.md
+bfa65751	2026-09-12	fix(racing): 兜底重选的影子候选补白名单渠道排他	不移植	—	backend	1	scope=racing：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+c5da86e8	2026-09-12	fix(autopilot): 请求画像工具判定补 tool_choice 形态	不移植	—	backend	1	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+c8122b51	2026-09-12	fix(racing): 伪标记观察窗覆盖闭标记形态与计数窗口修正	不移植	—	backend	3	scope=racing：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+c946bbc3	2026-09-12	test(racing): 竞速回归测试补充标记清单扩展用例	不移植	—	backend	1	scope=racing：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+c9ef15d9	2026-09-12	chore(registry): 合并工作区滞留的 2026-09-12 基准微漂移产物	不移植	—	docs	11	路径命中 benchmark/：autopilot/benchmark/ChannelsV3 体系	规则分类
+ca024ad2	2026-09-12	feat(toolcall): 白名单负反馈补盲——伪工具调用标记连续 miss 撤销 verified	不移植	—	backend	10	关键词「racing」：与精简路线冲突	规则分类
+cf9677e7	2026-09-12	feat(models): kimi-for-coding 全量升级 K2.8 Preview（模型 ID 不变）	不移植	—	backend	14	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+d299b6db	2026-09-12	feat(capability): 能力测试探测范围对齐画像协议清单	不移植	—	backend	4	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+d44deccd	2026-09-12	fix(racing): fold 路径补齐竞速提交闸门（native responses 空流根治）	不移植	—	backend	2	scope=racing：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+d9af6162	2026-09-12	feat(autopilot): 工具调用白名单渠道间排他	不移植	—	backend	4	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+e46be507	2026-09-12	feat(racing): 流式首字触发 floor 调整为 4s/8s 两档	不移植	—	backend	3	scope=racing：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+ebd997e0	2026-09-12	fix(routing): 带工具判定覆盖 codex 无明文 tools 形态	不移植	—	backend	3	关键词「racing」：与精简路线冲突	规则分类
+f6c0c5a8	2026-09-12	feat(racing): claim 闸门补伪工具调用标记软校验	不移植	—	backend	7	scope=racing：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+38f2aafc	2026-09-13	fix(responses): additional_tools 提升覆盖协议转换路径——chat 承接不再丢工具	条件移植	P0	backend	6	依赖 `a003d616`，补 `openai_converter.go`/`providers/responses.go` 转换路径不丢工具	ccx_audit_A.md
+7b3792fe	2026-09-13	fix(racing): 影子分支按渠道粒度去重，杜绝同渠道重复消耗	不移植	—	backend	2	scope=racing：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+80880bac	2026-09-13	feat(converters): claude→responses 流式补 codex 工具 remap	条件移植	P0	backend	2	依赖 `a003d616`，补 `claude_to_responses.go` 流式 remap，lean 有同名文件	ccx_audit_A.md
+a003d616	2026-09-13	feat(responses): codex additional_tools 协议归一——namespace/custom 工具提升与响应还原	条件移植	P0	backend	9	在 lean 已有的 `converters/codex_tools.go` 上增强工具提升/还原，属工具调用协议正确性，接入点需适配	ccx_audit_A.md
+0bbad411	2026-09-14	feat(autopilot): new-api 接入跳过 0 模型分组并在同步时兜底补建	不移植	—	backend	19	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+2e71b110	2026-09-14	fix(autopilot): 上调 new-api 建 key 每组预算至 120s	不移植	—	backend	1	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+57ded172	2026-09-14	fix(autopilot): 修复慢速代理下 new-api 接入建 key 中途超时	不移植	—	backend	2	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+1f98b370	2026-09-16	fix(benchmark): 映射 dradar dsh-deepseek-v4.1-flash 到 canonical	不移植	—	docs	13	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+4c0f3e15	2026-09-16	docs(todo): 完成 Claude Code v2.1.273 协议评估	不移植	—	other	1	docs: 文档/合并/计划类，非运行代码	规则分类
+5ffd61df	2026-09-16	chore(skills): 移除 model-update 的 context: fork	不移植	—	other	1	chore: 文档/合并/计划类，非运行代码	规则分类
+06fe363f	2026-09-17	chore(skills): 移除 upstream-check 的 context: fork	不移植	—	other	1	chore: 文档/合并/计划类，非运行代码	规则分类
+21894e4c	2026-09-17	订阅中心展开时卡片优先填当前行空位	不移植	P3	frontend	1	订阅中心布局，lean 无该组件。	ccx_audit_B2.md
+875b6359	2026-09-17	赞助商 Logo 只锁高度不水平裁剪	不移植	P3	frontend	1	订阅中心 SubscriptionProviderGrid.vue（lean 无）、赞助商体系。	ccx_audit_B2.md
+8f0ec998	2026-09-17	fix(ui): 统一订阅中心渠道卡操作并就地展开添加表单	不移植	—	frontend	11	路径命中 docs/specs/：autopilot/benchmark/ChannelsV3 体系	规则分类
+d80317e4	2026-09-17	chore(registry): 同步 2026-09-17 模型注册表与基准数据	不移植	—	docs	11	路径命中 benchmark/：autopilot/benchmark/ChannelsV3 体系	规则分类
+f78c6655	2026-09-17	修复订阅中心展开表单与相邻卡片重叠	不移植	P3	frontend	1	订阅中心 UI，lean 无该组件。	ccx_audit_B2.md
+3e26a934	2026-09-19	chore(registry): 按新成本口径重算 codexradar 证据与基准数据	不移植	—	docs	11	路径命中 benchmark/：autopilot/benchmark/ChannelsV3 体系	规则分类
+632b72b7	2026-09-19	chore(codegraph): 提交索引目录自忽略规则文件	不移植	—	other	1	.codegraph/.gitignore 纯工具配置。	ccx_audit_C.md
+ac2a6a16	2026-09-19	fix(benchmark): codexradar 成本口径切到 api_equivalent_cost_usd	不移植	—	other	2	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+d115e4dc	2026-09-19	feat(racing): 质量闸门让出即证据 + 白名单 fail-open 冷启动影子纪律	不移植	—	backend	10	scope=racing：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+eb8facdf	2026-09-19	chore(registry): 同步 2026-09-19 模型注册表与基准数据	不移植	—	docs	11	路径命中 benchmark/：autopilot/benchmark/ChannelsV3 体系	规则分类
+f6ef4f76	2026-09-19	chore(registry): 同步 2026-09-18 模型注册表与基准数据	不移植	—	docs	12	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+0074bb35	2026-09-20	chore(registry): 同步基准数据当日微漂移	不移植	—	docs	11	路径命中 benchmark/：autopilot/benchmark/ChannelsV3 体系	规则分类
+3d9a2e76	2026-09-20	feat(registry): 注册 StepFun Step 5 Preview 模型	不移植	—	backend	10	路径命中 model_registry：autopilot/benchmark/ChannelsV3 体系	规则分类
+6e7c4447	2026-09-20	chore(registry): Step 5 Preview 定价改记原始 CNY 口径	不移植	—	backend	10	路径命中 model_registry：autopilot/benchmark/ChannelsV3 体系	规则分类
+fcdeeadd	2026-09-20	chore(registry): Step 3.7 Flash 定价改记原始 CNY 口径	不移植	—	backend	10	路径命中 model_registry：autopilot/benchmark/ChannelsV3 体系	规则分类
+50f2acf0	2026-09-21	feat(benchmark): 注册 Step 5 Preview 并接入 AA 情报指数证据	不移植	—	docs	13	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+5958c3c4	2026-09-21	chore(registry): 同步 2026-09-21 模型注册表与基准数据	不移植	—	docs	11	路径命中 benchmark/：autopilot/benchmark/ChannelsV3 体系	规则分类
+930b5759	2026-09-21	feat(volcengine): 同步 Agent Plan AFP 抵扣目录至 2026-09 官方口径	不移植	—	backend	16	scope=volcengine：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+9d894c47	2026-09-21	fix(messages): 非流式响应透传未知顶层字段，兼容 auto mode safeguard 计费	条件移植	P0	backend	3	types.go` 的 `ExtraFields` 自定义 Marshal/Unmarshal 是通用透传机制（与 auto mode 无关），lean 无该字段	ccx_audit_A.md
+a6ad832f	2026-09-21	fix(metrics): 旁路请求记录携带模型，消除图表 unknown 归桶	条件移植	P0	backend	14	数据正确性：compact/旁路请求记录补 model 消除 unknown 归桶；lean RecordFailure/RecordSuccessWithUsage 尚无 model 参数，需改签名+14 文件调用点/测试，冲突风险中高。	ccx_audit_C.md
+142c8da2	2026-09-22	Desktop 订阅域与渠道编辑器补齐	不移植	—	desktop	11	订阅域/NewApiAccountPanel，明确排除。	ccx_audit_C.md
+48b58922	2026-09-22	feat(models): 注册 MiMo-V2.6 三款模型（pro/flash/pro-ultraspeed）	不移植	—	backend	21	路径命中 model_registry：autopilot/benchmark/ChannelsV3 体系	规则分类
+4eb604d8	2026-09-22	Desktop 报表/调度诊断/驾驶舱/健康中心增强	不移植	—	desktop	16	复杂报表 + 驾驶舱 + 健康中心，排除。	ccx_audit_C.md
+53647924	2026-09-22	Desktop 渠道列表 IA 合并统一视图	不移植	—	desktop	6	逻辑渠道聚合/统一渠道视图，明确排除。	ccx_audit_C.md
+5b3f4999	2026-09-22	feat(models): 注册 Grok 4.7	不移植	—	other	15	路径命中 model_registry：autopilot/benchmark/ChannelsV3 体系	规则分类
+727e1031	2026-09-22	chore(registry): 同步 2026-09-22 模型注册表与基准数据	不移植	—	docs	11	路径命中 benchmark/：autopilot/benchmark/ChannelsV3 体系	规则分类
+80e098fb	2026-09-22	feat(desktop): autopilot 链路 Wave2 — 诊断面板/Trace 详情/竞速开关/日志竞速归组	不移植	—	desktop	7	关键词「竞速」：与精简路线冲突	规则分类
+b55c0166	2026-09-22	Desktop Wave1 骨架（成本报表/会话雷达/AutopilotTrace）	不移植	—	desktop	11	3.0 web→desktop 功能对齐（autopilot trace、成本报表、会话雷达），订阅/报表体系，排除。	ccx_audit_C.md
+0a26f665	2026-09-23	渠道名称预览卡暗色模式白底	建议移植	P1	frontend	1	lean `AddChannelModal.vue:61` 仍是 `bg-grey-lighten-4`、541 行有 `.apikeys-card`，diff 可直接套（主题感知边框）。	ccx_audit_B2.md
+0a81fbfd	2026-09-23	feat(benchmark): 官方公告评测预填充——新模型无评测站数据时先采用公告质量	不移植	—	backend	17	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+10aba5ca	2026-09-23	能力测试 error/success tooltip 补暗色主题覆盖	建议移植	P1	frontend	1	lean `style.css:132-155` 与修复前完全一致（仅 pending 有 dark 覆盖），直接补 13 行 CSS。	ccx_audit_B2.md
+2178880c	2026-09-23	补声明 ChannelApiKeyRow.credentialUid 修复构建	不移植	P3	frontend	1	修复 505e5a36 索引签名引发的 3.0 类型退化，lean 无 `ChannelApiKeyRow`，不存在该构建错误。	ccx_audit_B2.md
+66d2fc1f	2026-09-23	fix(autopilot): 成功率 0-100/0-1 刻度混用归一	不移植	—	backend	6	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+74d9f2ad	2026-09-23	fix(routing): prevent tool whitelist lock-in and racing misfires	不移植	—	backend	14	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+8307e28a	2026-09-23	feat(compat): 「仅接受流式」升级为流式桥接兼容改写	不移植	—	backend	10	新建 `stream_bridge.go` 且改动 4 个协议 handler，依赖上一条 compat 学习信号	ccx_audit_A.md
+87fc1a5c	2026-09-23	refactor(routing)!: 删除显式 ModelMapping，全渠道统一 ModelResolver 自动映射	不移植	—	backend	111	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+8f90fbd6	2026-09-23	fix(scheduling): 余额/配额类错误降级为 (Key,模型) 组合级限制	不移植	—	backend	13	scope=scheduling：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+9ad40534	2026-09-23	fix(frontend): 配额真相徽章暗色提亮 — 文字升至主题 400 级并保持药丸底色可辨	不移植	—	frontend	1	关键词「配额真相」：与精简路线冲突	规则分类
+9bbd6627	2026-09-23	Web 管理台移除模型映射 UI 与一键建映射功能	不移植	P3	frontend	27	反向删除显式映射（lean 从头保留），与 lean 目标相反；27 files -1316 行。	ccx_audit_B2.md
+af9588eb	2026-09-23	fix(frontend): Key 倍率编辑兜底 credentialUid 定位	不移植	—	desktop	2	依赖 ChannelUID（channelUid）+ ConsumptionPolicy + patchKeyMultiplier 订阅倍率体系；lean 有 d365818d 独立 per-key multiplier。	ccx_audit_C.md
+b071f011	2026-09-23	fix(frontend): 渠道编辑保存不再静默丢弃绑定表单，托管补发按 UID 快照寻址	不移植	—	frontend	4	关键词「静默」：与精简路线冲突	规则分类
+b5eacbda	2026-09-23	Desktop 移除模型映射 UI，生成器去映射字段	不移植	—	desktop	31	"因 ChannelsV3 统一模型移除显式映射 UI，与 lean""用户显式模型映射""目标相反（rebuild 计划明确保留）。"	ccx_audit_C.md
+c6fa8964	2026-09-23	fix(racing): 无对手分支的独占交付不再标记竞速获胜	不移植	—	backend	5	scope=racing：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+d2715c81	2026-09-23	fix(compat): 识别 stream_required 错误码与中文「禁止非流」文案	不移植	—	backend	2	stream_requirement_signal.go` 错误码细化，依赖 `f92b0bf1` 组	ccx_audit_A.md
+d32af395	2026-09-23	fix(autopilot): honor kill switch and report new-api catch-up failures	不移植	—	backend	3	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+de15fff6	2026-09-23	feat(models): 注册 Claude Opus 5.5 与 GPT-6 Sol/Luna	不移植	—	backend	25	路径命中 benchmark/：autopilot/benchmark/ChannelsV3 体系	规则分类
+e306c755	2026-09-23	refactor(presets): 渠道预设删除映射类字段并重新生成产物	不移植	—	other	9	scope=presets：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+f1177c78	2026-09-23	Merge branch 'worktree-parallel-foraging-cascade'	不移植	—	-	0	other: 文档/合并/计划类，非运行代码	规则分类
+f92b0bf1	2026-09-23	fix(compat): 学习上游「仅接受流式」400 并放行 failover	不移植	—	backend	6	channel_compat_cache` + 新建 `stream_requirement_signal.go` 自学习，明确不移植	ccx_audit_A.md
+fc6a925e	2026-09-23	Merge branch 'worktree-nifty-waddling-starlight'	不移植	—	-	0	other: 文档/合并/计划类，非运行代码	规则分类
+1bf5703a	2026-09-24	fix(config): Key 倍率保存跨协议路由同步	不移植	—	backend	5	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+20b03c61	2026-09-24	refactor(config): 统一逻辑渠道共享字段投影	不移植	—	backend	4	关键词「逻辑渠道」：与精简路线冲突	规则分类
+23da9563	2026-09-24	refactor(config): 逻辑渠道 Settings 持久化与加载投影（方案 B 第一阶段）	不移植	—	backend	5	路径命中 logical_channel：autopilot/benchmark/ChannelsV3 体系	规则分类
+4ae28ba2	2026-09-24	fix(responses): 收敛无标识工具流状态	不移植	—	backend	4	实改 `config/channel_shared_fields.go` 逻辑渠道共享字段同步（含 `Racing`），属 ChannelsV3 聚合	ccx_audit_A.md
+5ef15356	2026-09-24	refactor(config): 逻辑渠道聚合记录统一为 ChannelsV3	不移植	—	backend	5	路径命中 channelsv3：autopilot/benchmark/ChannelsV3 体系	规则分类
+b24956b7	2026-09-24	fix(responses): 修复并行工具调用流状态错乱	已移植	—	backend	2	lean 已有等价提交 4d4e565e（subject 相似度 1.00）	规则分类
+eee014fa	2026-09-24	fix(routing): 近分候选优先原生精确模型	不移植	—	backend	2	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+f0e0ec3e	2026-09-24	docs: 完成上游版本变更影响评估	不移植	—	other	1	docs: 文档/合并/计划类，非运行代码	规则分类
+4eac5769	2026-09-25	chore(registry): refresh model registry benchmark artifacts	不移植	—	docs	11	路径命中 benchmark/：autopilot/benchmark/ChannelsV3 体系	规则分类
+65917431	2026-09-25	清理 ESLint 警告	不移植	P3	frontend	10	依附 3.0 特有代码的 ESLint 清理；lean CI 已有 `e4975d62` pr-checks.yml。	ccx_audit_B2.md
+69b7ce82	2026-09-25	清理 lint 格式错误	不移植	P3	frontend	3	纯 lint/格式清理。	ccx_audit_B2.md
+b1ee1967	2026-09-25	保留统一渠道 Key 分组倍率	不移植	P3	frontend	3	unifiedChannels.ts 统一渠道体系，lean 无该文件。	ccx_audit_B2.md
+b4330c67	2026-09-25	按独立 Key 隔离未分组模型策略	已覆盖	P3	frontend	8	lean `920abf6a` + `23c39d3f` 已按 (Key,模型) 组合级隔离实现，天然按协议独立。	ccx_audit_B2.md
+b574d8cf	2026-09-25	快捷保存前刷新焦点内倍率	已覆盖	P3	frontend	2	同上，lean `commit/saveGroupMultiplier` 保存前从草稿取最新值。	ccx_audit_B2.md
+d242dada	2026-09-25	输入时暂存 Key 分组倍率	已覆盖	P3	frontend	2	lean `ApiKeyManagementSection.vue:665` `groupMultiplierDrafts` 已实现草稿暂存（`d365818d`/`920abf6a`）。	ccx_audit_B2.md
+fa3a8006	2026-09-25	快捷保存执行账号绑定前置	不移植	P3	frontend	2	托管账号绑定前置，lean 无该体系。	ccx_audit_B2.md
+86730d5f	2026-09-27	fix: 修复 Responses effort、空流 failover 与统一指标	不移植	—	backend	26	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+87935176	2026-09-27	chore(data): 刷新模型注册表与基准数据	不移植	—	docs	11	路径命中 benchmark/：autopilot/benchmark/ChannelsV3 体系	规则分类
+19f31d84	2026-09-28	chore(data): 刷新模型注册表与基准数据	不移植	—	docs	11	路径命中 benchmark/：autopilot/benchmark/ChannelsV3 体系	规则分类
+271cecc7	2026-09-28	fix(autopilot): 按思考档校准 hy4-preview 质量	不移植	—	backend	3	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+80fcd423	2026-09-28	fix(responses): 保留 reasoning 元数据	不移植	—	backend	8	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+875c637d	2026-09-28	fix(autopilot): 保证 effort 质量档单调不降	不移植	—	backend	2	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+14d36ae7	2026-09-29	fix(stream): OpenAI chat 语义检测识别 refusal delta	建议移植	P0	backend	3	stream_processor.go` 补 `refusal` 增量识别，避免拒答流被误判空响应触发 failover	ccx_audit_A.md
+3e759fbc	2026-09-29	修复按 Key 排除模型的三处断链	已覆盖	P3	frontend	8	lean `920abf6a`/`23c39d3f` 的 (Key,模型) 限制与自动恢复已配回归测试，链路完整。	ccx_audit_B2.md
+4917f378	2026-09-29	fix(scheduler): 渠道删除时同步清理悬空的会话亲和条目	不移植	—	backend	3	依赖 `8da996f1` 的会话亲和/路由身份体系	ccx_audit_D.md
+5451fb86	2026-09-29	feat(metrics): 请求记录成本统一完整口径 + manifest_drift 补回填上下文	不移植	—	backend	9	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+6a0444ed	2026-09-29	fix(quota): SnapshotAll 剪除与拷贝收进同一把写锁	不移植	—	backend	2	scope=quota：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+a540a500	2026-09-29	feat(quota): 跨窗口陈旧观测惰性剪除与配额真相观测出口	不移植	—	backend	7	scope=quota：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+a6074e2c	2026-09-29	feat(failover): 统一流式预检错误识别与冷却恢复时间透传	已移植	—	backend	19	lean 已有等价提交 cb7497b7（subject 相似度 1.00）	规则分类
+b7746d82	2026-09-29	feat(models): 注册 Claude Sonnet 5.5	不移植	—	backend	28	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+e2de1217	2026-09-29	fix(stream): 透传 EOF 只补 SSE 终止符，不重发尾行正文	建议移植	P0	backend	2	stream_tools.go` 由重发 `trimmed` 改为只补 `\n\n`，消除尾部重复/JSON 损坏	ccx_audit_A.md
+e7dc8468	2026-09-29	Merge branch 'zcode/magpie-stream-failover': magpie 借鉴四阶段	不移植	—	-	0	other: 文档/合并/计划类，非运行代码	规则分类
+fd0e9e17	2026-09-29	恢复 Key×模型限制按协议路由并集分发	已覆盖	P3	frontend	2	"""并集分发""是 3.0 统一渠道视图产物；lean 六协议独立、按协议路由天然隔离，无需并集。"	ccx_audit_B2.md
+010c7129	2026-09-30	fix(quota): 快照与派生值同一瞬间产出，DeepCopy 隔离，渠道删除清理状态	不移植	—	backend	6	scope=quota：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+0f523c5b	2026-09-30	feat(models): 注册 GPT-6.1 Sol 独立模型并记录上游版本检查结论	不移植	—	other	8	路径命中 model_registry：autopilot/benchmark/ChannelsV3 体系	规则分类
+42197ca6	2026-09-30	fix(quota): reset 头裸相对秒数按相对时长解析	不移植	—	backend	2	scope=quota：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+48d8d826	2026-09-30	fix(stream,autopilot): 预检请求侧错误终态化，思考判定与转换器对齐	不移植	—	backend	9	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+6aa7e625	2026-09-30	fix(desktop): 分组模型限制按协议路由并集展示与恢复	已覆盖	P2	desktop	6	"分组模型限制能力已由 lean `920abf6a` 独立实现；本提交的""按协议路由并集""针对 3.0 逻辑渠道聚合，lean 协议渠道独立不适用（group-model-policy.ts 仅 groupModelPolicyKey）。"	ccx_audit_C.md
+70124ec1	2026-09-30	fix(logicalchannels): PUT removals 接入删除清理汇聚点并按路由下发分组限制	不移植	—	backend	2	scope=logicalchannels：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+715e9a63	2026-09-30	fix(quota): 窗口未知的 response_headers 观测按新鲜度兜底剪除	不移植	—	backend	2	scope=quota：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+745acbb3	2026-09-30	chore(data): 刷新基准图表数据（2026-09-29 快照）	不移植	—	docs	2	chore: 文档/合并/计划类，非运行代码	规则分类
+9bde3a23	2026-09-30	chore(data): GPT-6.1 Sol 注册数据与基准管线刷新（2026-09-30 重跑）	不移植	—	docs	11	路径命中 benchmark/：autopilot/benchmark/ChannelsV3 体系	规则分类
+a3090203	2026-09-30	fix(stream): chat 语义检测识别音频增量	建议移植	P0	backend	2	stream_processor.go` 补 `delta.audio` 识别，避免纯音频流被误判空响应	ccx_audit_A.md
+a98c7b1a	2026-09-30	perf(config): 能力表读取改用局部快照，消除深拷贝	条件移植	P3	backend	3	通用性能优化（消除每 attempt 全量深拷贝），不依赖 3.0 体系；需适配 lean config.go/upstream_failover.go，与 9f561cd1 同类，可暂缓。	ccx_audit_C.md
+b25d03b8	2026-09-30	fix(scheduler): 亲和路由身份写入与解析改用 ChannelUID	不移植	—	backend	4	同上，且含 `config.go` 结构性改动	ccx_audit_D.md
+bab4b308	2026-09-30	fix(stream): 请求侧拒绝终态补写客户端错误体，消除空 200	已移植	—	backend	3	lean 已有等价提交 00396a44（subject 相似度 0.83）	规则分类
+bd449ddb	2026-09-30	fix(stream): 补齐未终结的 SSE 尾事件，预检早退不再泄漏 reader	建议移植	P0	backend	8	补 `writtenTail` 终结符 + `StartBodyChunkReader` 加 `done` 早退，修 SSE 尾帧丢失与 goroutine 泄漏	ccx_audit_A.md
+ca45c94b	2026-09-30	chore(data): 重生成模型注册表产物并修复官方分数等价证据	不移植	—	backend	9	路径命中 model_registry：autopilot/benchmark/ChannelsV3 体系	规则分类
+f9674b4d	2026-09-30	分组模型禁用按协议路由并集分发	已覆盖	P3	frontend	2	同上，lean `920abf6a` 的分组模型限制按协议独立生效。	ccx_audit_B2.md
+fcb3d193	2026-09-30	chore(data): 刷新模型注册表与基准图表（2026-09-30 快照）	不移植	—	docs	11	路径命中 benchmark/：autopilot/benchmark/ChannelsV3 体系	规则分类
+6191798d	2026-10-01	chore(benchmark): 移除 litellm 映射表中不存在的 gpt-6/astra 前瞻键	不移植	—	other	1	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+81231b8b	2026-10-01	chore(data): 刷新模型注册表与基准图表（2026-10-01 快照）	不移植	—	docs	11	路径命中 benchmark/：autopilot/benchmark/ChannelsV3 体系	规则分类
+b7da9f47	2026-10-01	chore(benchmark): 修正 kimi-k2-thinking 的 litellm 上游 key	不移植	—	other	1	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+ec24024d	2026-10-01	docs(tool-call): 明确协议模型组合能力边界	不移植	—	docs	1	docs: 文档/合并/计划类，非运行代码	规则分类
+10295aed	2026-10-03	feat(balance): 余额探测调度器与管理端点	不移植	—	backend	4	写入 `quota.Manager` 参与调度评分＝配额真相/成本调度，违反 P3	ccx_audit_D.md
+73d9dda6	2026-10-03	feat(balance): 渠道级上游余额探测配置层	不移植	—	backend	7	QuotaPerUnit`/`ResolvedBalancePolicy` 供调度器使用，整套迁入超 P3 只读展示边界	ccx_audit_D.md
+98c6f8ba	2026-10-03	feat(balance): 上游余额探测器（newapi/sub2api + auto 识别）	已覆盖	—	backend	2	lean `833cfc13` 已移入 `upstreamprobe/balance.go`（412 行）作只读状态展示	ccx_audit_D.md
+c008a300	2026-10-03	渠道编辑对话框余额探测配置与结果展示	不移植	P3	frontend	9	订阅额度/配额真相与观测面板；lean 后端 `833cfc13` 已有只读余额探测，EditChannelModal.vue 无 balance，Web 侧配额配置 UI 属超额。	ccx_audit_B2.md
+f99a088e	2026-10-03	docs: AGENTS.md 补充上游余额探测能力边界	不移植	—	other	1	docs: 文档/合并/计划类，非运行代码	规则分类
+120ca363	2026-10-04	chore(data): 刷新模型注册表与基准图表（2026-10-04 快照）	不移植	—	docs	11	路径命中 benchmark/：autopilot/benchmark/ChannelsV3 体系	规则分类
+d674bc4f	2026-10-05	docs(specs): 同步上游余额探测到四份 spec	不移植	—	docs	5	docs: 文档/合并/计划类，非运行代码	规则分类
+9a4842ac	2026-10-08	chore(data): 刷新模型注册表与基准图表（2026-10-08 快照）	不移植	—	docs	11	路径命中 benchmark/：autopilot/benchmark/ChannelsV3 体系	规则分类
+af720c83	2026-10-08	feat(model): 注册 Claude Haiku 5.5 独立 canonical 模型	不移植	—	backend	30	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+6bb8d25f	2026-10-12	chore(upstream): 同步 Claude Code v2.1.295 / Codex rust-v0.162.0 协议变更评估	不移植	—	other	1	chore: 文档/合并/计划类，非运行代码	规则分类
+d97e08f9	2026-10-12	fix(failover): 中转网关本地内容审核错误允许 failover 换渠道并冷却渠道	已移植	—	backend	6	lean 已有等价提交 9592e589（subject 相似度 1.00）	规则分类
+801425ec	2026-10-15	移除手工倍率重复标签	不移植	P3	frontend	2	3.0 倍率 UI 文案微调，lean 无对应标签。	ccx_audit_B2.md
+d8613924	2026-10-15	test(autopilot): 前沿选型集成用例改用固定 fixture 注册表	不移植	—	backend	1	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+0309602b	2026-10-17	chore(data): 刷新模型注册表与基准图表（2026-10-15 快照）	不移植	—	docs	11	路径命中 benchmark/：autopilot/benchmark/ChannelsV3 体系	规则分类
+7cc34a2b	2026-10-17	test(config): 覆盖 DeepSeek V4.1 Flash 1017 日期后缀与基准画像解析	不移植	—	backend	1	路径命中 model_registry：autopilot/benchmark/ChannelsV3 体系	规则分类
+f8a23220	2026-10-17	feat(stream): 流式输出无限重复检测，一次确证即强制熔断渠道×Key×模型	条件移植	P1	backend	16	重复检测算法（`repetition_loop.go`）可抽，但熔断落在 3.0 `metrics/model_circuit` + `config/scheduler.go`，须改接 lean 渠道级熔断	ccx_audit_A.md
+0bf8e6be	2026-10-21	feat(benchmark): 对接 codexradar 雷达Bench v2 新评测接口	不移植	—	backend	11	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+63d0aa2d	2026-10-21	chore(data): 刷新雷达Bench v2 基准数据（2026-10-21 快照）	不移植	—	docs	11	路径命中 benchmark/：autopilot/benchmark/ChannelsV3 体系	规则分类
+1fe96820	2026-10-24	feat(model): 注册 Kimi K3.1 Pro 与 K3.1 Pro Highspeed 独立模型	不移植	—	backend	18	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+67742f69	2026-10-27	feat(models): 注册 GPT-6.1 Terra	不移植	—	backend	17	路径命中 benchmark/：autopilot/benchmark/ChannelsV3 体系	规则分类
+95cf7b60	2026-10-27	chore(serena): 更新网关约定配置	不移植	—	other	3	chore: 文档/合并/计划类，非运行代码	规则分类
+09ceeea2	2026-11-03	fix(autopilot): 不向不支持客户端锁定 effort 档位的模型发送非法参数	不移植	—	backend	4	scope=autopilot：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+0e478af0	2026-11-03	style(backend): gofmt 规整历史遗留格式文件	不移植	—	backend	6	纯 gofmt 格式（balanceprobe/upstreamprobe/main.go），排除。	ccx_audit_C.md
+3a08db97	2026-11-03	fix(handlers): 去重 system 数组中逐字重复的 harness 注入块	条件移植	P2	backend	3	DeduplicateIdenticalSystemBlocks` 为纯函数（依赖 `utils.MarshalJSONNoEscape` lean 已有），但接入点 `upstream_failover.go` 需重写	ccx_audit_A.md
+4710dee1	2026-11-03	refactor(benchmark): 退役 CodexRadar 历史证据	不移植	—	other	28	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+b2e9572a	2026-11-03	chore(benchmark): 暂时跳过 CodexRadar 并适配 AA v5.0	不移植	—	other	6	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+11425819	2026-11-04	chore(benchmark): 删除 CodexRadar 残留	不移植	—	backend	11	scope=benchmark：v3 大特性/评估体系，port-inventory 明确暂缓	规则分类
+1350b517	2026-11-04	feat(routing): 恢复用户显式模型重定向策略	不移植	—	backend	73	路径命中 internal/autopilot/：autopilot/benchmark/ChannelsV3 体系	规则分类
+1ac12cb8	2026-11-04	test(channels): 补协议级映射发送路径与旧六类更新契约测试	不移植	—	backend	3	纯测试 + `docs/design/protocol-model-mapping-plan.md` spec	ccx_audit_D.md
+20d04de2	2026-11-04	persist managed protocol model mappings	不移植	P3	frontend	2	修的是 ChannelsV3 托管账号单卡 patch（`managedChannelPatch.ts`，lean 无此文件），lean 六协议独立保存天然携带 modelMapping。	ccx_audit_B2.md
+2b5018a0	2026-11-04	feat(channels): 统一渠道卡展示并支持编辑协议级模型映射	不移植	—	desktop	18	路径命中 logicalchannel：autopilot/benchmark/ChannelsV3 体系	规则分类
+537e50ae	2026-11-04	docs: clarify protocol-scoped model mapping rollout	不移植	—	docs	1	docs: 文档/合并/计划类，非运行代码	规则分类
+8c3483ba	2026-11-04	test(config): 补充协议级模型映射回归测试	不移植	—	backend	3	路径命中 logical_channel：autopilot/benchmark/ChannelsV3 体系	规则分类
+ff767fa1	2026-11-04	恢复模型重定向候选列表	已覆盖	P3	frontend	10	lean 基线从未删除显式映射候选；`2801934f` 已同步源模型候选，Web/Desktop 的 combobox 候选/过滤/聚焦加载/错误提示/归一化均已具备且更完整，接口独立演化不可 cherry-pick。	ccx_audit_B2.md
