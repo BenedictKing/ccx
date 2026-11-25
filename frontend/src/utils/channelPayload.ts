@@ -87,6 +87,7 @@ export interface ChannelFormLike {
   normalizeSystemRoleToTopLevel: boolean
   codexNativeToolPassthrough: boolean
   codexToolCompat: boolean
+  responsesReasoningFold?: boolean
   normalizeNonstandardChatRoles?: boolean
   stripCodexClientTools?: boolean
   stripImageGenerationTool?: boolean
@@ -550,6 +551,7 @@ export function buildChannelPayload(
     normalizeSystemRoleToTopLevel: form.normalizeSystemRoleToTopLevel,
     codexNativeToolPassthrough: form.codexNativeToolPassthrough,
     codexToolCompat: form.codexToolCompat,
+    responsesReasoningFold: !!form.responsesReasoningFold,
     normalizeNonstandardChatRoles: !!form.normalizeNonstandardChatRoles,
     stripCodexClientTools: form.codexToolCompat,
     stripImageGenerationTool: !!form.stripImageGenerationTool,

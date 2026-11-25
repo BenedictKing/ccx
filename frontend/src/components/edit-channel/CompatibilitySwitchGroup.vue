@@ -76,6 +76,18 @@
         <v-switch :model-value="form.codexToolCompat" inset color="primary" hide-details @update:model-value="updateField('codexToolCompat', $event)" />
       </div>
 
+      <!-- Responses Reasoning Fold -->
+      <div v-if="channelType === 'responses'" class="d-flex align-center justify-space-between">
+        <div class="d-flex align-center ga-2">
+          <v-icon color="primary">mdi-cog</v-icon>
+          <div>
+            <div class="section-title section-title--soft">{{ t('channelEditor.compat.responsesReasoningFold.label') }}</div>
+            <div class="text-caption text-medium-emphasis">{{ t('channelEditor.compat.responsesReasoningFold.hint') }}</div>
+          </div>
+        </div>
+        <v-switch :model-value="form.responsesReasoningFold" inset color="primary" hide-details @update:model-value="updateField('responsesReasoningFold', $event)" />
+      </div>
+
       <!-- Strip Image Generation Tool -->
       <div v-if="channelType === 'responses' || channelType === 'chat'" class="d-flex align-center justify-space-between">
         <div class="d-flex align-center ga-2">
@@ -298,6 +310,7 @@ interface FormData {
   serviceType: string
   codexNativeToolPassthrough?: boolean
   codexToolCompat?: boolean
+  responsesReasoningFold?: boolean
   stripImageGenerationTool?: boolean
   convertImageUrlToB64Json?: boolean
   normalizeSystemRoleToTopLevel?: boolean

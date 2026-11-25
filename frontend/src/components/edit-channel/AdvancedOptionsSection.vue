@@ -96,6 +96,7 @@ interface FormData {
   circuitBreakerDisabled: boolean
   codexNativeToolPassthrough?: boolean
   codexToolCompat?: boolean
+  responsesReasoningFold?: boolean
   stripImageGenerationTool?: boolean
   convertImageUrlToB64Json?: boolean
   normalizeMetadataUserId?: boolean

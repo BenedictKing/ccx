@@ -851,6 +851,8 @@
   "channelEditor.compat.codexNativeTools.hint": "Convert Codex native tools into OpenAI function format",
   "channelEditor.compat.codexCompat.label": "Codex tool compatibility",
   "channelEditor.compat.codexCompat.hint": "Enable Codex CLI compatibility mode",
+  "channelEditor.compat.responsesReasoningFold.label": "Responses reasoning auto-continue",
+  "channelEditor.compat.responsesReasoningFold.hint": "Native Responses upstreams only: continue automatically when reasoning is truncated; text and tool calls are delayed until no further continuation is needed",
   "channelEditor.compat.stripImageGen.label": "Strip image generation tool",
   "channelEditor.compat.stripImageGen.hint": "Remove image generation tool calls from requests",
   "channelEditor.compat.convertImageUrlToB64Json.label": "Convert URL response to b64_json",

@@ -182,6 +182,7 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     stripBillingHeader: false,
     codexNativeToolPassthrough: false,
     codexToolCompat: false,
+    responsesReasoningFold: false,
     normalizeNonstandardChatRoles: false,
     stripCodexClientTools: false,
     stripImageGenerationTool: false,
@@ -807,6 +808,7 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     form.stripBillingHeader = false
     form.codexNativeToolPassthrough = false
     form.codexToolCompat = false
+    form.responsesReasoningFold = false
     form.normalizeNonstandardChatRoles = false
     form.stripCodexClientTools = false
     form.stripImageGenerationTool = false
@@ -903,6 +905,7 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     form.stripBillingHeader = channel.stripBillingHeader ?? false
     form.codexNativeToolPassthrough = !!channel.codexNativeToolPassthrough
     form.codexToolCompat = channel.codexToolCompat ?? channel.stripCodexClientTools ?? false
+    form.responsesReasoningFold = !!channel.responsesReasoningFold
     form.normalizeNonstandardChatRoles = !!channel.normalizeNonstandardChatRoles
     form.stripCodexClientTools = channel.codexToolCompat ?? channel.stripCodexClientTools ?? false
     form.stripImageGenerationTool = !!channel.stripImageGenerationTool

@@ -209,6 +209,7 @@ export interface Channel {
   normalizeSystemRoleToTopLevel?: boolean  // Claude 协议特定：将 messages 中 system 角色抽取回顶层 system 字段（兼容仅支持 user/assistant 的旧上游）
   codexNativeToolPassthrough?: boolean    // Codex 原生工具透传（默认 true）
   codexToolCompat?: boolean               // Codex 工具兼容（默认 true）
+  responsesReasoningFold?: boolean        // Responses 推理续接折叠：截断推理时自动续轮（默认 false）
   normalizeNonstandardChatRoles?: boolean  // OpenAI Chat 上游：将非标准 role 改写为 user（默认 true）
   stripCodexClientTools?: boolean          // Responses 上游：透传前剥离 Codex CLI 0.130+ 客户端专属工具条目（默认 true）
   stripImageGenerationTool?: boolean       // Responses/Chat 上游：移除 image_generation 工具（默认 true）

@@ -848,6 +848,8 @@
   "channelEditor.compat.codexNativeTools.hint": "Konversi alat native Codex ke format OpenAI function",
   "channelEditor.compat.codexCompat.label": "Kompatibilitas alat Codex",
   "channelEditor.compat.codexCompat.hint": "Aktifkan mode kompatibilitas Codex CLI",
+  "channelEditor.compat.responsesReasoningFold.label": "Lanjutan otomatis penalaran Responses",
+  "channelEditor.compat.responsesReasoningFold.hint": "Hanya untuk upstream Responses native: lanjutkan otomatis saat penalaran terpotong; teks dan pemanggilan tool ditunda hingga tidak ada lanjutan lagi",
   "channelEditor.compat.stripImageGen.label": "Hapus alat pembuatan gambar",
   "channelEditor.compat.stripImageGen.hint": "Hapus panggilan alat pembuatan gambar dari permintaan",
   "channelEditor.compat.convertImageUrlToB64Json.label": "Konversi respons URL ke b64_json",

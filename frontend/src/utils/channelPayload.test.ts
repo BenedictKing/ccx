@@ -38,6 +38,7 @@ describe('buildChannelPayload', () => {
       normalizeSystemRoleToTopLevel: false,
       codexNativeToolPassthrough: false,
       codexToolCompat: true,
+      responsesReasoningFold: true,
       stripImageGenerationTool: false,
       noVision: false,
       noVisionModels: [],
@@ -63,6 +64,7 @@ describe('buildChannelPayload', () => {
     expect(result.requestTimeoutMs).toBe(15000)
     expect(result.responseHeaderTimeoutMs).toBe(90000)
     expect(result.historicalImageTurnLimit).toBe(3)
+    expect(result.responsesReasoningFold).toBe(true)
   })
 
   it('Copilot 渠道省略 Base URL 时应写入默认上游地址', () => {

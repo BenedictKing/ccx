@@ -851,6 +851,8 @@
   "channelEditor.compat.codexNativeTools.hint": "将 Codex 原生工具转换为 OpenAI function 格式",
   "channelEditor.compat.codexCompat.label": "Codex 工具兼容模式",
   "channelEditor.compat.codexCompat.hint": "启用 Codex CLI 兼容模式",
+  "channelEditor.compat.responsesReasoningFold.label": "Responses 推理自动续接",
+  "channelEditor.compat.responsesReasoningFold.hint": "仅原生 Responses 上游生效：推理被截断时自动续轮，正文和工具调用会延迟到确定不再续接后发送",
   "channelEditor.compat.stripImageGen.label": "过滤图像生成工具",
   "channelEditor.compat.stripImageGen.hint": "从请求中移除图像生成工具调用",
   "channelEditor.compat.convertImageUrlToB64Json.label": "URL 响应转 b64_json",
