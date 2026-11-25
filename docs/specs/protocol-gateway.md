@@ -49,7 +49,7 @@ CCX 在同一监听端口提供六类代理入口，将客户端协议适配到�
 Responses 特殊流程：
 
 - `previous_response_id` 在原生路径保留；需要转换时使用会话快照重建必要历史，不能把其他尝试的工具上下文混入。
-- `responsesReasoningFold` 默认 false，只有显式开启才允许推理续轮折叠触发额外上游请求。
+- `responsesReasoningFold` 默认 false，只有显式开启才允许推理续轮折叠触发额外上游请求。开启时正文与工具调用缓冲到确定不再续接后下发；未开启时，即使因 Codex 工具兼容/原生透传进入同一处理流程，正文也必须实时转发，仅需还原 Codex 形态的工具调用缓冲到该项完成。
 - 本地 compact 从会话历史构造压缩输入，有长度截断与最近 reasoning 保留策略；`compactModel` 是实际上游模型且不再经过普通 `modelMapping`。
 - Copilot 按映射后的实际模型及其 `supported_endpoints` 选择 HTTP 或 WS；缺元数据时只保留带诊断的历史默认，不声称已验证。
 

@@ -183,6 +183,21 @@ func runResponsesFoldWithOptions(baseBody map[string]interface{}, firstResp *htt
 		var roundReasoning []interface{}
 		var terminal map[string]interface{}
 		var usage map[string]interface{}
+		// flushBuffered 还原并下发一个缓冲输出项，分配下游 output_index 并计入最终输出。
+		flushBuffered := func(entry *responsesFoldBufferedOutput) error {
+			remapFoldCodexEntry(codexCtx, entry)
+			for _, event := range entry.events {
+				if _, ok := event["output_index"]; ok {
+					event["output_index"] = dsOutputIndex
+				}
+				if err := emit(stamp(event)); err != nil {
+					return err
+				}
+			}
+			dsOutputIndex++
+			finalOutput = append(finalOutput, entry.item)
+			return nil
+		}
 
 		for {
 			frame, ok, err := iterator.next()
@@ -223,9 +238,12 @@ func runResponsesFoldWithOptions(baseBody map[string]interface{}, firstResp *htt
 			outputIndexKey := responsesFoldOutputIndexKey(outputIndex)
 			if eventType == "response.output_item.added" {
 				item := mapFromInterface(frame.event["item"])
-				if item["type"] == "reasoning" {
+				// 未开启续接时没有需要丢弃中间正文的续轮，正文等输出实时转发；
+				// 仅需 Codex 格式还原的工具调用缓冲到自身 output_item.done。
+				streamItem := item["type"] == "reasoning" || (!continueEnabled && !foldItemNeedsCodexRemap(codexCtx, item))
+				if streamItem {
 					roundCanRetry = false
-					outputKind[outputIndexKey] = "reasoning"
+					outputKind[outputIndexKey] = "streamed"
 					outputIndexToDownstream[outputIndexKey] = dsOutputIndex
 					frame.event["output_index"] = dsOutputIndex
 					dsOutputIndex++
@@ -243,13 +261,15 @@ func runResponsesFoldWithOptions(baseBody map[string]interface{}, firstResp *htt
 			}
 
 			switch outputKind[outputIndexKey] {
-			case "reasoning":
+			case "streamed":
 				if downstreamIndex, ok := outputIndexToDownstream[outputIndexKey]; ok && hasOutputIndex {
 					frame.event["output_index"] = downstreamIndex
 				}
 				if eventType == "response.output_item.done" {
 					item := mapFromInterface(frame.event["item"])
-					roundReasoning = append(roundReasoning, item)
+					if item["type"] == "reasoning" {
+						roundReasoning = append(roundReasoning, item)
+					}
 					finalOutput = append(finalOutput, item)
 				}
 				if err := emit(stamp(frame.event)); err != nil {
@@ -264,6 +284,14 @@ func runResponsesFoldWithOptions(baseBody map[string]interface{}, firstResp *htt
 				entry.events = append(entry.events, frame.event)
 				if eventType == "response.output_item.done" {
 					entry.item = mapFromInterface(frame.event["item"])
+					if !continueEnabled {
+						delete(bufferedByIndex, outputIndexKey)
+						bufferedOrder = removeFoldBufferedEntry(bufferedOrder, entry)
+						if err := flushBuffered(entry); err != nil {
+							_ = currentResp.Body.Close()
+							return responsesFoldResult{BilledUsage: summedUsage, EOFRetries: eofRetries}, err
+						}
+					}
 				}
 			default:
 				roundCanRetry = false
@@ -346,17 +374,9 @@ func runResponsesFoldWithOptions(baseBody map[string]interface{}, firstResp *htt
 		}
 
 		for _, entry := range bufferedOrder {
-			remapFoldCodexEntry(codexCtx, entry)
-			for _, event := range entry.events {
-				if _, ok := event["output_index"]; ok {
-					event["output_index"] = dsOutputIndex
-				}
-				if err := emit(stamp(event)); err != nil {
-					return responsesFoldResult{BilledUsage: summedUsage, EOFRetries: eofRetries}, err
-				}
+			if err := flushBuffered(entry); err != nil {
+				return responsesFoldResult{BilledUsage: summedUsage, EOFRetries: eofRetries}, err
 			}
-			dsOutputIndex++
-			finalOutput = append(finalOutput, entry.item)
 		}
 
 		agentUsage := responsesFoldAgentUsage(firstUsage, summedUsage, usage, true)
@@ -368,10 +388,32 @@ func runResponsesFoldWithOptions(baseBody map[string]interface{}, firstResp *htt
 	}
 }
 
+// foldItemNeedsCodexRemap 判断输出项是否为需还原 Codex 形态的 function_call（custom 代理或 namespace）。
+func foldItemNeedsCodexRemap(ctx *converters.CodexToolContext, item map[string]interface{}) bool {
+	if ctx == nil || item["type"] != "function_call" {
+		return false
+	}
+	name, _ := item["name"].(string)
+	if ctx.IsCustomToolProxy(name) {
+		return true
+	}
+	_, namespace := ctx.OpenAINameForFunctionTool(name)
+	return namespace != ""
+}
+
+func removeFoldBufferedEntry(entries []*responsesFoldBufferedOutput, target *responsesFoldBufferedOutput) []*responsesFoldBufferedOutput {
+	for i, entry := range entries {
+		if entry == target {
+			return append(entries[:i], entries[i+1:]...)
+		}
+	}
+	return entries
+}
+
 // remapFoldCodexEntry 把上游扁平 function_call 输出还原为 codex 期望的形态
 // （additional_tools 提升的逆变换）：custom 代理（functions__exec）→
 // custom_tool_call 事件序列；namespace function → 原始 name + namespace 字段。
-// fold 按 output_index 整项缓冲，轮末冲刷前 remap 完整 item，无需增量 delta 转换。
+// fold 按 output_index 整项缓冲，冲刷前（续接模式在轮末，否则在该项 done 时）remap 完整 item，无需增量 delta 转换。
 func remapFoldCodexEntry(ctx *converters.CodexToolContext, entry *responsesFoldBufferedOutput) {
 	if ctx == nil || entry == nil || entry.item == nil {
 		return
