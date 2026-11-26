@@ -29,6 +29,8 @@ const (
 
 	imageURLDownloadTimeout = 30 * time.Second
 	maxImageDownloadBytes   = 25 * 1024 * 1024
+
+	defaultImagesModel = "gpt-image-2"
 )
 
 // Handler Images API 代理处理器
@@ -160,7 +162,7 @@ func parseImagesRequest(c *gin.Context, bodyBytes []byte, contentType string, op
 			}
 			model, _ := reqMap["model"].(string)
 			if strings.TrimSpace(model) == "" {
-				model = "gpt-image-2"
+				model = defaultImagesModel
 			}
 			return model, isImagesStreamRequest(c, bodyBytes, contentType), true
 		}
@@ -175,7 +177,7 @@ func parseImagesRequest(c *gin.Context, bodyBytes []byte, contentType string, op
 		}
 		model := extractImagesModel(bodyBytes, contentType)
 		if strings.TrimSpace(model) == "" {
-			model = "gpt-image-2"
+			model = defaultImagesModel
 		}
 		return model, isImagesStreamRequest(c, bodyBytes, contentType), true
 	}
@@ -190,6 +192,13 @@ func parseImagesRequest(c *gin.Context, bodyBytes []byte, contentType string, op
 	}
 
 	model, _ := reqMap["model"].(string)
+	if hasNativeImageInputMessages(reqMap) {
+		// 通义千问等原生 Schema 把提示词放在 input.messages，不使用 OpenAI 顶层 prompt。
+		if strings.TrimSpace(model) == "" {
+			model = defaultImagesModel
+		}
+		return model, isImagesStreamRequest(c, bodyBytes, contentType), true
+	}
 	if model == "" {
 		logImagesValidationFailure(c, operation, contentType, bodyBytes, "validate_required", "missing_model", fmt.Errorf("model is required"))
 		imagesErrorResponse(c, http.StatusBadRequest, "model is required", "invalid_request_error", "missing_parameter")
@@ -203,6 +212,17 @@ func parseImagesRequest(c *gin.Context, bodyBytes []byte, contentType string, op
 	}
 
 	return model, isImagesStreamRequest(c, bodyBytes, contentType), true
+}
+
+// hasNativeImageInputMessages 判断是否为通义千问等原生图像 Schema：input.messages 为非空数组。
+// 空数组或类型不符时不放行，避免把没有提示词的请求转发给上游。
+func hasNativeImageInputMessages(reqMap map[string]interface{}) bool {
+	input, ok := reqMap["input"].(map[string]interface{})
+	if !ok {
+		return false
+	}
+	messages, ok := input["messages"].([]interface{})
+	return ok && len(messages) > 0
 }
 
 func handleMultiChannel(

@@ -28,7 +28,9 @@ CCX 在同一监听端口提供六类代理入口，将客户端协议适配到�
 
 - 文本协议之间的转换由 provider/converter 执行；原生响应中的未知扩展字段和大整数不得因无条件 JSON 往返而丢失。
 - Responses WebSocket 每个文本消息是独立的 `response.create` 逻辑请求；非文本或非法消息明确关闭。原生 WS、HTTP/SSE bridge 的选择取决于实际上游模型端点能力，不能把连接握手计为成功推理。
-- Images 的 generations 必须含 `model`、`prompt`；edits/variations 缺省模型使用当前实现默认值。`convertImageUrlToB64Json` 仅在客户端请求 `b64_json` 且显式开启时下载并转换 URL。
+- Images 的 generations 按请求 Schema 分流校验：OpenAI 形态必须含顶层 `model`、`prompt`；通义千问等原生形态以非空 `input.messages` 数组承载提示词，不强制顶层 `prompt`，缺省 `model` 时使用与 edits/variations 相同的实现默认值。空 `input.messages`、`input` 非对象或 `messages` 非数组都不算有效提示词，仍按 OpenAI 形态报错。edits/variations 缺省模型使用当前实现默认值。
+- 两种 generations Schema 都按原生 JSON 透传，`input`、`parameters` 等扩展字段不丢弃，模型映射只重写 `model`；不保证原生形态响应被转换成 OpenAI `data[]` 结构。
+- `convertImageUrlToB64Json` 仅在客户端请求 `b64_json` 且显式开启时下载并转换 URL。
 - Vectors 校验响应为包含 `data[].embedding` 数组的 JSON；不同向量空间、维度或归一化语义不得因 fallback 混用。
 - 所有代理入口使用代理访问密钥鉴权；`x-api-key`、`Authorization: Bearer` 和当前兼容的 query `key` 按中间件规则处理。
 
@@ -88,7 +90,7 @@ Responses 特殊流程：
 | 大整数与未知字段          | 需要 JSON 重写时不损失整数精度；原生未知字段不丢弃。                                     |
 | Responses HTTP/WS/compact | 每轮独立关联请求与终态；续轮字段保留；本地/上游 compact 分支及辅助调用口径正确。         |
 | 首内容前失败与提交后断流  | 前者可按预算 failover，后者不拼接其他上游响应；取消和失败终态准确。                      |
-| Images JSON/multipart     | 操作路径、模型映射、二进制 part 和 Content-Type 保留；URL 转 base64 遵守大小与安全限制。 |
+| Images JSON/multipart     | 操作路径、模型映射、二进制 part 和 Content-Type 保留；URL 转 base64 遵守大小与安全限制。generations 的 OpenAI 与 `input.messages` 原生 Schema 分别按各自规则校验，非法形态在选渠前返回 400。 |
 | Vectors 请求与响应        | 非法 model/input/dimensions 返回 400；合法 fallback 不混向量空间，非法响应不当作成功。   |
 | 鉴权与查询参数            | CCX key 不泄露到上游，重复查询参数保留；非法代理认证在选渠前失败。                       |
 | 禁用响应压缩              | Messages HTTP/SSE 的假上游实际收到 `identity`；默认 HTTP 协商 gzip、SSE 不自动协商，客户端收到可读响应。 |
@@ -102,6 +104,6 @@ Responses 特殊流程：
 - 公共重试与流处理：`backend-go/internal/handlers/common/`。
 - 原生字节契约：`messages/native_passthrough_test.go`、`chat/native_passthrough_test.go`、`responses/native_passthrough_test.go`、`gemini/native_passthrough_test.go`。
 - Responses WS 与 compact：`websocket.go`、`compact.go`、`compact_local.go`及同目录测试。
-- Images/Vectors：`images/handler.go`、`vectors/handler.go`及各自 `native_passthrough_test.go`、`handler_test.go`。
+- Images/Vectors：`images/handler.go`、`vectors/handler.go`及各自 `native_passthrough_test.go`、`handler_test.go`；generations 的 OpenAI/原生 Schema 分流校验见 `images/native_schema_test.go` 与 `handlers/images_native_schema_integration_test.go`（假上游字节级透传）。真实 ZeroCat/通义千问上游尚未实测。
 - 响应与错误矩阵：`messages`、`chat`、`responses`、`gemini` 四个目录的 `handler_response_matrix_test.go`，公共 `upstream_rejected_response_test.go`、`stream_data_error_test.go`、`client_error_test.go`。
 - 压缩协商：`utils/headers.go`、`utils/headers_test.go`、`messages/native_passthrough_test.go`；用量口径：`responses/stream.go`、`responses/usage.go`、`responses/usage_context_regression_test.go`。后者覆盖本地假上游的三轮高缓存 HTTP/SSE、低质量开关及重复 developer 消息；#263 的 llama.cpp 请求样本与 Codex App 实测仍待验证。
