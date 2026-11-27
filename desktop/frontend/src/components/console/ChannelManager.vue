@@ -340,7 +340,7 @@ function clearActionError() {
 }
 
 function sortChannels(source: Channel[]) {
-  return [...source].sort((a, b) => {
+  return source.toSorted((a, b) => {
     const priorityDiff = (a.priority ?? a.index) - (b.priority ?? b.index)
     if (priorityDiff !== 0) return priorityDiff
     return a.index - b.index

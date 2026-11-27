@@ -88,7 +88,7 @@ function sortProtocolOrder(proto: string): number {
 }
 
 const sortedTests = computed(() => {
-  return [...protocolResults.value].sort((a, b) => sortProtocolOrder(a.protocol) - sortProtocolOrder(b.protocol))
+  return protocolResults.value.toSorted((a, b) => sortProtocolOrder(a.protocol) - sortProtocolOrder(b.protocol))
 })
 
 // ── 协议显示名/颜色 ──

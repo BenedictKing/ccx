@@ -48,7 +48,10 @@ function expandedPatternMap() {
       try {
         new RegExp(pattern, 'i')
       } catch (err) {
-        throw new Error(`Invalid regex pattern for ${entry.displayName || entry.provider}: ${pattern}\n  ${err.message}`)
+        throw new Error(
+          `Invalid regex pattern for ${entry.displayName || entry.provider}: ${pattern}\n  ${err.message}`,
+          { cause: err }
+        )
       }
       result[pattern] = capability
     }

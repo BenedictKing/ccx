@@ -137,9 +137,6 @@ class VersionService {
    */
   private async fetchLatestVersion(): Promise<GitHubRelease | null> {
     try {
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), GITHUB_API_TIMEOUT)
-
       // 使用 /releases 端点获取最近的发布列表，然后过滤出第一个正式版本
       const response = await fetch(
         'https://api.github.com/repos/BenedictKing/ccx/releases?per_page=10',
@@ -147,11 +144,9 @@ class VersionService {
           headers: {
             Accept: 'application/vnd.github.v3+json',
           },
-          signal: controller.signal,
+          signal: AbortSignal.timeout(GITHUB_API_TIMEOUT),
         }
       )
-
-      clearTimeout(timeoutId)
 
       if (response.status === 200) {
         const releases: GitHubRelease[] = await response.json()
