@@ -1,4 +1,5 @@
 import { computed, ref, watch, type Ref } from 'vue'
+import { codexSourceModelNames } from '../../../../shared/model-mapping'
 import { AdminApiError } from '@/composables/useAdminApi'
 import type { Channel } from '@/services/admin-api'
 import { filterValidSupportedModelPatterns, parseSupportedModelInput } from '@/utils/channel-dialog-state'
@@ -58,7 +59,7 @@ export function useChannelTargetModels(options: ChannelTargetModelsOptions) {
 
   const sourceModelPresetOptions = computed(() => {
     if (options.channelType() === 'chat' || options.channelType() === 'responses') {
-      return ['astra', 'sol', 'terra', 'luna', 'codex-auto-review']
+      return [...codexSourceModelNames]
     }
     if (options.channelType() === 'images') {
       return ['gpt-image-2', 'gpt-image-1', 'dall-e-3', 'dall-e-2']

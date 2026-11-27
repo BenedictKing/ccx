@@ -66,7 +66,7 @@ GLM-5.4 的内置能力先验覆盖 `glm-5.4`、日期后缀及 `[1m]` 长上下
 
 运行顺序为：读取 `/models`（失败时使用内置探测候选并给 warning）→ 选择少量 strong/primary/fast 候选 → 实测协议 → 推荐目标渠道 → 生成映射和 reasoning 建议 → 兼容、工具、视觉及 thinking 探测 → 返回证据。
 
-- 推荐只使用实测成功模型。Responses/Chat 当前稳定源别名为 `astra`、`sol`、`terra`、`luna`、`codex-auto-review`；Messages 使用 `opus`、`sonnet`、`haiku`、`fable`。
+- 推荐只使用实测成功模型。Responses/Chat 的 Codex 源模型候选由共享列表维护，包含 `astra`、`sol`、`terra`、`luna`、`codex-auto-review` 等稳定别名及当前 GPT-5.6/GPT-6 精确模型 ID；Web 与 Desktop 使用同一列表。候选仅用于补全，允许手动输入其他源模型名；已配置模型从候选中隐藏以避免重复，提交相同源模型时更新现有映射。
 - 发现结果不生成 `supportedModels` 白名单，避免把有限探测结果变成长期流量限制；应用时清除旧推荐白名单的当前行为必须保持。
 - 结果区位于新增/编辑表单的模型重定向区域，展示推荐入口、模型数、成功协议、映射、reasoning、兼容项、能力证据和 warning。
 - 编辑已保存渠道时仍使用当前草稿，不回读旧 channelId 配置。应用推荐不自动保存，也不注册调度器或改变熔断状态。

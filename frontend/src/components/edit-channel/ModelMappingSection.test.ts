@@ -2,7 +2,9 @@
 /* eslint-disable vue/one-component-per-file, vue/require-prop-types */
 import { mount } from '@vue/test-utils'
 import { defineComponent, nextTick } from 'vue'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { createVuetify } from 'vuetify'
+import * as vuetifyComponents from 'vuetify/components'
 
 import ModelMappingSection from './ModelMappingSection.vue'
 
@@ -59,7 +61,7 @@ const sourceModelOptions = [
   { title: 'terra', value: 'terra' },
 ]
 
-const mountSection = (mappingRows: MappingRow[]) => mount(ModelMappingSection, {
+const mountSection = (mappingRows: MappingRow[], useRealCombobox = false) => mount(ModelMappingSection, {
   props: {
     mappingRows,
     sourceModelOptions,
@@ -77,9 +79,13 @@ const mountSection = (mappingRows: MappingRow[]) => mount(ModelMappingSection, {
     reasoningEffortOptions: [],
   },
   global: {
-    stubs: vuetifyStubs,
+    components: useRealCombobox ? { VCombobox: vuetifyComponents.VCombobox } : {},
+    plugins: useRealCombobox ? [createVuetify({ components: vuetifyComponents })] : [],
+    stubs: useRealCombobox ? { ...vuetifyStubs, VCombobox: false } : vuetifyStubs,
   },
 })
+
+afterEach(() => vi.unstubAllGlobals())
 
 const findNewMappingInput = (wrapper: ReturnType<typeof mountSection>, label: string) => wrapper
   .findAllComponents({ name: 'VCombobox' })
@@ -138,6 +144,32 @@ describe('ModelMappingSection', () => {
       noVision: true,
     })
     expect(emittedRows[1]).toMatchObject({ id: 2, source: 'astra' })
+  })
+
+  it('允许直接手输未列出的源模型和目标并添加', async () => {
+    vi.stubGlobal('ResizeObserver', class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    })
+    const wrapper = mountSection([], true)
+    const comboboxes = wrapper.findAllComponents(vuetifyComponents.VCombobox)
+
+    await comboboxes[0].find('input').setValue('custom-codex-model')
+    await comboboxes[1].find('input').setValue('custom-upstream-model')
+    await nextTick()
+
+    const addButton = wrapper.findAll('button').find(button => button.text().includes('app.actions.add'))
+    expect(addButton?.attributes('disabled')).toBeUndefined()
+    await addButton?.trigger('click')
+
+    const events = wrapper.emitted('update:mappingRows')
+    const emittedRows = events?.[events.length - 1]?.[0] as MappingRow[]
+    expect(emittedRows).toHaveLength(1)
+    expect(emittedRows[0]).toMatchObject({
+      source: 'custom-codex-model',
+      target: 'custom-upstream-model',
+    })
   })
 
   it.each([

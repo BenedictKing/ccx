@@ -1,4 +1,5 @@
 import { computed, type ComputedRef } from 'vue'
+import { codexSourceModelNames } from '../../../shared/model-mapping'
 
 type ChannelType = 'messages' | 'chat' | 'responses' | 'gemini' | 'images' | 'vectors'
 type Translator = (key: string) => string
@@ -46,13 +47,7 @@ export function useEditChannelOptions(
 
   const allSourceModelOptions = computed(() => {
     if (channelType.value === 'chat' || channelType.value === 'responses') {
-      return [
-        { title: 'astra', value: 'astra' },
-        { title: 'sol', value: 'sol' },
-        { title: 'terra', value: 'terra' },
-        { title: 'luna', value: 'luna' },
-        { title: 'codex-auto-review', value: 'codex-auto-review' },
-      ]
+      return codexSourceModelNames.map(value => ({ title: value, value }))
     }
     if (channelType.value === 'images') {
       return [
