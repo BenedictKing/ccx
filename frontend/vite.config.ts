@@ -64,7 +64,8 @@ export default defineConfig(({ mode }) => {
       }
     },
     build: {
-      target: 'es2024',
+      // 与 tsconfig 的 ES2022 基线保持一致：不为语法糖抬高旧浏览器要求
+      target: 'es2022',
       outDir: 'dist',
       emptyOutDir: true,
       // 确保资源路径正确

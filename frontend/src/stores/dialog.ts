@@ -113,9 +113,9 @@ export const useDialogStore = defineStore('dialog', () => {
     confirmDialogCancelText.value = options.cancelText || ''
     confirmDialogColor.value = options.color || 'error'
     showConfirmDialog.value = true
-    const { promise, resolve } = Promise.withResolvers<boolean>()
-    confirmResolver = resolve
-    return promise
+    return new Promise((resolve) => {
+      confirmResolver = resolve
+    })
   }
 
   /**

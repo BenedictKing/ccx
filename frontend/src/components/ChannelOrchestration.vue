@@ -946,7 +946,7 @@ const buildChannelOrder = (
   const getRank = (ch: Channel): number =>
     ch.priority ?? fallbackRank.get(ch.index) ?? originalRank.get(ch.index) ?? ch.index
 
-  return source.toSorted((a, b) => {
+  return [...source].sort((a, b) => {
     const rankDiff = getRank(a) - getRank(b)
     if (rankDiff !== 0) return rankDiff
 

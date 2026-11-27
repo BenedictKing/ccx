@@ -23,7 +23,7 @@ Web 与 Desktop 共享 CCX 管理 API，提供渠道、站点、观测和运行�
 - `/conversations` 仅保留到 `/channels/messages` 的兼容跳转，不再展示驾驶舱。
 - 协议页顺序为全局统计/模型去向、渠道概况、普通或子代理编排；渠道编辑、日志、能力测试、Key 运维和诊断使用对应对话框/侧栏。
 - 未认证只显示认证入口；管理请求 401 不清空现有草稿。切换协议应取消或忽略旧请求，避免旧响应覆盖新页面。
-- Web 的 TypeScript 与 Vite 构建目标为 ES2024；当前页面使用的 `Array.prototype.toSorted` 和 `Promise.withResolvers` 要求浏览器原生支持，至少为 Chrome/Edge 119、Firefox 121、Safari 17.4，不为旧浏览器注入这些内建方法的 polyfill。
+- Web 的 TypeScript `target`/`lib` 与 Vite `build.target` 统一为 ES2022。Web 使用的排序逻辑保留复制后 `sort()`，确认对话框保留 `new Promise()`，避免引入 `toSorted()`、`Promise.withResolvers()` 或对应的 polyfill。Vite 8 的 CSS 目标映射包含 Safari/iOS 16.4；实际运行仍取决于浏览器 API（如 `AbortSignal.timeout()`）及依赖，iOS 15 未经验证。
 
 ### Desktop
 
@@ -102,7 +102,7 @@ Web 与 Desktop 共享 CCX 管理 API，提供渠道、站点、观测和运行�
 
 - Web 导航与控制器：`frontend/src/App.vue`、`router/index.ts`、`composables/useAppController.ts`。
 - Web 页面：`ChannelsView.vue`、`SiteOnboardingView.vue`及组件测试。
-- Web 运行基线与现代化 API：`frontend/tsconfig.json`、`frontend/vite.config.ts`、`stores/dialog.ts`、`ChannelOrchestration.vue` 和 `shared/model-priority/model-priority.ts`。
+- Web 运行基线：`frontend/tsconfig.json`、`frontend/vite.config.ts`。
 - Desktop 页面：`desktop/frontend/src/App.vue`、`components/layout/Sidebar.vue`。
 - Desktop 服务桥：`desktop/app.go`、`internal/backend/` 的 Manager 实现。
 - Agent 配置：`configservice/service.go`、`preview.go`、`claude.go`、`codex.go`、`opencode.go`及测试。
