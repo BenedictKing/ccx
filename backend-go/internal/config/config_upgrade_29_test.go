@@ -108,7 +108,7 @@ func TestV3ConfigIsRejectedWithoutChangingFile(t *testing.T) {
 	}
 }
 
-func TestAPIKeyGroupMultiplierSurvivesLoadSaveAndRestart(t *testing.T) {
+func TestLegacyAPIKeyGroupMultiplierMigratesToChannel(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.json")
 	original := []byte(`{"upstream":[{"name":"test","apiKeys":["sk-test"],"apiKeyConfigs":[{"key":"sk-test","groupMultiplier":0.35}]}]}`)
@@ -126,9 +126,8 @@ func TestAPIKeyGroupMultiplierSurvivesLoadSaveAndRestart(t *testing.T) {
 	}
 	check := func(cm *ConfigManager) {
 		t.Helper()
-		configs := NormalizeAPIKeyConfigsForView(cm.GetConfig().Upstream[0])
-		if len(configs) != 1 || configs[0].GroupMultiplier == nil || *configs[0].GroupMultiplier != 0.35 {
-			t.Fatalf("API Key 分组倍率未保留: %+v", configs)
+		if got := cm.GetConfig().Upstream[0].BillingMultiplier(); got != 0.35 {
+			t.Fatalf("渠道倍率 = %v, want 0.35", got)
 		}
 	}
 

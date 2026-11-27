@@ -110,9 +110,6 @@ export interface GroupModelMutationResponse {
 }
 
 export interface APIKeyConfig {
-  groupMultiplier?: number | null
-  multiplierSource?: string
-  multiplierUpdatedAt?: string
   sourceAccountUid?: string
   sourceRemoteTokenId?: number
   remoteStatus?: string
@@ -171,7 +168,7 @@ export interface ModelPricingTier {
 export interface Channel {
   siteAccountUid?: string
   siteGroup?: string
-  maxGroupMultiplier?: number | null
+  groupMultiplier?: number | null
   name: string
   serviceType: 'openai' | 'gemini' | 'claude' | 'responses' | 'copilot'
   authHeader?: ChannelAuthHeader | ''

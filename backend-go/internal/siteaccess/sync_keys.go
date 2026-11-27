@@ -39,6 +39,7 @@ func listAllTokens(ctx context.Context, a siteAdapter, account SiteAccount, toke
 func syncRemoteKey(cm *config.ConfigManager, apiType string, index int, channel config.UpstreamConfig, meta ProvisionedKeyMeta, remote NewApiToken, ratios map[string]float64) (bool, error) {
 	configs := append([]config.APIKeyConfig(nil), channel.APIKeyConfigs...)
 	found := false
+	var multiplier config.OptionalMultiplier
 	for _, key := range channel.APIKeys {
 		if keyFingerprint(key) != meta.KeyFingerprint {
 			continue
@@ -61,12 +62,11 @@ func syncRemoteKey(cm *config.ConfigManager, apiType string, index int, channel 
 			cfg.RemoteStatus = "group_missing"
 		} else if !validNewApiGroupRatio(ratio) {
 			return false, fmt.Errorf("远端分组倍率无效，保留最近可信配置")
-		} else {
-			cfg.GroupMultiplier = &ratio
-			if cfg.MultiplierSource == "" {
-				cfg.MultiplierSource = "newapi"
+		} else if remote.Group == meta.Group && channel.SiteGroup == meta.Group &&
+			(cfg.SourceAccountUID == "" || cfg.SourceAccountUID == channel.SiteAccountUID) {
+			if channel.GroupMultiplier == nil || *channel.GroupMultiplier != ratio {
+				multiplier = config.OptionalMultiplier{Present: true, Value: &ratio}
 			}
-			cfg.MultiplierUpdatedAt = time.Now().UTC().Format(time.RFC3339)
 		}
 		if remote.Status != 0 && remote.Status != 1 {
 			cfg.RemoteStatus = "disabled"
@@ -92,10 +92,10 @@ func syncRemoteKey(cm *config.ConfigManager, apiType string, index int, channel 
 	if !found {
 		return false, nil
 	}
-	changed := !reflect.DeepEqual(channel.APIKeyConfigs, configs)
+	changed := multiplier.Present || !reflect.DeepEqual(channel.APIKeyConfigs, configs)
 	if !changed {
 		return false, nil
 	}
-	_, err := updateProtocolChannel(cm, apiType, index, config.UpstreamUpdate{APIKeyConfigs: configs, ExpectedSiteSnapshot: &channel})
+	_, err := updateProtocolChannel(cm, apiType, index, config.UpstreamUpdate{APIKeyConfigs: configs, GroupMultiplier: multiplier, ExpectedSiteSnapshot: &channel})
 	return true, err
 }

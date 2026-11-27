@@ -74,7 +74,7 @@ func (cm *ConfigManager) AddVectorsUpstream(upstream UpstreamConfig) error {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
-	if err := validateKeySettings(upstream.APIKeyConfigs, upstream.MaxGroupMultiplier); err != nil {
+	if err := validateGroupMultiplier(upstream.GroupMultiplier); err != nil {
 		return err
 	}
 
@@ -162,7 +162,7 @@ func (cm *ConfigManager) UpdateVectorsUpstream(index int, updates UpstreamUpdate
 		return false, err
 	}
 
-	if err := validateKeySettings(updates.APIKeyConfigs, updates.MaxGroupMultiplier.Value); err != nil {
+	if err := validateGroupMultiplier(updates.GroupMultiplier.Value); err != nil {
 		return false, err
 	}
 

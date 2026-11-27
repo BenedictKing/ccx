@@ -148,7 +148,7 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     description: '',
     apiKeys: [] as string[],
     apiKeyConfigs: undefined as Channel['apiKeyConfigs'],
-    maxGroupMultiplier: null as number | null,
+    groupMultiplier: null as number | null,
     modelMapping: {} as Record<string, string>,
     modelCapabilitiesText: '',
     modelCapabilityRows: [] as ModelCapabilityRow[],
@@ -194,6 +194,8 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     historicalImageTurnLimit: 0,
   })
 
+  const managedMultiplier = computed(() => !!props.channel?.siteAccountUid &&
+    !!form.apiKeyConfigs?.some(cfg => cfg.sourceRemoteTokenId))
   const channelTypeRef = computed(() => props.channelType)
   const {
     serviceTypeOptions,
@@ -697,6 +699,7 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
 
   const buildSubmitPayload = () => {
     const payload = buildChannelPayload(form, { channelType: props.channelType })
+    if (managedMultiplier.value) delete payload.groupMultiplier
     applyVisionFallbackReasoning(payload)
     if (!form.streamFirstContentTimeoutEnabled) {
       delete payload.streamFirstContentTimeoutMs
@@ -769,7 +772,7 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     form.description = ''
     form.apiKeys = []
     form.apiKeyConfigs = undefined
-    form.maxGroupMultiplier = null
+    form.groupMultiplier = null
     form.modelMapping = {}
     form.modelCapabilitiesText = ''
     form.modelCapabilityRows = []
@@ -856,7 +859,7 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
 
     // 直接存储原始密钥，不需要映射关系
     form.apiKeys = [...channel.apiKeys]
-    form.maxGroupMultiplier = channel.maxGroupMultiplier ?? null
+    form.groupMultiplier = channel.groupMultiplier ?? null
     form.apiKeyConfigs = channel.apiKeyConfigs
       ? channel.apiKeyConfigs.map(cfg => ({
           ...cfg,
@@ -1270,6 +1273,7 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
 
   return {
     formRef,
+    managedMultiplier,
     activeSection,
     sections,
     baseUrlHasError,

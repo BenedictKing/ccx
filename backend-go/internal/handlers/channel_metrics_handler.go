@@ -686,7 +686,7 @@ func getChannelKeyMetricsHistoryWithKind(metricsManager *metrics.MetricsManager,
 							OutputTokens:             b.OutputTokens,
 							CacheCreationInputTokens: b.CacheCreationTokens,
 							CacheReadInputTokens:     b.CacheReadTokens,
-							CostUSD:                  metrics.CalculateTokenCostUSDForKey(model, &upstream, keyInfo.APIKey, cfg.UpstreamModelCapabilities, b.InputTokens, b.OutputTokens, b.CacheCreationTokens, b.CacheReadTokens),
+							CostUSD:                  metrics.CalculateTokenCostUSDForChannel(model, &upstream, cfg.UpstreamModelCapabilities, b.InputTokens, b.OutputTokens, b.CacheCreationTokens, b.CacheReadTokens),
 						})
 					}
 					sort.Slice(dataPoints, func(i, j int) bool {
@@ -745,7 +745,7 @@ func getChannelKeyMetricsHistoryWithKind(metricsManager *metrics.MetricsManager,
 						OutputTokens:             p.OutputTokens,
 						CacheCreationInputTokens: p.CacheCreationInputTokens,
 						CacheReadInputTokens:     p.CacheReadInputTokens,
-						CostUSD:                  metrics.CalculateTokenCostUSDForKey(model, &upstream, keyInfo.APIKey, cfg.UpstreamModelCapabilities, p.InputTokens, p.OutputTokens, p.CacheCreationInputTokens, p.CacheReadInputTokens),
+						CostUSD:                  metrics.CalculateTokenCostUSDForChannel(model, &upstream, cfg.UpstreamModelCapabilities, p.InputTokens, p.OutputTokens, p.CacheCreationInputTokens, p.CacheReadInputTokens),
 					}
 				}
 				result.Keys = append(result.Keys, KeyMetricsHistoryResult{
@@ -767,7 +767,7 @@ func getChannelKeyMetricsHistoryWithKind(metricsManager *metrics.MetricsManager,
 			channelModelData := metricsManager.GetKeyModelHistoricalStatsMultiURL(upstream.GetAllBaseURLs(), apiKey, serviceType, duration, interval)
 			for model, points := range channelModelData {
 				for _, p := range points {
-					result.Summary.TotalCostUSD += metrics.CalculateTokenCostUSDForKey(model, &upstream, apiKey, cfg.UpstreamModelCapabilities, p.InputTokens, p.OutputTokens, p.CacheCreationInputTokens, p.CacheReadInputTokens)
+					result.Summary.TotalCostUSD += metrics.CalculateTokenCostUSDForChannel(model, &upstream, cfg.UpstreamModelCapabilities, p.InputTokens, p.OutputTokens, p.CacheCreationInputTokens, p.CacheReadInputTokens)
 				}
 			}
 		}

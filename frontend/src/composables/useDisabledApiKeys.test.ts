@@ -9,7 +9,7 @@ type ChannelType = 'messages' | 'chat' | 'responses' | 'gemini' | 'images' | 've
 function createState(channelType: ChannelType = 'chat') {
   const form = reactive<{ apiKeys: string[]; apiKeyConfigs?: APIKeyConfig[] }>({
     apiKeys: ['sk-test'],
-    apiKeyConfigs: [{ key: 'sk-test', groupMultiplier: 0.5 }],
+    apiKeyConfigs: [{ key: 'sk-test', weight: 2 }],
   })
   const apiService = {
     setApiKeySuspended: vi.fn().mockResolvedValue(undefined),
@@ -45,7 +45,7 @@ describe('useDisabledApiKeys 暂停与恢复', () => {
     expect(form.apiKeyConfigs?.[0]).toMatchObject({
       key: 'sk-test',
       enabled: false,
-      groupMultiplier: 0.5,
+      weight: 2,
     })
     expect(state.suspendingKey.value).toBe('')
   })

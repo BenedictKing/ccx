@@ -32,9 +32,6 @@ func HasEffectiveConfig(upstream *config.UpstreamConfig) bool {
 	if upstream == nil {
 		return false
 	}
-	if upstream.MaxGroupMultiplier != nil {
-		return true
-	}
 	for _, cfg := range upstream.APIKeyConfigs {
 		if config.IsAPIKeyConfigEffective(cfg) {
 			return true
@@ -64,7 +61,7 @@ func CandidatesForModel(upstream *config.UpstreamConfig, failedKeys map[string]b
 		if key == "" || failedKeys[key] {
 			continue
 		}
-		if !upstream.IsAPIKeyGroupMultiplierAllowed(key) {
+		if !upstream.IsAPIKeyRemoteAvailable(key) {
 			continue
 		}
 		cfg := byKey[key]
@@ -86,10 +83,7 @@ func CandidatesForModel(upstream *config.UpstreamConfig, failedKeys map[string]b
 		if model != "" && upstream.IsGroupModelDisabled(key, quotaGroup, model) {
 			continue
 		}
-		scope := "key:" + stableKeyID(key)
-		if quotaGroup != "" {
-			scope = "quota:" + stableKeyID("quota:"+quotaGroup)
-		}
+		scope := LimiterScope(key, quotaGroup)
 		out = append(out, Candidate{
 			APIKey:     key,
 			Config:     cfg,
@@ -215,6 +209,13 @@ func ConfigForCandidate(channel config.UpstreamConfig, cfg config.APIKeyConfig) 
 		MaxConcurrent:   maxConcurrent,
 		AutoFromHeaders: autoFromHeaders,
 	}
+}
+
+func LimiterScope(key, quotaGroup string) string {
+	if quotaGroup != "" {
+		return "quota:" + stableKeyID("quota:"+quotaGroup)
+	}
+	return "key:" + stableKeyID(key)
 }
 
 func stableKeyID(key string) string {

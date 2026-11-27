@@ -6,7 +6,6 @@ import (
 	"github.com/BenedictKing/ccx/internal/config"
 	"github.com/BenedictKing/ccx/internal/metrics"
 	"github.com/BenedictKing/ccx/internal/scheduler"
-	"github.com/BenedictKing/ccx/internal/utils"
 	"github.com/gin-gonic/gin"
 )
 
@@ -56,7 +55,7 @@ func GetChannelLogs(
 		if logs == nil {
 			logs = make([]*metrics.ChannelLog, 0)
 		}
-		applyChannelLogCosts(logs, upstream, normalizedServiceType, cfgManager.GetConfig().UpstreamModelCapabilities)
+		applyChannelLogCosts(logs, upstream, cfgManager.GetConfig().UpstreamModelCapabilities)
 
 		c.JSON(200, gin.H{
 			"channelIndex": channelIndex,
@@ -66,42 +65,14 @@ func GetChannelLogs(
 	}
 }
 
-// applyChannelLogCosts 按当前模型价格与 Key 分组倍率估算单条日志费用。
-// logs 为 store 返回的副本；优先使用指标身份，脱敏 Key 冲突或无法反查时按倍率 1 计算。
-func applyChannelLogCosts(logs []*metrics.ChannelLog, upstream *config.UpstreamConfig, normalizedServiceType string, global map[string]config.UpstreamModelCapability) {
-	if len(logs) == 0 || upstream == nil {
-		return
-	}
-	keyByMask := make(map[string]string)
-	keyByMetricsKey := make(map[string]string)
-	for _, apiKey := range channelStatsAPIKeys(*upstream) {
-		mask := utils.MaskAPIKey(apiKey)
-		if previous, exists := keyByMask[mask]; !exists {
-			keyByMask[mask] = apiKey
-		} else if previous != apiKey {
-			keyByMask[mask] = ""
-		}
-		for _, baseURL := range upstream.GetAllBaseURLs() {
-			for _, metricsKey := range metrics.GenerateMetricsLookupKeys(baseURL, apiKey, normalizedServiceType) {
-				keyByMetricsKey[metricsKey] = apiKey
-			}
-		}
-	}
-	for _, logEntry := range logs {
-		if logEntry == nil || (logEntry.InputTokens == 0 && logEntry.OutputTokens == 0 && logEntry.CacheCreationTokens == 0 && logEntry.CacheReadTokens == 0) {
+// applyChannelLogCosts 按当前模型价格与渠道倍率估算日志费用。
+func applyChannelLogCosts(logs []*metrics.ChannelLog, upstream *config.UpstreamConfig, global map[string]config.UpstreamModelCapability) {
+	for _, entry := range logs {
+		if entry == nil || (entry.InputTokens == 0 && entry.OutputTokens == 0 && entry.CacheCreationTokens == 0 && entry.CacheReadTokens == 0) {
 			continue
 		}
-		input, output := int64(logEntry.InputTokens), int64(logEntry.OutputTokens)
-		cacheCreation, cacheRead := int64(logEntry.CacheCreationTokens), int64(logEntry.CacheReadTokens)
-		apiKey := keyByMetricsKey[logEntry.MetricsKey]
-		if apiKey == "" {
-			apiKey = keyByMask[logEntry.KeyMask]
-		}
-		if apiKey != "" {
-			logEntry.CostUSD = metrics.CalculateTokenCostUSDForKey(logEntry.Model, upstream, apiKey, global, input, output, cacheCreation, cacheRead)
-		} else {
-			logEntry.CostUSD = metrics.CalculateTokenCostUSDWithConfig(logEntry.Model, upstream, global, input, output, cacheCreation, cacheRead)
-		}
+		entry.CostUSD = metrics.CalculateTokenCostUSDForChannel(entry.Model, upstream, global,
+			int64(entry.InputTokens), int64(entry.OutputTokens), int64(entry.CacheCreationTokens), int64(entry.CacheReadTokens))
 	}
 }
 

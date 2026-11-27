@@ -178,10 +178,10 @@ func costCalculatorForUpstreams(upstreams []config.UpstreamConfig, kind schedule
 	byMetricsKey := make(map[string]keyCostConfig)
 	for i := range upstreams {
 		upstream := &upstreams[i]
+		multiplier := upstream.BillingMultiplier()
 		serviceType := scheduler.NormalizedMetricsServiceType(kind, upstream.ServiceType)
 		for _, baseURL := range upstream.GetAllBaseURLs() {
 			for _, key := range channelStatsAPIKeys(*upstream) {
-				multiplier := upstream.APIKeyGroupMultiplier(key)
 				for _, identity := range metrics.GenerateMetricsLookupKeys(baseURL, key, serviceType) {
 					if previous, exists := byMetricsKey[identity]; exists && previous.upstream != upstream {
 						previous.upstream = nil // 同一指标身份无法区分两个渠道价格。

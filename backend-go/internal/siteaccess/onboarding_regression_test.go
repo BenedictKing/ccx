@@ -82,35 +82,35 @@ func TestAccountChannelsSurviveRenameAndRemainIsolated(t *testing.T) {
 	}
 }
 
-func TestMultiplierSyncBlocksAndRecoversWithoutOverridingManualDisable(t *testing.T) {
+func TestMultiplierSyncChangesChannelCostWithoutOverridingManualDisable(t *testing.T) {
 	site, uid, store, cm, adapter := newProvisionTestDeps(t)
 	defer cm.Close()
 	_, err := ProvisionProtocol(context.Background(), store, cm, adapter, ProvisionRequest{AccountUID: uid, Protocol: "chat", Groups: []string{"default"}, Models: []string{"gpt-4o"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	check := func(want bool) {
+	check := func(want float64) {
 		t.Helper()
 		ch := cm.GetConfig().ChatUpstream[0]
-		if ch.IsAPIKeyGroupMultiplierAllowed(ch.APIKeys[0]) != want {
-			t.Fatalf("倍率准入不符: %+v", ch.APIKeyConfigs)
+		if got := ch.BillingMultiplier(); got != want || !ch.IsAPIKeyRemoteAvailable(ch.APIKeys[0]) {
+			t.Fatalf("倍率或调度状态不符: got %v, want %v", got, want)
 		}
 	}
-	check(true)
+	check(1)
 	site.mu.Lock()
 	site.groups["default"] = 2
 	site.mu.Unlock()
 	if _, err := ReconcileAccount(context.Background(), store, cm, adapter, uid); err != nil {
 		t.Fatal(err)
 	}
-	check(false)
+	check(2)
 	site.mu.Lock()
 	site.groups["default"] = 0
 	site.mu.Unlock()
 	if _, err := ReconcileAccount(context.Background(), store, cm, adapter, uid); err != nil {
 		t.Fatal(err)
 	}
-	check(true)
+	check(0)
 	ch := cm.GetConfig().ChatUpstream[0]
 	no := false
 	ch.APIKeyConfigs[0].Enabled = &no
@@ -230,7 +230,7 @@ func TestExistingChannelAccountBindingPreservesKeysAndRefreshesRatio(t *testing.
 		t.Fatal(err)
 	}
 	unbound := cm.GetConfig().ChatUpstream[0]
-	if unbound.SiteAccountUID != "" || unbound.SiteGroup != "" || unbound.APIKeyConfigs[0].MultiplierSource != "manual" {
+	if unbound.SiteAccountUID != "" || unbound.SiteGroup != "" || unbound.BillingMultiplier() != original.BillingMultiplier() {
 		t.Fatalf("解绑状态不符: %+v", unbound)
 	}
 	if fmt.Sprint(unbound.APIKeys) != fmt.Sprint(originalKeys) || unbound.Name != original.Name {
@@ -244,7 +244,7 @@ func TestExistingChannelAccountBindingPreservesKeysAndRefreshesRatio(t *testing.
 		t.Fatal(err)
 	}
 	bound := cm.GetConfig().ChatUpstream[0]
-	if bound.SiteAccountUID != uid || bound.SiteGroup != "default" || *bound.APIKeyConfigs[0].GroupMultiplier != 0.25 {
+	if bound.SiteAccountUID != uid || bound.SiteGroup != "default" || bound.BillingMultiplier() != 0.25 {
 		t.Fatalf("绑定或倍率同步失败: %+v", bound)
 	}
 	if fmt.Sprint(bound.APIKeys) != fmt.Sprint(originalKeys) || bound.Name != original.Name {
@@ -346,7 +346,7 @@ func TestGroupCopyKeepsOriginalAndUsesIndependentKey(t *testing.T) {
 		t.Fatal("空模型分组不应创建渠道副本")
 	}
 	site.mu.Lock()
-	site.groups["vip"] = 0.5
+	site.groups["vip"] = 2.0
 	site.mu.Unlock()
 	req := ChannelGroupCopyRequest{KeyBindingRequest: KeyBindingRequest{AccountUID: uid, Protocol: "chat", ChannelIndex: 0, APIKey: original.APIKeys[0], Group: "vip"}}
 	result, err := CopyChannelToGroup(context.Background(), store, cm, adapter, req)
@@ -361,7 +361,7 @@ func TestGroupCopyKeepsOriginalAndUsesIndependentKey(t *testing.T) {
 		t.Fatalf("原渠道被改写: %+v", channels)
 	}
 	copy := channels[0]
-	if copy.SiteAccountUID != uid || copy.SiteGroup != "vip" || len(copy.APIKeys) != 1 || copy.APIKeys[0] == original.APIKeys[0] || *copy.APIKeyConfigs[0].GroupMultiplier != 0.5 {
+	if copy.SiteAccountUID != uid || copy.SiteGroup != "vip" || len(copy.APIKeys) != 1 || copy.APIKeys[0] == original.APIKeys[0] || copy.BillingMultiplier() != 2 {
 		t.Fatalf("副本分组或 Key 不符: %+v", copy)
 	}
 	req.ChannelIndex = 1
@@ -376,7 +376,7 @@ func TestGroupCopyKeepsOriginalAndUsesIndependentKey(t *testing.T) {
 		t.Fatal(err)
 	}
 	channels = cm.GetConfig().ChatUpstream
-	if *channels[0].APIKeyConfigs[0].GroupMultiplier != 0.25 || *channels[1].APIKeyConfigs[0].GroupMultiplier != 1 {
-		t.Fatalf("分组对账串写: vip=%v default=%v", channels[0].APIKeyConfigs[0].GroupMultiplier, channels[1].APIKeyConfigs[0].GroupMultiplier)
+	if channels[0].BillingMultiplier() != 0.25 || channels[1].BillingMultiplier() != 1 {
+		t.Fatalf("分组对账串写: vip=%v default=%v", channels[0].BillingMultiplier(), channels[1].BillingMultiplier())
 	}
 }

@@ -40,12 +40,12 @@ func TestGlobalCostKeepsSameModelChannelPricesSeparate(t *testing.T) {
 	}
 }
 
-func TestGlobalCostAppliesKeyGroupMultipliers(t *testing.T) {
-	zero, discount, price := 0.0, 0.5, 2.0
+func TestGlobalCostUsesChannelMultiplierForAllKeys(t *testing.T) {
+	discount, price := 0.5, 2.0
 	upstream := config.UpstreamConfig{
 		BaseURL: "https://relay.example", APIKeys: []string{"free", "discount", "standard"},
-		APIKeyConfigs:   []config.APIKeyConfig{{Key: "free", GroupMultiplier: &zero}, {Key: "discount", GroupMultiplier: &discount}},
-		DisabledAPIKeys: []config.DisabledKeyInfo{{Key: "disabled-free", Config: &config.APIKeyConfig{Key: "disabled-free", GroupMultiplier: &zero}}},
+		GroupMultiplier: &discount,
+		DisabledAPIKeys: []config.DisabledKeyInfo{{Key: "disabled-free"}},
 		ModelCapabilities: map[string]config.UpstreamModelCapability{
 			"private-model": {Pricing: &config.ModelPricing{Currency: "USD", InputCacheMissPrice: &price}},
 		},
@@ -65,7 +65,7 @@ func TestGlobalCostAppliesKeyGroupMultipliers(t *testing.T) {
 			for _, tc := range []struct {
 				key  string
 				want float64
-			}{{"free", 0}, {"discount", 1}, {"standard", 2}, {"disabled-free", 0}} {
+			}{{"free", 1}, {"discount", 1}, {"standard", 1}, {"disabled-free", 1}} {
 				for _, identity := range metrics.GenerateMetricsLookupKeys(upstream.BaseURL, tc.key, serviceType) {
 					if got := calculate(identity, "private-model", 1_000_000, 0, 0, 0); got != tc.want {
 						t.Errorf("key %s cost = %v, want %v", tc.key, got, tc.want)
@@ -95,7 +95,7 @@ func TestGlobalCostKeepsConsistentMultiplierForSharedKeys(t *testing.T) {
 			for _, multiplier := range tc.multipliers {
 				cfg.ChatUpstream = append(cfg.ChatUpstream, config.UpstreamConfig{
 					BaseURL: "https://shared.example", APIKeys: []string{"sk-shared"}, ServiceType: "openai",
-					APIKeyConfigs: []config.APIKeyConfig{{Key: "sk-shared", GroupMultiplier: multiplier}},
+					GroupMultiplier: multiplier,
 				})
 			}
 			calculate := globalCostCalculator(cfg, scheduler.ChannelKindChat)

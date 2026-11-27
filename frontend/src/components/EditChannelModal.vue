@@ -66,10 +66,10 @@
                 :channel-id="props.channel?.index"
                 :proxy-url="form.proxyUrl"
                 :api-key-configs="form.apiKeyConfigs"
-                :max-group-multiplier="form.maxGroupMultiplier"
+                :group-multiplier="form.groupMultiplier"
+                :managed-multiplier="managedMultiplier"
                 @update:api-keys="form.apiKeys = $event"
-                @update:api-key-configs="form.apiKeyConfigs = $event"
-                @update:max-group-multiplier="form.maxGroupMultiplier = $event"
+                @update:group-multiplier="form.groupMultiplier = $event"
                 @update:proxy-url="form.proxyUrl = $event"
                 @bind-account="bindingKey = $event"
                 @restore-key="restoreDisabledKey"
@@ -470,6 +470,7 @@ const {
   showClaudeChannelPresets,
   showCodexResponsesChannelPresets,
   form,
+  managedMultiplier,
   baseUrlsText,
   modelMappingRows,
   hasNoVisionRows,

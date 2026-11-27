@@ -9,6 +9,8 @@
 
 - 六类渠道分别保存在 `upstream`、`chatUpstream`、`responsesUpstream`、`geminiUpstream`、`imagesUpstream`、`vectorsUpstream`；管理路径统一为 `/api/{type}/channels/*`。
 - `channelUid` 是历史观测和子代理策略使用的稳定身份；数组 `index` 只用于当前管理操作，重排、改名和换 Key 不得改变 UID。
+- `groupMultiplier` 是整个渠道的费用倍率，适用于所有当前及历史 Key。留空按 1，填写 0 表示免费；接受任意有限非负值。不按倍率筛选 Key。Web 和桌面渠道编辑只展示一个倍率字段，说明不同倍率应拆分渠道；站点托管的倍率由绑定与对账维护。
+- 升级旧配置时，仅当旧渠道各当前及停用 Key 的有效倍率一致才迁移到渠道（未设置的 Key 按 1）；显式渠道倍率优先。旧值不一致时按 1，保留迁移前配置备份并记录渠道名称，供用户按需拆分。旧 Key 倍率和渠道倍率上限不再写出。
 - `serviceType` 描述上游协议，`channelKind` 描述 CCX 对外入口，两者可以不同；不得仅凭模型名称猜测协议。
 - 渠道发现使用表单草稿和临时配置，不直接保存渠道；连通性测试使用已保存渠道，结果不构成对所有上游能力的永久保证。
 
@@ -108,7 +110,7 @@ Web/Desktop 还需验证长模型名、加载、空态、部分失败、无 Key�
 
 ## 7. 实现与测试索引
 
-- 配置字段：`backend-go/internal/config/config.go`。
+- 配置字段：`backend-go/internal/config/config.go`；渠道倍率迁移与回归见 `key_group_multiplier.go`、`key_group_multiplier_test.go`。费用报表用本地 SQLite 验证，尚未使用托管站点真实账号验证。
 - 映射与白名单：`config_utils.go`及对应测试。
 - 能力与 Embedding：`model_registry.go`、`embedding_capability.go`。
 - 渠道发现：`channel_discovery.go`、`channel_discovery_test.go`。

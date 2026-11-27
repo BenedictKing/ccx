@@ -40,7 +40,8 @@ interface KeyModelsStatus {
 
 const props = defineProps<{
   apiKeyConfigs?: APIKeyConfig[]
-  maxGroupMultiplier?: number | null
+  groupMultiplier?: number | null
+  managedMultiplier?: boolean
   existingApiKeys: string[]
   newApiKeysText: string
   copiedKeyIndex: number | null
@@ -60,7 +61,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'update:apiKeyConfigs': [APIKeyConfig[]]
-  'update:maxGroupMultiplier': [number | null]
+  'update:groupMultiplier': [number | null]
   'update:newApiKeysText': [value: string]
   'addNewApiKeys': []
   'removeExistingApiKey': [index: number]
@@ -185,18 +186,6 @@ async function setKeySuspended(key: string, suspended: boolean) {
   }
 }
 
-function updateMultiplier(key: string, raw: unknown) {
-  const value = raw == null || raw === '' ? null : Number(raw)
-  let found = false
-  const configs = (props.apiKeyConfigs || []).map(cfg => {
-    if (cfg.key !== key) return cfg
-    found = true
-    return { ...cfg, groupMultiplier: value }
-  })
-  if (!found) configs.push({ key, groupMultiplier: value })
-  emit('update:apiKeyConfigs', configs)
-}
-
 function getKeyStatus(key: string) {
   return props.keyModelsStatus.get(key)
 }
@@ -238,8 +227,8 @@ const visibleDisabledKeys = computed(() => {
     <p v-if="errors.apiKeys" class="text-[10px] text-destructive">{{ errors.apiKeys }}</p>
     <p v-if="suspendError" class="text-[10px] text-destructive">{{ suspendError }}</p>
     <div class="space-y-1">
-      <label class="text-xs">{{ t('channelEditor.auth.maxMultiplier') }}<Input :model-value="maxGroupMultiplier ?? ''" type="number" min="0" step="any" class="mt-1 max-w-40" @update:model-value="emit('update:maxGroupMultiplier', $event === '' ? null : Number($event))" /></label>
-      <p class="text-xs text-muted-foreground">{{ t('channelEditor.auth.maxMultiplierHint') }}</p>
+      <label class="text-xs">{{ t('channelEditor.auth.groupMultiplier') }}<Input :model-value="groupMultiplier ?? ''" :readonly="managedMultiplier" type="number" min="0" step="any" class="mt-1 max-w-40" @update:model-value="emit('update:groupMultiplier', $event == null || $event === '' ? null : Number($event))" /></label>
+      <p class="text-xs text-muted-foreground">{{ t('channelEditor.auth.groupMultiplierHint') }}</p>
     </div>
 
     <!-- API Keys 列表 -->
@@ -257,7 +246,6 @@ const visibleDisabledKeys = computed(() => {
           <span v-if="isKeyPaused(key)" class="shrink-0 rounded bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-medium text-amber-600">
             {{ t('channelCard.keyPaused') }}
           </span>
-          <Input :model-value="apiKeyConfigs?.find(cfg => cfg.key === key)?.groupMultiplier ?? ''" :aria-label="t('channelEditor.auth.groupMultiplier')" :title="t('channelEditor.auth.groupMultiplier')" type="number" min="0" step="any" class="h-8 w-24" :readonly="!!apiKeyConfigs?.find(cfg => cfg.key === key)?.sourceRemoteTokenId" @update:model-value="updateMultiplier(key, $event)" />
           <span
             v-if="getKeyStatus(key)?.loading"
             class="rounded bg-sky-500/10 px-1.5 py-0.5 text-[9px] font-medium text-sky-600"

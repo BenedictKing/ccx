@@ -25,13 +25,13 @@ func doMinimalInferenceRequest(ctx context.Context, channel config.UpstreamConfi
 	}
 	apiKey := ""
 	for _, key := range channel.APIKeys {
-		if channel.IsAPIKeyGroupMultiplierAllowed(key) {
+		if channel.IsAPIKeyEnabled(key) && channel.IsAPIKeyRemoteAvailable(key) {
 			apiKey = key
 			break
 		}
 	}
 	if apiKey == "" {
-		return fmt.Errorf("没有符合倍率上限和远端状态的 Key")
+		return fmt.Errorf("没有可用的 Key")
 	}
 
 	var method, path string

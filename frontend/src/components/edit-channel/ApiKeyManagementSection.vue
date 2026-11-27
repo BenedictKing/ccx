@@ -17,7 +17,7 @@
       </v-card-title>
 
       <v-card-text class="pt-2">
-        <v-text-field :model-value="maxGroupMultiplier" :label="t('channelEditor.auth.maxMultiplier')" :hint="t('channelEditor.auth.maxMultiplierHint')" persistent-hint clearable type="number" min="0" step="any" variant="outlined" density="compact" class="mb-4" :rules="[validMultiplier]" @update:model-value="updateLimit" />
+        <v-text-field :model-value="groupMultiplier" :label="t('channelEditor.auth.groupMultiplier')" :hint="t('channelEditor.auth.groupMultiplierHint')" persistent-hint :clearable="!managedMultiplier" :readonly="managedMultiplier" type="number" min="0" step="any" variant="outlined" density="compact" class="mb-4" :rules="[validMultiplier]" @update:model-value="updateMultiplier" />
         <!-- 现有密钥列表 -->
         <div v-if="apiKeys.length" class="mb-4">
           <v-list density="compact" class="bg-transparent">
@@ -87,25 +87,6 @@
                 </div>
               </v-list-item-title>
 
-              <v-list-item-subtitle class="d-flex align-center ga-2 mt-1">
-                <span class="text-caption">{{ t('channelEditor.auth.groupMultiplier') }}</span>
-                <v-text-field
-                  :model-value="getGroupMultiplierInput(key)"
-                  type="number"
-                  min="0"
-                  step="any"
-                  variant="outlined"
-                  density="compact"
-                  hide-details
-                  :aria-label="t('channelEditor.auth.groupMultiplier')"
-                  :readonly="!!apiKeyConfigs?.find(config => config.key === key)?.sourceRemoteTokenId"
-                  :rules="[validMultiplier]"
-                  class="group-multiplier-input"
-                  @update:model-value="stageGroupMultiplier(key, $event)"
-                  @blur="commitGroupMultiplier(key)"
-                  @keydown.enter="commitGroupMultiplier(key)"
-                />
-              </v-list-item-subtitle>
               <v-list-item-subtitle v-if="expandedGroupModelKey === key" class="d-flex align-center ga-2 mt-2">
                 <v-chip size="x-small" color="secondary" variant="tonal">
                   {{ getQuotaGroup(key) || t('channelCard.independentKey') }}
@@ -616,15 +597,15 @@ interface Props {
   channelId?: number
   proxyUrl?: string
   apiKeyConfigs?: APIKeyConfig[]
-  maxGroupMultiplier?: number | null
+  groupMultiplier?: number | null
+  managedMultiplier?: boolean
 }
 
 const props = defineProps<Props>()
 
 const emit = defineEmits<{
   'update:apiKeys': [string[]]
-  'update:apiKeyConfigs': [APIKeyConfig[]]
-  'update:maxGroupMultiplier': [number | null]
+  'update:groupMultiplier': [number | null]
   'update:proxyUrl': [string]
   'bind-account': [string]
   'restore-key': [string]
@@ -684,54 +665,9 @@ const disableGroupModel = (key: string) => {
   const model = groupModelDrafts.value[key]?.trim()
   if (model) emit('disable-group-model', key, model)
 }
-const groupMultiplierDrafts = ref(new Map<string, string>())
 const validMultiplier = (value: unknown) => value == null || value === '' || (Number.isFinite(Number(value)) && Number(value) >= 0) || t('channelEditor.auth.multiplierInvalid')
-const updateLimit = (value: unknown) => {
-  if (validMultiplier(value) !== true) return
-  emit('update:maxGroupMultiplier', value == null || value === '' ? null : Number(value))
-}
-
-const getGroupMultiplier = (key: string): number | null => {
-  return props.apiKeyConfigs?.find(config => config.key === key)?.groupMultiplier ?? null
-}
-
-const getGroupMultiplierInput = (key: string): string | number => {
-  return groupMultiplierDrafts.value.get(key) ?? getGroupMultiplier(key) ?? ''
-}
-
-const stageGroupMultiplier = (key: string, value: unknown) => {
-  const drafts = new Map(groupMultiplierDrafts.value)
-  const raw = value == null ? '' : String(value)
-  drafts.set(key, raw)
-  groupMultiplierDrafts.value = drafts
-
-  const groupMultiplier = raw.trim() === '' ? null : Number(raw.trim())
-  if (groupMultiplier === null || (Number.isFinite(groupMultiplier) && groupMultiplier >= 0)) {
-    saveGroupMultiplier(key, groupMultiplier)
-  }
-}
-
-const commitGroupMultiplier = (key: string) => {
-  const drafts = new Map(groupMultiplierDrafts.value)
-  const raw = drafts.get(key)
-  if (raw === undefined) return
-
-  const groupMultiplier = raw.trim() === '' ? null : Number(raw.trim())
-  drafts.delete(key)
-  groupMultiplierDrafts.value = drafts
-  if (groupMultiplier !== null && (!Number.isFinite(groupMultiplier) || groupMultiplier < 0)) return
-  saveGroupMultiplier(key, groupMultiplier)
-}
-
-const saveGroupMultiplier = (key: string, groupMultiplier: number | null) => {
-  let found = false
-  const configs = (props.apiKeyConfigs ?? []).map(config => {
-    if (config.key !== key) return config
-    found = true
-    return { ...config, groupMultiplier }
-  })
-  if (!found && groupMultiplier !== null) configs.push({ key, groupMultiplier })
-  emit('update:apiKeyConfigs', configs)
+const updateMultiplier = (value: unknown) => {
+  emit('update:groupMultiplier', value == null || value === '' ? null : Number(value))
 }
 
 const visibleDisabledKeys = computed(() => {
@@ -909,10 +845,6 @@ const getDisabledKeyLabel = (reason: string) => {
 </script>
 
 <style scoped>
-.group-multiplier-input {
-  max-width: 140px;
-}
-
 .section-title {
   font-size: 1.125rem;
   font-weight: 600;

@@ -87,7 +87,7 @@ func TestSub2APIProvisionSyncAndImportContract(t *testing.T) {
 		t.Fatalf("重复创建 Key: %d", created)
 	}
 	ch := cm.GetConfig().ResponsesUpstream[0]
-	if ch.ServiceType != "responses" || ch.ModelMapping["sol"] != "gpt-test" || *ch.APIKeyConfigs[0].GroupMultiplier != 0 {
+	if ch.ServiceType != "responses" || ch.ModelMapping["sol"] != "gpt-test" || ch.BillingMultiplier() != 0 {
 		t.Fatalf("默认 Agent 配置或零倍率丢失: %+v", ch)
 	}
 	ratio = 2
@@ -95,8 +95,8 @@ func TestSub2APIProvisionSyncAndImportContract(t *testing.T) {
 		t.Fatal(err)
 	}
 	ch = cm.GetConfig().ResponsesUpstream[0]
-	if ch.IsAPIKeyGroupMultiplierAllowed(ch.APIKeys[0]) {
-		t.Fatal("用户专属倍率越限未退出调度")
+	if ch.BillingMultiplier() != 2 || !ch.IsAPIKeyRemoteAvailable(ch.APIKeys[0]) {
+		t.Fatal("应更新渠道倍率，不应限制 Key 调度")
 	}
 }
 
@@ -116,7 +116,7 @@ func TestInferenceKeyImportNeedsNoManagementAPI(t *testing.T) {
 		t.Fatalf("导入失败: %+v %v", result, err)
 	}
 	ch := cm.GetConfig().Upstream[0]
-	if ch.APIKeys[0] != "sk-inference" || ch.ModelMapping["claude"] != "chosen-model" || ch.APIKeyConfigs[0].GroupMultiplier != nil {
+	if ch.APIKeys[0] != "sk-inference" || ch.ModelMapping["claude"] != "chosen-model" || ch.GroupMultiplier != nil {
 		t.Fatal("推理 Key 或模型配置不符，未知倍率不得当作 0")
 	}
 }

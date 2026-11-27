@@ -19,7 +19,7 @@ func BuildChannelView(up config.UpstreamConfig, index int) gin.H {
 		"apiKeys":                       up.APIKeys,
 		"siteAccountUid":                up.SiteAccountUID,
 		"siteGroup":                     up.SiteGroup,
-		"maxGroupMultiplier":            up.MaxGroupMultiplier,
+		"groupMultiplier":               up.GroupMultiplier,
 		"apiKeyConfigs":                 config.NormalizeAPIKeyConfigsForView(up),
 		"description":                   up.Description,
 		"website":                       up.Website,

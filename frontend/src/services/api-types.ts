@@ -110,9 +110,6 @@ export interface APIKeyConfig {
   name?: string
   enabled?: boolean
   quotaGroup?: string
-  groupMultiplier?: number | null
-  multiplierSource?: string
-  multiplierUpdatedAt?: string
   sourceAccountUid?: string
   sourceRemoteTokenId?: number
   remoteStatus?: string
@@ -168,7 +165,7 @@ export interface Channel {
   channelUid?: string
   siteAccountUid?: string
   siteGroup?: string
-  maxGroupMultiplier?: number | null
+  groupMultiplier?: number | null
   name: string
   serviceType: 'openai' | 'gemini' | 'claude' | 'responses' | 'copilot'
   authHeader?: ChannelAuthHeader | ''

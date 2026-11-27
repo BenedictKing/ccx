@@ -67,7 +67,7 @@
 ### 主动限速与冷却
 
 - 渠道/Key 或 quota scope 可使用滑动窗口和并发信号量；排队超过允许等待或处于 cooldown 时快速 failover。
-- `rateLimitAutoFromHeaders=true` 时解析 `Retry-After`、Anthropic 和 OpenAI reset/remaining 头；429/5xx 取最晚有效冷却，成功响应也可识别耗尽信号。
+- `rateLimitAutoFromHeaders=true` 时解析 `Retry-After`、Anthropic 和 OpenAI reset/remaining 头。429 和剩余额度耗尽只冷却实际使用的 Key 或显式共享的 quota group，其他 Key 仍按渠道总限速尝试；5xx 退避保留渠道作用域。
 - 冷却只延长不缩短，最多到当前时间后 1 小时；热更新配置保留已有 cooldown 和运行令牌。
 
 ## 5. 状态、异常与恢复边界
@@ -102,5 +102,5 @@
 - 定时恢复：`scheduler/recovery.go`、`channel_scheduler_recovery_test.go`。
 - 请求预算与故障转移：`common/retry_budget.go`、`multi_channel_failover.go`、`upstream_failover.go`及对应集成测试。
 - 熔断：`metrics/channel_metrics_circuit.go`、`channel_metrics_circuit_breaker_test.go`。
-- 主动限速：`ratelimit/limiter.go`、`hints.go`及包内测试。
+- 主动限速：`ratelimit/limiter.go`、`hints.go`及包内测试。智谱 429/1308 的出站次数、共享配额组和 5xx 渠道退避见 `upstream_failover_test.go` 的本地假上游测试；未再次请求真实上游。
 - 调度诊断：`handlers/scheduler_diagnose_handler.go`及测试。

@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/BenedictKing/ccx/internal/config"
+	"github.com/BenedictKing/ccx/internal/keypool"
 	"github.com/BenedictKing/ccx/internal/metrics"
 	"github.com/BenedictKing/ccx/internal/ratelimit"
 	"github.com/BenedictKing/ccx/internal/scheduler"
@@ -859,4 +860,101 @@ func newTestFailoverDependencies(t *testing.T, upstream config.UpstreamConfig) (
 	}
 
 	return cfgManager, channelScheduler, messagesMetrics, cleanup
+}
+
+func TestUpstreamRetryAfterUsesCredentialQuotaFor429(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		status  int
+		configs []config.APIKeyConfig
+		wantKey string
+	}{
+		{"bare keys", http.StatusTooManyRequests, nil, "sk-same-quota"},
+		{"shared quota", http.StatusTooManyRequests, []config.APIKeyConfig{
+			{Key: "sk-first", QuotaGroup: "account-a"},
+			{Key: "sk-same-quota", QuotaGroup: "account-a"},
+		}, "sk-independent"},
+		{"server backoff", http.StatusServiceUnavailable, nil, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sent := make(chan string, 3)
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				key := r.Header.Get("X-Api-Key")
+				sent <- key
+				if key == "sk-first" {
+					w.Header().Set("Retry-After", "10997")
+					w.WriteHeader(tc.status)
+					if tc.status == http.StatusTooManyRequests {
+						_, _ = w.Write([]byte(`{"type":"error","error":{"type":"rate_limit_error","code":"1308","message":"已达到 5 小时的使用上限"}}`))
+					} else {
+						_, _ = w.Write([]byte(`{"error":{"message":"upstream error"}}`))
+					}
+					return
+				}
+				_, _ = w.Write([]byte(`{"ok":true}`))
+			}))
+			defer server.Close()
+			upstream := config.UpstreamConfig{
+				Name: "glm", BaseURL: server.URL, ServiceType: "claude", Status: "active", RateLimitRPM: 5,
+				APIKeys: []string{"sk-first", "sk-same-quota", "sk-independent"}, APIKeyConfigs: tc.configs,
+			}
+			cm, sch, mm, cleanup := newTestFailoverDependencies(t, upstream)
+			defer cleanup()
+			manager := ratelimit.NewManager()
+			defer manager.Stop()
+			sch.SetRateLimitManager(manager)
+			limiter := manager.GetOrCreate("Messages", 0, ratelimit.Config{RPM: 5, AutoFromHeaders: true})
+			c, _ := gin.CreateTestContext(httptest.NewRecorder())
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", nil)
+			handled, key, _, _, _, err := TryUpstreamWithAllKeys(
+				c, config.NewEnvConfig(), cm, sch, scheduler.ChannelKindMessages, "Messages", mm, &upstream,
+				[]warmup.URLLatencyResult{{URL: server.URL}}, []byte(`{"model":"glm-5.4","messages":[]}`), nil, false,
+				func(u *config.UpstreamConfig, failed map[string]bool) (string, error) {
+					return cm.GetNextAPIKey(u, failed, "Messages")
+				},
+				func(c *gin.Context, u *config.UpstreamConfig, key string) (*http.Request, error) {
+					req, err := http.NewRequestWithContext(c.Request.Context(), http.MethodPost, u.BaseURL, strings.NewReader("{}"))
+					if err == nil {
+						req.Header.Set("X-Api-Key", key)
+					}
+					return req, err
+				},
+				nil, nil, nil,
+				func(*gin.Context, *http.Response, *config.UpstreamConfig, string, []byte) (*types.Usage, error) {
+					return &types.Usage{InputTokens: 1}, nil
+				},
+				"glm-5.4", "", 0, sch.GetChannelLogStore(scheduler.ChannelKindMessages),
+			)
+			if key != tc.wantKey || handled != (tc.wantKey != "") {
+				t.Fatalf("handled=%v key=%q, want key=%q, last error=%v", handled, key, tc.wantKey, err)
+			}
+			close(sent)
+			var got []string
+			for key := range sent {
+				got = append(got, key)
+			}
+			want := "sk-first"
+			if tc.wantKey != "" {
+				want += "," + tc.wantKey
+			}
+			if strings.Join(got, ",") != want {
+				t.Fatalf("requests sent upstream = %v, want %s", got, want)
+			}
+			if cooling, _ := limiter.InCooldown(time.Now()); cooling != (tc.status >= 500) {
+				t.Fatalf("channel cooldown = %v for HTTP %d", cooling, tc.status)
+			}
+			if tc.status == http.StatusTooManyRequests {
+				group := ""
+				if len(tc.configs) > 0 {
+					group = tc.configs[0].QuotaGroup
+				}
+				scope := keypool.LimiterScope("sk-first", group)
+				if scoped := manager.GetScoped("Messages", 0, scope); scoped == nil {
+					t.Fatalf("missing cooldown scope %s", scope)
+				} else if cooling, _ := scoped.InCooldown(time.Now()); !cooling {
+					t.Fatalf("scope %s should still be in cooldown", scope)
+				}
+			}
+		})
+	}
 }

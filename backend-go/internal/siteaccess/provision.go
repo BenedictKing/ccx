@@ -9,7 +9,6 @@ import (
 	"net/url"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/BenedictKing/ccx/internal/config"
 )
@@ -332,13 +331,11 @@ func aProvisionGroup(ctx context.Context, store *AccountStore, cfgManager *confi
 // 不存在则新建该协议的独立渠道。不触碰其他协议的配置数组。
 func upsertProvisionedChannel(cfgManager *config.ConfigManager, apiType, serviceType string, account SiteAccount, group newApiResolvedGroup, tokenID int, channelName, apiKey, previousFingerprint string, modelMapping map[string]string, supportedModels []string) error {
 	channels := protocolChannels(cfgManager, apiType)
-	keyConfig := config.APIKeyConfig{Key: apiKey, QuotaGroup: account.UID + "/" + group.Name, GroupMultiplier: &group.Ratio,
-		MultiplierSource: account.SiteType, MultiplierUpdatedAt: time.Now().UTC().Format(time.RFC3339), SourceAccountUID: account.UID, SourceRemoteTokenID: tokenID}
-	limit := &group.MaxMultiplier
-	if account.CredentialMode == "key" {
-		keyConfig.GroupMultiplier = nil
-		keyConfig.MultiplierSource = "manual"
-		limit = nil
+	keyConfig := config.APIKeyConfig{Key: apiKey, QuotaGroup: account.UID + "/" + group.Name,
+		SourceAccountUID: account.UID, SourceRemoteTokenID: tokenID}
+	var multiplier *float64
+	if account.CredentialMode != "key" {
+		multiplier = &group.Ratio
 	}
 	for i := range channels {
 		if !matchesAccountChannel(channels[i], account, group.Name, previousFingerprint) {
@@ -362,8 +359,7 @@ func upsertProvisionedChannel(cfgManager *config.ConfigManager, apiType, service
 		for j := range configs {
 			if configs[j].Key == apiKey {
 				previous := configs[j]
-				previous.QuotaGroup, previous.GroupMultiplier = keyConfig.QuotaGroup, keyConfig.GroupMultiplier
-				previous.MultiplierSource, previous.MultiplierUpdatedAt = keyConfig.MultiplierSource, keyConfig.MultiplierUpdatedAt
+				previous.QuotaGroup = keyConfig.QuotaGroup
 				previous.SourceAccountUID, previous.SourceRemoteTokenID = keyConfig.SourceAccountUID, keyConfig.SourceRemoteTokenID
 				keyConfig = previous
 				configs = append(configs[:j], configs[j+1:]...)
@@ -373,7 +369,7 @@ func upsertProvisionedChannel(cfgManager *config.ConfigManager, apiType, service
 		configs = append(configs, keyConfig)
 		_, err := updateProtocolChannel(cfgManager, apiType, i, config.UpstreamUpdate{APIKeys: keys, APIKeyConfigs: configs,
 			ExpectedSiteSnapshot: &channels[i],
-			SiteAccountUID:       &account.UID, SiteGroup: &group.Name, MaxGroupMultiplier: config.OptionalMultiplier{Present: true, Value: limit},
+			SiteAccountUID:       &account.UID, SiteGroup: &group.Name, GroupMultiplier: config.OptionalMultiplier{Present: multiplier != nil, Value: multiplier},
 			ModelMapping: modelMapping, SupportedModels: supportedModels, ServiceType: &serviceType})
 		return err
 	}
@@ -385,17 +381,17 @@ func upsertProvisionedChannel(cfgManager *config.ConfigManager, apiType, service
 	}
 
 	channel := config.UpstreamConfig{
-		Name:               channelName,
-		BaseURL:            account.BaseURL,
-		SiteAccountUID:     account.UID,
-		SiteGroup:          group.Name,
-		MaxGroupMultiplier: limit,
-		APIKeys:            []string{apiKey},
-		APIKeyConfigs:      []config.APIKeyConfig{keyConfig},
-		ServiceType:        serviceType,
-		Status:             "active",
-		ModelMapping:       modelMapping,
-		SupportedModels:    supportedModels,
+		Name:            channelName,
+		BaseURL:         account.BaseURL,
+		SiteAccountUID:  account.UID,
+		SiteGroup:       group.Name,
+		GroupMultiplier: multiplier,
+		APIKeys:         []string{apiKey},
+		APIKeyConfigs:   []config.APIKeyConfig{keyConfig},
+		ServiceType:     serviceType,
+		Status:          "active",
+		ModelMapping:    modelMapping,
+		SupportedModels: supportedModels,
 	}
 	switch apiType {
 	case "Messages":

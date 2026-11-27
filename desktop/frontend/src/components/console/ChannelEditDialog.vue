@@ -70,6 +70,7 @@ const {
   DEFAULT_SELECT_VALUE,
   reasoningEffortOptions,
   form,
+  managedMultiplier,
   disabledGroupModels,
   historicalApiKeys,
   detectedBaseUrls,
@@ -244,9 +245,10 @@ const embeddingTargetModels = computed(() =>
                     <section :ref="(el: any) => setSectionRef('auth', el)" data-section-id="auth" class="scroll-mt-4">
                       <AuthPanel
                         :api-key-configs="form.apiKeyConfigs"
-                        :max-group-multiplier="form.maxGroupMultiplier"
+                        :group-multiplier="form.groupMultiplier"
+                        :managed-multiplier="managedMultiplier"
                         @update:api-key-configs="form.apiKeyConfigs = $event"
-                        @update:max-group-multiplier="form.maxGroupMultiplier = $event"
+                        @update:group-multiplier="form.groupMultiplier = $event"
                         :existing-api-keys="existingApiKeys"
                         :new-api-keys-text="newApiKeysText"
                         :copied-key-index="copiedKeyIndex"

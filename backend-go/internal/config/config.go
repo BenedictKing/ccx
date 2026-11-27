@@ -23,8 +23,8 @@ type UpstreamConfig struct {
 	APIKeys               []string                           `json:"apiKeys"`
 	SiteAccountUID        string                             `json:"siteAccountUid,omitempty"` // 托管归属独立于用户可编辑的渠道名称
 	SiteGroup             string                             `json:"siteGroup,omitempty"`
-	MaxGroupMultiplier    *float64                           `json:"maxGroupMultiplier,omitempty"`  // nil=不设上限，0=仅允许零倍率
-	APIKeyConfigs         []APIKeyConfig                     `json:"apiKeyConfigs,omitempty"`       // API Key 附加配置（限速、权重、配额组、分组倍率等），通过 Key 关联 APIKeys
+	GroupMultiplier       *float64                           `json:"groupMultiplier,omitempty"`     // 渠道计费倍率：nil 按 1，0 表示免费
+	APIKeyConfigs         []APIKeyConfig                     `json:"apiKeyConfigs,omitempty"`       // API Key 附加配置（限速、权重、配额组等），通过 Key 关联 APIKeys
 	HistoricalAPIKeys     []string                           `json:"historicalApiKeys,omitempty"`   // 历史 API Key（用于统计聚合，换 Key 后保留旧 Key 的统计数据）
 	DisabledAPIKeys       []DisabledKeyInfo                  `json:"disabledApiKeys,omitempty"`     // 被拉黑的 API Key（持久化，需手动恢复）
 	DisabledKeyModels     []DisabledKeyModelInfo             `json:"disabledKeyModels,omitempty"`   // 被限制的 (Key,模型) 组合（持久化，定时自动恢复）
@@ -118,9 +118,6 @@ type APIKeyConfig struct {
 	Name                     string   `json:"name,omitempty"`
 	Enabled                  *bool    `json:"enabled,omitempty"`
 	QuotaGroup               string   `json:"quotaGroup,omitempty"`
-	GroupMultiplier          *float64 `json:"groupMultiplier,omitempty"`
-	MultiplierSource         string   `json:"multiplierSource,omitempty"`
-	MultiplierUpdatedAt      string   `json:"multiplierUpdatedAt,omitempty"`
 	SourceAccountUID         string   `json:"sourceAccountUid,omitempty"`
 	SourceRemoteTokenID      int      `json:"sourceRemoteTokenId,omitempty"`
 	RemoteStatus             string   `json:"remoteStatus,omitempty"` // 远端明确停用/过期/分组缺失；空表示未发现限制
@@ -322,7 +319,7 @@ func IsAPIKeyConfigEffective(cfg APIKeyConfig) bool {
 	if cfg.RateLimitAutoFromHeaders != nil {
 		return true
 	}
-	if cfg.Weight > 0 || len(cfg.Models) > 0 || cfg.GroupMultiplier != nil {
+	if cfg.Weight > 0 || len(cfg.Models) > 0 || cfg.RemoteStatus != "" {
 		return true
 	}
 	return false
@@ -466,7 +463,7 @@ type UpstreamUpdate struct {
 	ExpectedSiteSnapshot          *UpstreamConfig                    `json:"-"` // 后台同步的乐观并发保护，不由外部 API 赋值
 	SiteAccountUID                *string                            `json:"siteAccountUid"`
 	SiteGroup                     *string                            `json:"siteGroup"`
-	MaxGroupMultiplier            OptionalMultiplier                 `json:"maxGroupMultiplier"`
+	GroupMultiplier               OptionalMultiplier                 `json:"groupMultiplier"`
 	Name                          *string                            `json:"name"`
 	ServiceType                   *string                            `json:"serviceType"`
 	AuthHeader                    *string                            `json:"authHeader"`
@@ -734,7 +731,7 @@ func (cm *ConfigManager) GetNextAPIKey(upstream *UpstreamConfig, failedKeys map[
 	filtered := *upstream
 	filtered.APIKeys = make([]string, 0, len(upstream.APIKeys))
 	for _, key := range upstream.APIKeys {
-		if upstream.IsAPIKeyEnabled(key) && upstream.IsAPIKeyGroupMultiplierAllowed(key) {
+		if upstream.IsAPIKeyEnabled(key) && upstream.IsAPIKeyRemoteAvailable(key) {
 			filtered.APIKeys = append(filtered.APIKeys, key)
 		}
 	}

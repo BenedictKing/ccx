@@ -16,6 +16,7 @@ import (
 	"github.com/BenedictKing/ccx/internal/keypool"
 	"github.com/BenedictKing/ccx/internal/metrics"
 	"github.com/BenedictKing/ccx/internal/providers"
+	"github.com/BenedictKing/ccx/internal/ratelimit"
 	"github.com/BenedictKing/ccx/internal/scheduler"
 	"github.com/BenedictKing/ccx/internal/siteaccess"
 	"github.com/BenedictKing/ccx/internal/types"
@@ -364,7 +365,7 @@ func TryUpstreamWithAllKeys(
 					releases = append(releases, release)
 				}
 				if selection.LimiterScope != "" {
-					keyLimiter := rateLimitMgr.GetOrCreateScoped(apiType, channelIndex, selection.LimiterScope, keypool.ConfigForCandidate(*upstream, selection.Config))
+					keyLimiter := rateLimitMgr.GetOrCreateScoped(apiType, channelIndex, selection.LimiterScope, rateLimitConfigForSelection(upstream, selection))
 					release, rlErr := keyLimiter.Acquire(c.Request.Context(), maxRateLimitWait, time.Now())
 					if rlErr != nil {
 						lastError = rlErr
@@ -511,13 +512,14 @@ func TryUpstreamWithAllKeys(
 				continue
 			}
 
-			// 学习上游限流头：动态调整限速器状态（cooldown 等）
+			// 配额响应只影响本次出站使用的凭证；5xx 服务退避仍可冷却渠道。
 			if rateLimitMgr := channelScheduler.GetRateLimitManager(); rateLimitMgr != nil {
 				now := time.Now()
-				if limiter := rateLimitMgr.Get(apiType, channelIndex); limiter != nil {
-					limiter.ApplyUpstreamHints(resp.Header, resp.StatusCode, now)
-				}
-				if selection.LimiterScope != "" {
+				if resp.StatusCode >= 500 && upstream.IsRateLimitAutoFromHeadersEnabled() {
+					if limiter := rateLimitMgr.Get(apiType, channelIndex); limiter != nil {
+						limiter.ApplyUpstreamHints(resp.Header, resp.StatusCode, now)
+					}
+				} else if selection.LimiterScope != "" && rateLimitConfigForSelection(upstream, selection).AutoFromHeaders {
 					if limiter := rateLimitMgr.GetScoped(apiType, channelIndex, selection.LimiterScope); limiter != nil {
 						limiter.ApplyUpstreamHints(resp.Header, resp.StatusCode, now)
 					}
@@ -845,6 +847,13 @@ func waitForHalfOpenProbe(ctx context.Context, metricsManager *metrics.MetricsMa
 	}
 }
 
+func rateLimitConfigForSelection(upstream *config.UpstreamConfig, selection keypool.Selection) ratelimit.Config {
+	if selection.CredentialID == "" {
+		return ratelimit.Config{AutoFromHeaders: upstream.IsRateLimitAutoFromHeadersEnabled()}
+	}
+	return keypool.ConfigForCandidate(*upstream, selection.Config)
+}
+
 func selectAttemptAPIKey(channelScheduler *scheduler.ChannelScheduler, kind scheduler.ChannelKind, channelIndex int, upstream *config.UpstreamConfig, failedKeys map[string]bool, failedQuotaGroups map[string]bool, model string, fallback NextAPIKeyFunc) (keypool.Selection, string, error) {
 	if !keypool.HasEffectiveConfig(upstream) {
 		if fallback == nil {
@@ -854,7 +863,11 @@ func selectAttemptAPIKey(channelScheduler *scheduler.ChannelScheduler, kind sche
 		if err != nil {
 			return keypool.Selection{}, "", err
 		}
-		return keypool.Selection{APIKey: apiKey}, apiKey, nil
+		selection := keypool.Selection{APIKey: apiKey}
+		if upstream.IsRateLimitAutoFromHeadersEnabled() {
+			selection.LimiterScope = keypool.LimiterScope(apiKey, "")
+		}
+		return selection, apiKey, nil
 	}
 
 	var deferred []keypool.Selection
@@ -871,7 +884,7 @@ func selectAttemptAPIKey(channelScheduler *scheduler.ChannelScheduler, kind sche
 			Config:         candidate.Config,
 		}
 		if channelScheduler != nil && selection.LimiterScope != "" {
-			cfg := keypool.ConfigForCandidate(*upstream, selection.Config)
+			cfg := rateLimitConfigForSelection(upstream, selection)
 			deferForLoad, _, _ := channelScheduler.ShouldDeferForRateLimit(kind, channelIndex, selection.LimiterScope, cfg, time.Now())
 			if deferForLoad {
 				deferred = append(deferred, selection)

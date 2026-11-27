@@ -22,11 +22,11 @@ import (
 
 func TestGroupMultiplierCostHistoryAndCSV(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	zero, discount, price := 0.0, 0.5, 2.0
+	discount, price := 0.5, 2.0
 	upstream := config.UpstreamConfig{
 		Name: "mixed", BaseURL: "https://relay.example", APIKeys: []string{"sk-free", "sk-discount", "sk-standard"},
-		APIKeyConfigs:   []config.APIKeyConfig{{Key: "sk-free", GroupMultiplier: &zero}, {Key: "sk-discount", GroupMultiplier: &discount}},
-		DisabledAPIKeys: []config.DisabledKeyInfo{{Key: "sk-disabled-free", Config: &config.APIKeyConfig{Key: "sk-disabled-free", GroupMultiplier: &zero}}},
+		GroupMultiplier: &discount,
+		DisabledAPIKeys: []config.DisabledKeyInfo{{Key: "sk-disabled-free"}},
 		ModelCapabilities: map[string]config.UpstreamModelCapability{
 			"private-model": {Pricing: &config.ModelPricing{Currency: "USD", InputCacheMissPrice: &price}},
 		},
@@ -50,7 +50,7 @@ func TestGroupMultiplierCostHistoryAndCSV(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = cm.Close() })
-	wantByKey := map[string]float64{"sk-free": 0, "sk-discount": 1, "sk-standard": 2, "sk-disabled-free": 0}
+	wantByKey := map[string]float64{"sk-free": 1, "sk-discount": 1, "sk-standard": 1, "sk-disabled-free": 1}
 	for _, kind := range []scheduler.ChannelKind{
 		scheduler.ChannelKindMessages, scheduler.ChannelKindChat, scheduler.ChannelKindResponses,
 		scheduler.ChannelKindGemini, scheduler.ChannelKindImages, scheduler.ChannelKindVectors,
@@ -73,7 +73,7 @@ func TestGroupMultiplierCostHistoryAndCSV(t *testing.T) {
 			router.GET("/global", GetGlobalStatsHistory(mm, cm, kind))
 			router.GET("/keys/:id", getChannelKeyMetricsHistoryWithKind(mm, cm, kind, true, 0))
 			router.GET("/csv", GetUsageReportCSV(store, cm))
-			// 6h 查询内存，7d 查询真实 SQLite；两条路径都必须逐 Key 计算倍率。
+			// 6h 查询内存，7d 查询真实 SQLite；两条路径对所有 Key 使用同一渠道倍率。
 			for _, duration := range []string{"6h", "7d"} {
 				t.Run(duration, func(t *testing.T) {
 					assertGroupMultiplierHistory(t, router, duration, wantByMask)
@@ -95,8 +95,8 @@ func assertGroupMultiplierHistory(t *testing.T, router *gin.Engine, duration str
 	if err := json.Unmarshal(response.Body.Bytes(), &global); err != nil {
 		t.Fatal(err)
 	}
-	if global.Summary.TotalCostUSD != 3 || global.Summary.TotalRequests != 4 || global.Summary.TotalInputTokens != 4_000_000 {
-		t.Fatalf("global summary = %+v, want USD 3 and 4M tokens across 4 requests", global.Summary)
+	if global.Summary.TotalCostUSD != 4 || global.Summary.TotalRequests != 4 || global.Summary.TotalInputTokens != 4_000_000 {
+		t.Fatalf("global summary = %+v, want USD 4 and 4M tokens across 4 requests", global.Summary)
 	}
 	var pointCost, modelCost float64
 	for _, point := range global.DataPoints {
@@ -105,8 +105,8 @@ func assertGroupMultiplierHistory(t *testing.T, router *gin.Engine, duration str
 	for _, point := range global.ModelDataPoints["private-model"] {
 		modelCost += point.CostUSD
 	}
-	if pointCost != 3 || modelCost != 3 {
-		t.Fatalf("global points cost=%v model cost=%v, want 3 each", pointCost, modelCost)
+	if pointCost != 4 || modelCost != 4 {
+		t.Fatalf("global points cost=%v model cost=%v, want 4 each", pointCost, modelCost)
 	}
 	response = httptest.NewRecorder()
 	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/keys/0?duration="+duration, nil))
@@ -117,7 +117,7 @@ func assertGroupMultiplierHistory(t *testing.T, router *gin.Engine, duration str
 	if err := json.Unmarshal(response.Body.Bytes(), &keys); err != nil {
 		t.Fatal(err)
 	}
-	if keys.Summary.TotalCostUSD != 3 || keys.Summary.TotalRequests != 4 || len(keys.Keys) != 4 {
+	if keys.Summary.TotalCostUSD != 4 || keys.Summary.TotalRequests != 4 || len(keys.Keys) != 4 {
 		t.Fatalf("keys summary = %+v, keys=%d", keys.Summary, len(keys.Keys))
 	}
 	for _, key := range keys.Keys {
@@ -166,8 +166,8 @@ func assertGroupMultiplierCSV(t *testing.T, router *gin.Engine, apiType string) 
 			}
 			costCounts[cost]++
 		}
-		if costCounts[0] != 2 || costCounts[1] != 1 || costCounts[2] != 1 {
-			t.Fatalf("CSV costs=%v, want 2 free keys, USD 1 and USD 2", costCounts)
+		if costCounts[1] != 4 {
+			t.Fatalf("CSV costs=%v, want USD 1 for each key", costCounts)
 		}
 	}
 }

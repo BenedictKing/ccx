@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/BenedictKing/ccx/internal/config"
 )
@@ -41,6 +40,9 @@ func BindExistingChannel(ctx context.Context, store *AccountStore, cfgManager *c
 	channel := channels[req.ChannelIndex]
 	if channel.SiteAccountUID != "" && channel.SiteAccountUID != account.UID {
 		return fmt.Errorf("渠道已绑定其他账号，请先解绑")
+	}
+	if channel.SiteGroup != "" && channel.SiteGroup != req.Group {
+		return fmt.Errorf("远端分组与当前渠道不同，请建立独立渠道")
 	}
 	if NormalizeSiteURL(channel.BaseURL) != account.BaseURL {
 		return fmt.Errorf("渠道站点地址与账号不一致")
@@ -82,26 +84,12 @@ func BindExistingChannel(ctx context.Context, store *AccountStore, cfgManager *c
 		if err != nil {
 			return err
 		}
-		ratios, err := adapterForAccount(account, adapter).FetchGroups(ctx, account.BaseURL, accessToken, account.UserID, account.AuthTokenMode)
+		ratio, err := fetchBindingRatio(ctx, adapterForAccount(account, adapter), account, accessToken, req.Group)
 		if err != nil {
-			return fmt.Errorf("读取分组倍率失败: %w", err)
+			return err
 		}
-		ratio, ok := ratios[req.Group]
-		if !ok || !validNewApiGroupRatio(ratio) {
-			return fmt.Errorf("远端分组 %q 不存在或倍率无效", req.Group)
-		}
-		limit := DefaultNewApiMaxGroupMultiplier
-		for _, plan := range account.Plans {
-			if plan.Protocol == req.Protocol && plan.MaxMultiplier != nil {
-				limit = *plan.MaxMultiplier
-				break
-			}
-		}
-		if ratio > limit {
-			return fmt.Errorf("分组 %q 的倍率 %.4g 超过上限 %.4g", req.Group, ratio, limit)
-		}
-		updates.MaxGroupMultiplier = config.OptionalMultiplier{Present: true, Value: &limit}
-		updates.APIKeyConfigs = upsertBoundKeyConfig(configs, matchedKey, account, *meta, ratio)
+		updates.GroupMultiplier = config.OptionalMultiplier{Present: true, Value: &ratio}
+		updates.APIKeyConfigs = upsertBoundKeyConfig(configs, matchedKey, account, *meta)
 	}
 	if _, err := updateProtocolChannel(cfgManager, apiType, req.ChannelIndex, updates); err != nil {
 		return err
@@ -110,23 +98,19 @@ func BindExistingChannel(ctx context.Context, store *AccountStore, cfgManager *c
 	return nil
 }
 
-func upsertBoundKeyConfig(configs []config.APIKeyConfig, key string, account SiteAccount, meta ProvisionedKeyMeta, ratio float64) []config.APIKeyConfig {
+func upsertBoundKeyConfig(configs []config.APIKeyConfig, key string, account SiteAccount, meta ProvisionedKeyMeta) []config.APIKeyConfig {
 	for i := range configs {
 		if configs[i].Key != key {
 			continue
 		}
 		configs[i].QuotaGroup = account.UID + "/" + meta.Group
-		configs[i].GroupMultiplier = &ratio
-		configs[i].MultiplierSource = account.SiteType
-		configs[i].MultiplierUpdatedAt = time.Now().UTC().Format(time.RFC3339)
 		configs[i].SourceAccountUID = account.UID
 		configs[i].SourceRemoteTokenID = meta.TokenID
 		configs[i].RemoteStatus = ""
 		return configs
 	}
 	return append(configs, config.APIKeyConfig{
-		Key: key, QuotaGroup: account.UID + "/" + meta.Group, GroupMultiplier: &ratio,
-		MultiplierSource: account.SiteType, MultiplierUpdatedAt: time.Now().UTC().Format(time.RFC3339),
+		Key: key, QuotaGroup: account.UID + "/" + meta.Group,
 		SourceAccountUID: account.UID, SourceRemoteTokenID: meta.TokenID,
 	})
 }
@@ -154,10 +138,6 @@ func UnbindExistingChannel(cfgManager *config.ConfigManager, req ChannelBindingR
 		configs[i].SourceAccountUID = ""
 		configs[i].SourceRemoteTokenID = 0
 		configs[i].RemoteStatus = ""
-		configs[i].MultiplierUpdatedAt = ""
-		if configs[i].GroupMultiplier != nil {
-			configs[i].MultiplierSource = "manual"
-		}
 		if configs[i].QuotaGroup == channel.SiteAccountUID+"/"+channel.SiteGroup {
 			configs[i].QuotaGroup = ""
 		}
@@ -228,16 +208,23 @@ func BindExistingKey(ctx context.Context, store *AccountStore, cfgManager *confi
 	if plain != req.APIKey {
 		return fmt.Errorf("所选远端 Key 与当前本地 Key 不一致")
 	}
-	ratio, err := fetchBindingRatio(ctx, site, account, accessToken, req.Group, channel.MaxGroupMultiplier)
+	ratio, err := fetchBindingRatio(ctx, site, account, accessToken, req.Group)
 	if err != nil {
 		return err
 	}
+	if channel.SiteAccountUID != "" && (channel.SiteGroup != req.Group ||
+		(channel.SiteAccountUID != account.UID && channel.BillingMultiplier() != ratio)) {
+		return fmt.Errorf("远端分组或倍率与当前渠道不同，请建立独立渠道")
+	}
 	meta := ProvisionedKeyMeta{Name: remote.Name, Group: remote.Group, TokenID: remote.ID, Protocol: req.Protocol, KeyFingerprint: keyFingerprint(plain), Imported: true}
-	configs := upsertBoundKeyConfig(append([]config.APIKeyConfig(nil), channel.APIKeyConfigs...), req.APIKey, account, meta, ratio)
+	configs := upsertBoundKeyConfig(append([]config.APIKeyConfig(nil), channel.APIKeyConfigs...), req.APIKey, account, meta)
 	updates := config.UpstreamUpdate{APIKeyConfigs: configs, ExpectedSiteSnapshot: &channel}
 	if channel.SiteAccountUID == "" {
 		updates.SiteAccountUID = &account.UID
 		updates.SiteGroup = &req.Group
+	}
+	if channel.SiteAccountUID == "" || channel.SiteAccountUID == account.UID {
+		updates.GroupMultiplier = config.OptionalMultiplier{Present: true, Value: &ratio}
 	}
 	if _, err := updateProtocolChannel(cfgManager, apiType, req.ChannelIndex, updates); err != nil {
 		return err
@@ -274,10 +261,6 @@ func UnbindExistingKey(store *AccountStore, cfgManager *config.ConfigManager, re
 		configs[i].SourceAccountUID = ""
 		configs[i].SourceRemoteTokenID = 0
 		configs[i].RemoteStatus = ""
-		configs[i].MultiplierUpdatedAt = ""
-		if configs[i].GroupMultiplier != nil {
-			configs[i].MultiplierSource = "manual"
-		}
 		if strings.HasPrefix(configs[i].QuotaGroup, sourceAccount+"/") {
 			configs[i].QuotaGroup = ""
 		}
@@ -357,7 +340,7 @@ func CopyChannelToGroup(ctx context.Context, store *AccountStore, cfgManager *co
 		return nil, err
 	}
 	site := adapterForAccount(account, adapter)
-	ratio, err := fetchBindingRatio(ctx, site, account, accessToken, req.Group, channel.MaxGroupMultiplier)
+	ratio, err := fetchBindingRatio(ctx, site, account, accessToken, req.Group)
 	if err != nil {
 		return nil, err
 	}
@@ -419,6 +402,7 @@ func CopyChannelToGroup(ctx context.Context, store *AccountStore, cfgManager *co
 	clone.Name = uniqueChannelCopyName(protocolChannels(cfgManager, apiType), channel.Name, req.Group)
 	clone.SiteAccountUID = account.UID
 	clone.SiteGroup = req.Group
+	clone.GroupMultiplier = &ratio
 	clone.APIKeys = []string{plain}
 	clone.HistoricalAPIKeys = nil
 	clone.DisabledAPIKeys = nil
@@ -437,7 +421,7 @@ func CopyChannelToGroup(ctx context.Context, store *AccountStore, cfgManager *co
 		}
 	}
 	keyConfig.RemoteStatus = ""
-	clone.APIKeyConfigs = upsertBoundKeyConfig([]config.APIKeyConfig{keyConfig}, plain, account, meta, ratio)
+	clone.APIKeyConfigs = upsertBoundKeyConfig([]config.APIKeyConfig{keyConfig}, plain, account, meta)
 	if err := addProtocolChannel(cfgManager, apiType, *clone); err != nil {
 		if !reused {
 			if deleteErr := site.DeleteToken(ctx, account.BaseURL, accessToken, account.UserID, account.AuthTokenMode, tokenID); deleteErr != nil {
@@ -504,7 +488,7 @@ func remoteTokenPlaintext(ctx context.Context, site siteAdapter, account SiteAcc
 	return NewApiToken{}, "", fmt.Errorf("所选远端 Key 不存在")
 }
 
-func fetchBindingRatio(ctx context.Context, site siteAdapter, account SiteAccount, accessToken, group string, limit *float64) (float64, error) {
+func fetchBindingRatio(ctx context.Context, site siteAdapter, account SiteAccount, accessToken, group string) (float64, error) {
 	ratios, err := site.FetchGroups(ctx, account.BaseURL, accessToken, account.UserID, account.AuthTokenMode)
 	if err != nil {
 		return 0, fmt.Errorf("读取分组倍率失败: %w", err)
@@ -512,9 +496,6 @@ func fetchBindingRatio(ctx context.Context, site siteAdapter, account SiteAccoun
 	ratio, ok := ratios[group]
 	if !ok || !validNewApiGroupRatio(ratio) {
 		return 0, fmt.Errorf("远端分组 %q 不存在或倍率无效", group)
-	}
-	if limit != nil && ratio > *limit {
-		return 0, fmt.Errorf("分组 %q 的倍率 %.4g 超过渠道上限 %.4g", group, ratio, *limit)
 	}
 	return ratio, nil
 }

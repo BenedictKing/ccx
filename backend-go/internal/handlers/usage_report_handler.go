@@ -163,7 +163,7 @@ func GetUsageReportCSV(store *metrics.SQLiteStore, cfgManager *config.ConfigMana
 			if calculateCost := costCalculators[bucket.APIType]; calculateCost != nil {
 				cost = calculateCost(bucket.MetricsKey, bucket.Model, bucket.InputTokens, bucket.OutputTokens, bucket.CacheCreationTokens, bucket.CacheReadTokens)
 			} else {
-				cost = metrics.CalculateTokenCostUSDWithConfig(bucket.Model, upstream, cfg.UpstreamModelCapabilities,
+				cost = metrics.CalculateTokenCostUSDForChannel(bucket.Model, upstream, cfg.UpstreamModelCapabilities,
 					bucket.InputTokens, bucket.OutputTokens, bucket.CacheCreationTokens, bucket.CacheReadTokens)
 			}
 			row := []string{month, bucket.Timestamp.Format(time.RFC3339), zone, bucket.APIType,

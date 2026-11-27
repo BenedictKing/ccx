@@ -434,10 +434,7 @@ func IsChannelInPromotion(upstream *UpstreamConfig) bool {
 // 使用深拷贝可避免并发请求之间的竞态条件
 func (u *UpstreamConfig) Clone() *UpstreamConfig {
 	cloned := *u // 浅拷贝
-	if u.MaxGroupMultiplier != nil {
-		v := *u.MaxGroupMultiplier
-		cloned.MaxGroupMultiplier = &v
-	}
+	cloned.GroupMultiplier = cloneGroupMultiplier(u.GroupMultiplier)
 
 	// 深拷贝切片字段
 	if u.BaseURLs != nil {
@@ -574,8 +571,8 @@ func applyAPIKeyConfigUpdate(upstream *UpstreamConfig, updates UpstreamUpdate) {
 	if updates.SiteGroup != nil {
 		upstream.SiteGroup = *updates.SiteGroup
 	}
-	if updates.MaxGroupMultiplier.Present {
-		upstream.MaxGroupMultiplier = updates.MaxGroupMultiplier.Value
+	if updates.GroupMultiplier.Present {
+		upstream.GroupMultiplier = cloneGroupMultiplier(updates.GroupMultiplier.Value)
 	}
 	if updates.APIKeyConfigs != nil {
 		upstream.APIKeyConfigs = normalizeAPIKeyConfigs(upstream.APIKeys, updates.APIKeyConfigs)
@@ -596,10 +593,6 @@ func cloneEmbeddingCapability(capability EmbeddingCapability) EmbeddingCapabilit
 }
 
 func cloneAPIKeyConfig(cfg APIKeyConfig) APIKeyConfig {
-	if cfg.GroupMultiplier != nil {
-		v := *cfg.GroupMultiplier
-		cfg.GroupMultiplier = &v
-	}
 	if cfg.Enabled != nil {
 		v := *cfg.Enabled
 		cfg.Enabled = &v

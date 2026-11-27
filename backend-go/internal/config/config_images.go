@@ -71,7 +71,7 @@ func (cm *ConfigManager) AddImagesUpstream(upstream UpstreamConfig) error {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
-	if err := validateKeySettings(upstream.APIKeyConfigs, upstream.MaxGroupMultiplier); err != nil {
+	if err := validateGroupMultiplier(upstream.GroupMultiplier); err != nil {
 		return err
 	}
 
@@ -139,7 +139,7 @@ func (cm *ConfigManager) UpdateImagesUpstream(index int, updates UpstreamUpdate)
 		return false, fmt.Errorf("无效的 Images 上游索引: %d", index)
 	}
 
-	if err := validateKeySettings(updates.APIKeyConfigs, updates.MaxGroupMultiplier.Value); err != nil {
+	if err := validateGroupMultiplier(updates.GroupMultiplier.Value); err != nil {
 		return false, err
 	}
 

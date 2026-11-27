@@ -86,16 +86,21 @@ func (cm *ConfigManager) loadConfig() error {
 		return fmt.Errorf("检测到 3.0 权威渠道配置：精简版只支持 2.9 协议渠道配置，已拒绝加载以保护原数据")
 	}
 
-	if err := json.Unmarshal(data, &cm.config); err != nil {
+	var loaded Config
+	if err := json.Unmarshal(data, &loaded); err != nil {
 		cm.mu.Unlock()
 		return err
 	}
+	cm.config = loaded
 	// 外部配置已载入，旧的自写摘要不再代表当前内存状态。
 	cm.selfWriteSum = ""
 
 	// 兼容旧配置：检查 FuzzyModeEnabled 字段是否存在
 	// 如果不存在，默认设为 true（新功能默认启用）
 	needSaveDefaults := cm.applyConfigDefaults(data)
+	if cm.migrateChannelGroupMultipliers(rawConfig) {
+		needSaveDefaults = true
+	}
 	if normalizeChannelUIDs(&cm.config) {
 		needSaveDefaults = true
 	}
@@ -684,7 +689,7 @@ func (cm *ConfigManager) backupConfig() {
 	}
 
 	// 创建备份文件
-	timestamp := time.Now().Format("2006-01-02T15-04-05")
+	timestamp := time.Now().Format("2006-01-02T15-04-05.000000000")
 	backupFile := filepath.Join(backupDir, fmt.Sprintf("config-%s.json", timestamp))
 	if err := os.WriteFile(backupFile, data, 0600); err != nil { // 仅所有者可读写
 		log.Printf("[Config-Backup] 警告: 写入备份文件失败: %v", err)

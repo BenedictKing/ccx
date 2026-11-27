@@ -163,7 +163,7 @@ const { t } = useLanguage()
     insecureSkipVerify: false,
     apiKeysText: '',
     apiKeyConfigs: undefined as Channel['apiKeyConfigs'],
-    maxGroupMultiplier: null as number | null,
+    groupMultiplier: null as number | null,
     customHeadersText: '{}',
     modelMappingText: '{}',
     modelCapabilitiesText: '',
@@ -197,6 +197,8 @@ const { t } = useLanguage()
     stripCodexClientTools: false,
     stripImageGenerationTool: false,
   })
+  const managedMultiplier = computed(() => !!form.apiKeyConfigs?.some(cfg => cfg.sourceRemoteTokenId))
+
 
   const supportsOpenAIAdvanced = computed(() => props.channelType !== 'vectors' && supportsAdvancedChannelOptions(form.serviceType))
   const supportsOpenAIAdvancedOptions = computed(() => props.channelType !== 'vectors' && supportsAdvancedChannelOptions(form.serviceType))
@@ -349,7 +351,7 @@ const { t } = useLanguage()
     form.insecureSkipVerify = false
     form.apiKeysText = ''
     form.apiKeyConfigs = undefined
-    form.maxGroupMultiplier = null
+    form.groupMultiplier = null
     form.customHeadersText = '{}'
     form.modelMappingText = '{}'
     form.modelCapabilitiesText = ''
@@ -430,7 +432,7 @@ const { t } = useLanguage()
     form.insecureSkipVerify = ch.insecureSkipVerify ?? false
     existingApiKeys.value = [...(ch.apiKeys || [])]
     form.apiKeyConfigs = ch.apiKeyConfigs?.map(cfg => ({ ...cfg, models: cfg.models ? [...cfg.models] : undefined }))
-    form.maxGroupMultiplier = ch.maxGroupMultiplier ?? null
+    form.groupMultiplier = ch.groupMultiplier ?? null
     form.apiKeysText = ''
     newApiKeysText.value = ''
     copiedKeyIndex.value = null
@@ -531,7 +533,7 @@ const { t } = useLanguage()
     if (form.serviceType !== 'copilot' && submitBaseUrls.value.length === 0) errs.baseUrl = t('channelEditor.basic.baseUrl.required')
     // copilot 渠道通过 OAuth 登录，apiKeys 由登录流程填充，此处豁免必填校验
     if (!hasConfigurableKeys.value && form.serviceType !== 'copilot') errs.apiKeys = t('channelEditor.auth.apiKeyRequired')
-    if ([form.maxGroupMultiplier, ...(form.apiKeyConfigs || []).map(cfg => cfg.groupMultiplier)].some(value => value != null && (!Number.isFinite(value) || value < 0))) errs.apiKeys = t('channelEditor.auth.multiplierInvalid')
+    if (form.groupMultiplier != null && (!Number.isFinite(form.groupMultiplier) || form.groupMultiplier < 0)) errs.apiKeys = t('channelEditor.auth.multiplierInvalid')
     if (String(form.requestTimeoutMs).trim()) {
       const timeout = Number(form.requestTimeoutMs)
       if (!Number.isInteger(timeout) || timeout < 1000 || timeout > 300000) {
@@ -1030,7 +1032,7 @@ const { t } = useLanguage()
       description: form.description,
       apiKeys: getSubmitApiKeys(),
       apiKeyConfigs: form.apiKeyConfigs,
-      maxGroupMultiplier: form.maxGroupMultiplier,
+      groupMultiplier: managedMultiplier.value ? undefined : form.groupMultiplier,
       modelMapping,
       modelCapabilityRows: modelCapabilityRows.value,
       embeddingCapabilityRows: form.embeddingCapabilityRows,
@@ -1112,6 +1114,7 @@ const { t } = useLanguage()
     DEFAULT_SELECT_VALUE,
     reasoningEffortOptions,
     form,
+    managedMultiplier,
     disabledApiKeys,
     visibleDisabledKeys,
     disabledGroupModels,
