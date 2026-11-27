@@ -64,6 +64,7 @@ export default defineConfig(({ mode }) => {
       }
     },
     build: {
+      target: 'es2024',
       outDir: 'dist',
       emptyOutDir: true,
       // 确保资源路径正确

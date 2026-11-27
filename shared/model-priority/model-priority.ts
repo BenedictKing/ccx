@@ -146,7 +146,7 @@ export function getModelPriority(name: string): number {
 }
 
 export function sortModelNamesDesc(models: string[]): string[] {
-  return [...models].sort((a, b) => {
+  return models.toSorted((a, b) => {
     const priorityA = getModelPriority(a)
     const priorityB = getModelPriority(b)
     if (priorityA !== priorityB) return priorityA - priorityB
