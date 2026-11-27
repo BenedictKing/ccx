@@ -18,6 +18,7 @@ import (
 	"github.com/BenedictKing/ccx/internal/providers"
 	"github.com/BenedictKing/ccx/internal/ratelimit"
 	"github.com/BenedictKing/ccx/internal/scheduler"
+	"github.com/BenedictKing/ccx/internal/session"
 	"github.com/BenedictKing/ccx/internal/siteaccess"
 	"github.com/BenedictKing/ccx/internal/types"
 	"github.com/BenedictKing/ccx/internal/utils"
@@ -171,6 +172,14 @@ func TryUpstreamWithAllKeys(
 	tryOpts.channelLogOptions = append(tryOpts.channelLogOptions, WithSubagentRoutingPolicy(c.GetBool("ccxSubagentRoutingApplied"), c.GetString("ccxSubagentRoutingModel")))
 	tryOpts.channelLogOptions = append(tryOpts.channelLogOptions, WithGatewayRequestID(routingRequestID(c)))
 
+	sessionID, _, agentRole, _ := RequestConversationContextFromGin(c)
+	if agentRole != "subagent" {
+		agentRole = "main"
+	}
+	affinityScope := session.CredentialAffinityScope{Protocol: string(kind), ChannelUID: upstream.ChannelUID, Role: agentRole, SessionID: sessionID}
+	traceAffinity := channelScheduler.GetTraceAffinityManager()
+	preferredCredential := traceAffinity.PreferredCredential(affinityScope)
+
 	metricsServiceType := scheduler.NormalizedMetricsServiceType(kind, upstream.ServiceType)
 
 	var lastFailoverError *FailoverError
@@ -295,7 +304,7 @@ func TryUpstreamWithAllKeys(
 			} else {
 				keyAttempts++
 				var err error
-				selection, apiKey, err = selectAttemptAPIKey(channelScheduler, kind, channelIndex, upstream, failedKeys, failedQuotaGroups, redirectedModel, nextAPIKey)
+				selection, apiKey, err = selectAttemptAPIKey(channelScheduler, kind, channelIndex, upstream, failedKeys, failedQuotaGroups, redirectedModel, preferredCredential, nextAPIKey)
 				if err != nil {
 					lastError = err
 					break // 当前 BaseURL 没有可用 Key，尝试下一个 BaseURL
@@ -350,41 +359,40 @@ func TryUpstreamWithAllKeys(
 				upstreamCopy.ModelMapping[model] = mappingDecision.Model
 			}
 
-			// 主动限速：在构建/发送请求前获取许可（渠道级 + Key/Quota scope）
+			// 渠道只限制总并发与服务冷却；RPM 由当前 Key 单独扣减。
 			if rateLimitMgr := channelScheduler.GetRateLimitManager(); rateLimitMgr != nil {
 				const maxRateLimitWait = 10 * time.Second
-				releases := make([]func(), 0, 2)
-				if limiter := rateLimitMgr.Get(apiType, channelIndex); limiter != nil {
-					release, rlErr := limiter.Acquire(c.Request.Context(), maxRateLimitWait, time.Now())
-					if rlErr != nil {
-						lastError = rlErr
-						RequestLogf(c, "[%s-RateLimit] 渠道限速器拦截: %v，尝试下一个 Key/渠道", apiType, rlErr)
-						failedKeys[apiKey] = true
-						continue
-					}
-					releases = append(releases, release)
-				}
-				if selection.LimiterScope != "" {
-					keyLimiter := rateLimitMgr.GetOrCreateScoped(apiType, channelIndex, selection.LimiterScope, rateLimitConfigForSelection(upstream, selection))
-					release, rlErr := keyLimiter.Acquire(c.Request.Context(), maxRateLimitWait, time.Now())
-					if rlErr != nil {
-						lastError = rlErr
-						RequestLogf(c, "[%s-RateLimit] Key/Quota 限速器拦截: scope=%s, err=%v，尝试下一个 Key/渠道", apiType, selection.LimiterScope, rlErr)
-						failedKeys[apiKey] = true
-						if selection.QuotaGroup != "" {
+				now := time.Now()
+				keyLimiter := rateLimitMgr.GetOrCreateScoped(apiType, channelIndex, selection.CredentialID, keypool.ConfigForCandidate(*upstream, selection.Config))
+				channelLimiter := rateLimitMgr.Get(apiType, channelIndex)
+				if selection.QuotaGroup != "" {
+					if quotaLimiter := rateLimitMgr.GetScoped(apiType, channelIndex, selection.LimiterScope); quotaLimiter != nil {
+						if cooling, _ := quotaLimiter.InCooldown(now); cooling {
+							lastError = ratelimit.ErrInCooldown
 							failedQuotaGroups[selection.QuotaGroup] = true
+							failedKeys[apiKey] = true
+							continue
 						}
-						for i := len(releases) - 1; i >= 0; i-- {
-							releases[i]()
-						}
-						continue
 					}
-					releases = append(releases, release)
+				}
+				releaseChannel, rlErr := channelLimiter.Acquire(c.Request.Context(), maxRateLimitWait, now)
+				if rlErr != nil {
+					lastError = rlErr
+					RequestLogf(c, "[%s-RateLimit] 渠道限速器拦截: %v，尝试下一个 Key/渠道", apiType, rlErr)
+					failedKeys[apiKey] = true
+					continue
+				}
+				releaseKey, rlErr := keyLimiter.Acquire(c.Request.Context(), maxRateLimitWait, time.Now())
+				if rlErr != nil {
+					releaseChannel()
+					lastError = rlErr
+					RequestLogf(c, "[%s-RateLimit] Key 限速器拦截: scope=%s, err=%v，尝试下一个 Key/渠道", apiType, selection.CredentialID, rlErr)
+					failedKeys[apiKey] = true
+					continue
 				}
 				activeRateLimitRelease = func() {
-					for i := len(releases) - 1; i >= 0; i-- {
-						releases[i]()
-					}
+					releaseKey()
+					releaseChannel()
 				}
 			}
 
@@ -519,10 +527,12 @@ func TryUpstreamWithAllKeys(
 					if limiter := rateLimitMgr.Get(apiType, channelIndex); limiter != nil {
 						limiter.ApplyUpstreamHints(resp.Header, resp.StatusCode, now)
 					}
-				} else if selection.LimiterScope != "" && rateLimitConfigForSelection(upstream, selection).AutoFromHeaders {
-					if limiter := rateLimitMgr.GetScoped(apiType, channelIndex, selection.LimiterScope); limiter != nil {
-						limiter.ApplyUpstreamHints(resp.Header, resp.StatusCode, now)
+				} else if keypool.ConfigForCandidate(*upstream, selection.Config).AutoFromHeaders {
+					limiter := rateLimitMgr.GetScoped(apiType, channelIndex, selection.LimiterScope)
+					if limiter == nil && selection.QuotaGroup != "" {
+						limiter = rateLimitMgr.GetOrCreateScoped(apiType, channelIndex, selection.LimiterScope, ratelimit.Config{})
 					}
+					limiter.ApplyUpstreamHints(resp.Header, resp.StatusCode, now)
 				}
 			}
 
@@ -786,6 +796,7 @@ func TryUpstreamWithAllKeys(
 			}
 			// 记录渠道日志
 			completeRoutingLog(c, channelLogStore, metricsKey, logRequestID, http.StatusOK, true, "", isRetryAttempt, usage)
+			traceAffinity.RecordSuccessfulCredential(affinityScope, preferredCredential, selection.CredentialID)
 			return true, apiKey, originalIdx, nil, usage, nil
 		}
 
@@ -847,56 +858,60 @@ func waitForHalfOpenProbe(ctx context.Context, metricsManager *metrics.MetricsMa
 	}
 }
 
-func rateLimitConfigForSelection(upstream *config.UpstreamConfig, selection keypool.Selection) ratelimit.Config {
-	if selection.CredentialID == "" {
-		return ratelimit.Config{AutoFromHeaders: upstream.IsRateLimitAutoFromHeadersEnabled()}
-	}
-	return keypool.ConfigForCandidate(*upstream, selection.Config)
-}
-
-func selectAttemptAPIKey(channelScheduler *scheduler.ChannelScheduler, kind scheduler.ChannelKind, channelIndex int, upstream *config.UpstreamConfig, failedKeys map[string]bool, failedQuotaGroups map[string]bool, model string, fallback NextAPIKeyFunc) (keypool.Selection, string, error) {
-	if !keypool.HasEffectiveConfig(upstream) {
-		if fallback == nil {
-			return keypool.Selection{}, "", fmt.Errorf("上游 %s 没有可用的API密钥", upstream.Name)
-		}
-		apiKey, err := fallback(upstream, failedKeys)
-		if err != nil {
-			return keypool.Selection{}, "", err
-		}
-		selection := keypool.Selection{APIKey: apiKey}
-		if upstream.IsRateLimitAutoFromHeadersEnabled() {
-			selection.LimiterScope = keypool.LimiterScope(apiKey, "")
-		}
-		return selection, apiKey, nil
-	}
-
-	var deferred []keypool.Selection
+func selectAttemptAPIKey(channelScheduler *scheduler.ChannelScheduler, kind scheduler.ChannelKind, channelIndex int, upstream *config.UpstreamConfig, failedKeys map[string]bool, failedQuotaGroups map[string]bool, model, preferredCredential string, fallback NextAPIKeyFunc) (keypool.Selection, string, error) {
+	var ready, high, full []keypool.Selection
+	now := time.Now()
 	for _, candidate := range keypool.CandidatesForModel(upstream, failedKeys, model) {
-		if candidate.QuotaGroup != "" && failedQuotaGroups[candidate.QuotaGroup] {
+		if failedQuotaGroups[candidate.QuotaGroup] {
 			continue
 		}
 		selection := keypool.Selection{
 			APIKey:         candidate.APIKey,
-			CredentialID:   candidate.Scope,
+			CredentialID:   keypool.LimiterScope(candidate.APIKey, ""),
 			CredentialName: candidate.Config.Name,
 			QuotaGroup:     candidate.QuotaGroup,
 			LimiterScope:   candidate.Scope,
 			Config:         candidate.Config,
 		}
-		if channelScheduler != nil && selection.LimiterScope != "" {
-			cfg := rateLimitConfigForSelection(upstream, selection)
-			deferForLoad, _, _ := channelScheduler.ShouldDeferForRateLimit(kind, channelIndex, selection.LimiterScope, cfg, time.Now())
-			if deferForLoad {
-				deferred = append(deferred, selection)
-				continue
-			}
+		deferred, ratio, cooling := channelScheduler.CredentialRateLimitLoad(kind, channelIndex, upstream, candidate, now)
+		if cooling {
+			continue
 		}
-		return selection, candidate.APIKey, nil
+		if selection.CredentialID == preferredCredential && ratio < 1 {
+			return selection, selection.APIKey, nil
+		}
+		switch {
+		case ratio >= 1:
+			full = append(full, selection)
+		case deferred:
+			high = append(high, selection)
+		default:
+			ready = append(ready, selection)
+		}
 	}
 
-	if len(deferred) > 0 {
-		selection := deferred[0]
-		return selection, selection.APIKey, nil
+	for _, tier := range [][]keypool.Selection{ready, high, full} {
+		if len(tier) == 0 {
+			continue
+		}
+		if keypool.HasEffectiveConfig(upstream) {
+			return tier[0], tier[0].APIKey, nil
+		}
+		// 无 Key 级配置时仍沿用原有顺序与临时失败恢复，但只在当前水位层选择。
+		filtered := *upstream
+		filtered.APIKeys = make([]string, 0, len(tier))
+		for _, candidate := range tier {
+			filtered.APIKeys = append(filtered.APIKeys, candidate.APIKey)
+		}
+		key, err := fallback(&filtered, failedKeys)
+		if err != nil {
+			return keypool.Selection{}, "", err
+		}
+		for _, candidate := range tier {
+			if candidate.APIKey == key {
+				return candidate, key, nil
+			}
+		}
 	}
 
 	return keypool.Selection{}, "", fmt.Errorf("上游 %s 没有可用的API密钥", upstream.Name)

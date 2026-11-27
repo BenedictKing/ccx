@@ -958,3 +958,83 @@ func TestUpstreamRetryAfterUsesCredentialQuotaFor429(t *testing.T) {
 		})
 	}
 }
+
+func TestChannelRPMIsPerKeyAndOnlyNewSessionsAvoidHighWater(t *testing.T) {
+	for _, grouped := range []bool{false, true} {
+		name := "independent"
+		if grouped {
+			name = "shared upstream quota"
+		}
+		t.Run(name, func(t *testing.T) {
+			sent := make(chan string, 8)
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				sent <- r.Header.Get("X-Api-Key")
+				_, _ = w.Write([]byte(`{"ok":true}`))
+			}))
+			defer server.Close()
+			upstream := config.UpstreamConfig{
+				ChannelUID: "stable-channel", Name: "glm", BaseURL: server.URL, ServiceType: "claude",
+				APIKeys: []string{"sk-first", "sk-second"}, Status: "active", RateLimitRPM: 5,
+			}
+			if grouped {
+				upstream.APIKeyConfigs = []config.APIKeyConfig{
+					{Key: "sk-first", QuotaGroup: "shared"},
+					{Key: "sk-second", QuotaGroup: "shared"},
+				}
+			}
+			cm, sch, mm, cleanup := newTestFailoverDependencies(t, upstream)
+			defer cleanup()
+			defer sch.GetTraceAffinityManager().Stop()
+			manager := ratelimit.NewManager()
+			defer manager.Stop()
+			sch.SetRateLimitManager(manager)
+			channelLimiter := manager.GetOrCreate("Messages", 0, ratelimit.Config{MaxConcurrent: 1})
+
+			for i, tc := range []struct{ session, want string }{
+				{"existing", "sk-first"}, {"existing", "sk-first"}, {"existing", "sk-first"},
+				{"new", "sk-second"},                               // first Key is at 60%
+				{"existing", "sk-first"}, {"existing", "sk-first"}, // retain affinity until the hard limit
+				{"existing", "sk-second"}, // first Key is now at 100%
+				{"existing", "sk-second"}, // successful failover established affinity
+			} {
+				c, _ := gin.CreateTestContext(httptest.NewRecorder())
+				c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", nil)
+				SetRequestLogContext(c, tc.session, i+1)
+				handled, key, _, _, _, err := TryUpstreamWithAllKeys(
+					c, config.NewEnvConfig(), cm, sch, scheduler.ChannelKindMessages, "Messages", mm, &upstream,
+					[]warmup.URLLatencyResult{{URL: server.URL}}, []byte(`{"model":"glm-5.4","messages":[]}`), nil, false,
+					func(u *config.UpstreamConfig, failed map[string]bool) (string, error) {
+						return cm.GetNextAPIKey(u, failed, "Messages")
+					},
+					func(c *gin.Context, u *config.UpstreamConfig, key string) (*http.Request, error) {
+						req, err := http.NewRequestWithContext(c.Request.Context(), http.MethodPost, u.BaseURL, strings.NewReader("{}"))
+						if err == nil {
+							req.Header.Set("X-Api-Key", key)
+						}
+						return req, err
+					},
+					nil, nil, nil,
+					func(*gin.Context, *http.Response, *config.UpstreamConfig, string, []byte) (*types.Usage, error) {
+						return &types.Usage{InputTokens: 1}, nil
+					},
+					"glm-5.4", "", 0, sch.GetChannelLogStore(scheduler.ChannelKindMessages),
+				)
+				if !handled || key != tc.want {
+					t.Fatalf("request %d: handled=%v key=%q, want %q, last error=%v", i+1, handled, key, tc.want, err)
+				}
+				if got := <-sent; got != tc.want {
+					t.Fatalf("request %d sent with %q, want %q", i+1, got, tc.want)
+				}
+			}
+			for key, want := range map[string]int{"sk-first": 5, "sk-second": 3} {
+				limiter := manager.GetScoped("Messages", 0, keypool.LimiterScope(key, ""))
+				if got := limiter.Status(time.Now()); got.WindowSize != want || got.MaxRequests != 5 {
+					t.Fatalf("%s: limiter = %+v, want %d independent requests of 5", key, got, want)
+				}
+			}
+			if got := channelLimiter.Status(time.Now()); got.MaxRequests != 0 || got.MaxConcurrent != 1 || got.ActiveRequests != 0 {
+				t.Fatalf("channel should retain only its concurrency limit: %+v", got)
+			}
+		})
+	}
+}

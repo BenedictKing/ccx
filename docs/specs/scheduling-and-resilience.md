@@ -66,8 +66,9 @@
 
 ### 主动限速与冷却
 
-- 渠道/Key 或 quota scope 可使用滑动窗口和并发信号量；排队超过允许等待或处于 cooldown 时快速 failover。
-- `rateLimitAutoFromHeaders=true` 时解析 `Retry-After`、Anthropic 和 OpenAI reset/remaining 头。429 和剩余额度耗尽只冷却实际使用的 Key 或显式共享的 quota group，其他 Key 仍按渠道总限速尝试；5xx 退避保留渠道作用域。
+- 常规 HTTP 代理的 `rateLimitRpm` 是每个 Key 的默认请求数上限，按 Key 单独计数；Key 的显式 RPM 和窗口覆盖渠道默认值。渠道最大并发数仍约束整个渠道，Key 的并发设置仅约束该 Key。
+- 新对话优先选择低于 50% 水位的可用 Key；都超过水位时仍可以使用有剩余容量的 Key。已有对话优先复用最后成功的 Key，只有 Key 已满、冷却、熔断、禁用或模型不兼容才尝试其他 Key。没有可立即发送的 Key 时使用有界排队；排队超时后继续 failover。
+- `rateLimitAutoFromHeaders=true` 时解析 `Retry-After`、Anthropic 和 OpenAI reset/remaining 头。429 和剩余额度耗尽只冷却实际使用的 Key 或显式共享的 quota group；共享上游配额的多个 Key 仍各自计算主动 RPM。5xx 退避保留渠道作用域。
 - 冷却只延长不缩短，最多到当前时间后 1 小时；热更新配置保留已有 cooldown 和运行令牌。
 
 ## 5. 状态、异常与恢复边界
@@ -102,5 +103,5 @@
 - 定时恢复：`scheduler/recovery.go`、`channel_scheduler_recovery_test.go`。
 - 请求预算与故障转移：`common/retry_budget.go`、`multi_channel_failover.go`、`upstream_failover.go`及对应集成测试。
 - 熔断：`metrics/channel_metrics_circuit.go`、`channel_metrics_circuit_breaker_test.go`。
-- 主动限速：`ratelimit/limiter.go`、`hints.go`及包内测试。智谱 429/1308 的出站次数、共享配额组和 5xx 渠道退避见 `upstream_failover_test.go` 的本地假上游测试；未再次请求真实上游。
+- 主动限速：`ratelimit/limiter.go`、`hints.go`、`keypool/keyconfig.go`及包内测试。Messages 假上游覆盖按 Key 独立计数、共享配额组、已有与新对话分流。原生 Responses WebSocket 和上游 compact 的独立传输路径不在此规则内。智谱 429/1308 的出站次数、共享配额组和 5xx 渠道退避见 `upstream_failover_test.go` 的本地假上游测试；未再次请求真实上游。
 - 调度诊断：`handlers/scheduler_diagnose_handler.go`及测试。

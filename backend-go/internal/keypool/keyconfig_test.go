@@ -131,8 +131,8 @@ func TestConfigForCandidate_UsesWindowSeconds(t *testing.T) {
 	if got.RPM != 50 {
 		t.Fatalf("inherited RPM = %d, want 50", got.RPM)
 	}
-	if got.MaxConcurrent != 3 {
-		t.Fatalf("inherited MaxConcurrent = %d, want 3", got.MaxConcurrent)
+	if got.MaxConcurrent != 0 {
+		t.Fatalf("channel concurrency should not be inherited by a Key, got %d", got.MaxConcurrent)
 	}
 
 	got = ConfigForCandidate(up, config.APIKeyConfig{

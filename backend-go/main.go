@@ -467,7 +467,7 @@ func main() {
 	applyCircuitBreakerConfig(cfgManager.GetConfig())
 	cfgManager.RegisterOnConfigChange(applyCircuitBreakerConfig)
 
-	// 初始化主动限速管理器（渠道级令牌桶 + 并发控制 + 429 动态 cooldown）
+	// 初始化主动限速管理器（渠道并发与服务退避；RPM 由各 Key 独立计数）
 	rateLimitManager := ratelimit.NewManager()
 	applyRateLimitConfig := func(cfg config.Config) {
 		channelTypes := []struct {
@@ -485,8 +485,6 @@ func main() {
 			for idx, upstream := range ct.upstreams {
 				autoFromHeaders := upstream.RateLimitAutoFromHeaders != nil && *upstream.RateLimitAutoFromHeaders
 				rateLimitManager.GetOrCreate(ct.apiType, idx, ratelimit.Config{
-					RPM:             upstream.RateLimitRPM,
-					WindowSeconds:   config.RateLimitWindowSeconds(upstream.RateLimitWindowMinutes),
 					MaxConcurrent:   upstream.RateLimitMaxConcurrent,
 					AutoFromHeaders: autoFromHeaders,
 				})

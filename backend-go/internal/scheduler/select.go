@@ -584,6 +584,21 @@ func rateLimitLoadShedKey(apiType string, channelIndex int, scope string) string
 	return fmt.Sprintf("%s:%d:%s", apiType, channelIndex, scope)
 }
 
+// CredentialRateLimitLoad 合并共享上游冷却与独立 Key 的主动限速水位。
+func (s *ChannelScheduler) CredentialRateLimitLoad(kind ChannelKind, channelIndex int, upstream *config.UpstreamConfig, candidate keypool.Candidate, now time.Time) (bool, float64, bool) {
+	if s == nil || s.rateLimitManager == nil {
+		return false, 0, false
+	}
+	if candidate.QuotaGroup != "" {
+		if limiter := s.rateLimitManager.GetScoped(kindAPIType(kind), channelIndex, candidate.Scope); limiter != nil {
+			if cooling, _ := limiter.InCooldown(now); cooling {
+				return true, 1, true
+			}
+		}
+	}
+	return s.ShouldDeferForRateLimit(kind, channelIndex, keypool.LimiterScope(candidate.APIKey, ""), keypool.ConfigForCandidate(*upstream, candidate.Config), now)
+}
+
 func (s *ChannelScheduler) channelRateLimitSoftDeferred(upstream *config.UpstreamConfig, kind ChannelKind, channelIndex int, model string, now time.Time) (bool, float64, string, bool) {
 	if upstream == nil || s == nil || s.rateLimitManager == nil {
 		return false, 0, "", false
@@ -591,10 +606,6 @@ func (s *ChannelScheduler) channelRateLimitSoftDeferred(upstream *config.Upstrea
 
 	if deferred, ratio, cooldown := s.ShouldDeferForRateLimit(kind, channelIndex, "", ratelimit.Config{}, now); deferred {
 		return true, ratio, "channel", cooldown
-	}
-
-	if !keypool.HasEffectiveConfig(upstream) {
-		return false, 0, "", false
 	}
 
 	candidates := keypool.CandidatesForModel(upstream, nil, model)
@@ -606,8 +617,7 @@ func (s *ChannelScheduler) channelRateLimitSoftDeferred(upstream *config.Upstrea
 	maxScope := ""
 	maxCooldown := false
 	for _, candidate := range candidates {
-		cfg := keypool.ConfigForCandidate(*upstream, candidate.Config)
-		deferred, ratio, cooldown := s.ShouldDeferForRateLimit(kind, channelIndex, candidate.Scope, cfg, now)
+		deferred, ratio, cooldown := s.CredentialRateLimitLoad(kind, channelIndex, upstream, candidate, now)
 		if ratio > maxRatio {
 			maxRatio = ratio
 			maxScope = candidate.Scope

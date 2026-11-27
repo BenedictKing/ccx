@@ -69,6 +69,7 @@
 - `conversation_state.json` 持久保存会话标识、标题/最近用户消息、recap、状态和成功来源；默认闲置 1 小时标记 idle、24 小时过期，停止时 flush。
 - 普通 Trace 亲和保存在内存，默认 30 分钟无活动过期；主子角色隔离，上下文桶也隔离，避免大上下文来源污染小请求。
 - 加密续轮优先恢复原成功渠道和实际模型。来源被关闭、策略不再允许或兼容性无法证明时明确失败，不跨渠道发送密文、不降为普通文本、不静默改发其他模型。
+- 常规 HTTP 代理在渠道内记录会话最近一次成功的 Key。该内存亲和按协议、渠道 UID、会话和主/子代理角色隔离，成功续期，30 分钟未使用过期。新会话按 Key 水位选择；已绑定的会话仅在该 Key 无法使用时切换，切换成功才更新亲和。没有可识别会话的请求按当前水位独立选择。这一规则不改变渠道亲和、显式路由或 Responses 加密续轮的来源选择。
 
 ### Thinking 缓存
 
@@ -109,7 +110,7 @@
 - 子代理配置/API：`config/subagent_routing.go`、`handlers/subagent_routing_handler.go`及测试。
 - 调度与重试：`scheduler/subagent_routing_test.go`、`common/subagent_routing_integration_test.go`。
 - Responses 会话：`session/manager.go`、`responses/stream_session.go`、`subagent_continuation_test.go`、`encrypted_affinity_test.go`。
-- 成功来源：`conversation/tracker.go`、`persistence.go`及测试。
+- 成功来源：`conversation/tracker.go`、`persistence.go`及测试。渠道内 Key 亲和见 `session/trace_affinity.go` 与 `common/upstream_failover_test.go`。
 - Thinking：`thinkingcache/thinking_cache.go`及收集器测试。
 - Web 面板：`SubagentRoutingPanel.vue`及组件测试；Desktop 对应面板位于 `desktop/frontend/src/components/`。
 - 2026-11-25 实现差异：备用池在配置视图、Web/Desktop 列表、普通候选和加密续聊中统一排除；新增及策略中缺失的非备用渠道默认开启；Web 子代理行高改为 60px，手柄/序号列宽与间距复用普通请求尺寸。

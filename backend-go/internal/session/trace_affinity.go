@@ -17,12 +17,23 @@ type TraceAffinity struct {
 	LastUsedAt   time.Time
 }
 
+// CredentialAffinityScope 按协议、稳定渠道身份、角色和会话隔离 Key 亲和。
+type CredentialAffinityScope struct {
+	Protocol, ChannelUID, Role, SessionID string
+}
+
+type credentialAffinity struct {
+	id         string
+	lastUsedAt time.Time
+}
+
 // TraceAffinityManager 管理 trace 与渠道的亲和性
 type TraceAffinityManager struct {
-	mu       sync.RWMutex
-	affinity map[string]*TraceAffinity // key: user_id
-	ttl      time.Duration
-	stopCh   chan struct{} // 用于停止清理 goroutine
+	mu                   sync.RWMutex
+	affinity             map[string]*TraceAffinity // key: user_id
+	credentialAffinities map[CredentialAffinityScope]credentialAffinity
+	ttl                  time.Duration
+	stopCh               chan struct{} // 用于停止清理 goroutine
 }
 
 // NewTraceAffinityManager 创建 Trace 亲和性管理器
@@ -159,6 +170,38 @@ func (m *TraceAffinityManager) RemoveByChannel(channelIndex int) {
 	}
 }
 
+// PreferredCredential 返回未过期的凭证身份；身份是摘要，不保存 Key 明文。
+func (m *TraceAffinityManager) PreferredCredential(scope CredentialAffinityScope) string {
+	if m == nil || scope.ChannelUID == "" || scope.SessionID == "" {
+		return ""
+	}
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	entry := m.credentialAffinities[scope]
+	if time.Since(entry.lastUsedAt) > m.ttl {
+		return ""
+	}
+	return entry.id
+}
+
+// RecordSuccessfulCredential 只在成功后更新；并发请求不得覆盖已切换的亲和。
+func (m *TraceAffinityManager) RecordSuccessfulCredential(scope CredentialAffinityScope, expected, credentialID string) {
+	if m == nil || scope.ChannelUID == "" || scope.SessionID == "" || credentialID == "" {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	now := time.Now()
+	entry := m.credentialAffinities[scope]
+	if entry.id != expected && entry.id != credentialID && now.Sub(entry.lastUsedAt) <= m.ttl {
+		return
+	}
+	if m.credentialAffinities == nil {
+		m.credentialAffinities = make(map[CredentialAffinityScope]credentialAffinity)
+	}
+	m.credentialAffinities[scope] = credentialAffinity{id: credentialID, lastUsedAt: now}
+}
+
 // Cleanup 清理过期的亲和记录
 func (m *TraceAffinityManager) Cleanup() int {
 	m.mu.Lock()
@@ -168,6 +211,11 @@ func (m *TraceAffinityManager) Cleanup() int {
 		if now.Sub(affinity.LastUsedAt) > m.ttl {
 			delete(m.affinity, userID)
 			cleaned++
+		}
+	}
+	for scope, entry := range m.credentialAffinities {
+		if now.Sub(entry.lastUsedAt) > m.ttl {
+			delete(m.credentialAffinities, scope)
 		}
 	}
 	ttl := m.ttl
